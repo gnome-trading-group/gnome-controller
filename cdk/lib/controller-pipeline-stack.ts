@@ -37,7 +37,8 @@ export class ControllerPipelineStack extends cdk.Stack {
         ],
         env: {
           NPM_TOKEN: npmSecret.secretValue.unsafeUnwrap()
-        }
+        },
+        primaryOutputDirectory: 'cdk/cdk.out',
       }),
     });
 
