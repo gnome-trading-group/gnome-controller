@@ -21,7 +21,6 @@ export class ControllerPipelineStack extends cdk.Stack {
     super(scope, id, props);
 
     const npmSecret = secrets.Secret.fromSecretNameV2(this, 'NPMToken', 'npm-token');
-    const githubSecret = secrets.Secret.fromSecretNameV2(this, 'GithubMaven', 'GITHUB_MAVEN');
 
     const pipeline = new pipelines.CodePipeline(this, "ControllerPipeline", {
       crossAccountKeys: true,
@@ -57,7 +56,5 @@ export class ControllerPipelineStack extends cdk.Stack {
     pipeline.buildPipeline();
     npmSecret.grantRead(pipeline.synthProject.role!!);
     npmSecret.grantRead(pipeline.pipeline.role);
-    githubSecret.grantRead(pipeline.synthProject.role!!);
-    githubSecret.grantRead(pipeline.pipeline.role);
   }
 }
