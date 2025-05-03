@@ -22,7 +22,7 @@ export class FrontendStack extends cdk.Stack {
 
     const distribution = new cloudfront.Distribution(this, "ControllerDistribution", {
       defaultBehavior: {
-        origin: new origins.HttpOrigin(websiteBucket.bucketWebsiteDomainName),
+        origin: new origins.S3StaticWebsiteOrigin(websiteBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
       },
       defaultRootObject: "index.html",
