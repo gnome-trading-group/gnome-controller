@@ -12,17 +12,19 @@ export class FrontendStack extends cdk.Stack {
 
     const websiteBucket = new s3.Bucket(this, "ControllerBucket", {
       bucketName: "gnome-controller-frontend",
-      websiteIndexDocument: "index.html",
-      websiteErrorDocument: "index.html", 
-      publicReadAccess: false,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
 
+    const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, "ControllerOAI");
+    websiteBucket.grantRead(originAccessIdentity);
+
     const distribution = new cloudfront.Distribution(this, "ControllerDistribution", {
       defaultBehavior: {
-        origin: new origins.S3StaticWebsiteOrigin(websiteBucket),
+        origin: new origins.S3Origin(websiteBucket, {
+          originAccessIdentity,
+        }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
       },
       defaultRootObject: "index.html",
