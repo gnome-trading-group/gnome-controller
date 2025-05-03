@@ -19,10 +19,9 @@ export class FrontendStack extends cdk.Stack {
       autoDeleteObjects: true,
     });
 
-    // Create Cognito User Pool
     const userPool = new cognito.UserPool(this, "ControllerUserPool", {
       userPoolName: "gnome-controller-users",
-      selfSignUpEnabled: false, // Disable self sign-up
+      selfSignUpEnabled: false,
       signInAliases: {
         email: true,
       },
@@ -34,11 +33,15 @@ export class FrontendStack extends cdk.Stack {
       },
     });
 
-    // Create Origin Access Identity
+    const domain = userPool.addDomain("CognitoDomain", {
+      cognitoDomain: {
+        domainPrefix: "gnome-controller",
+      },
+    });
+
     const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, "ControllerOAI");
     websiteBucket.grantRead(originAccessIdentity);
 
-    // Create CloudFront Function for authentication
     const authFunction = new cloudfront.Function(this, "AuthFunction", {
       code: cloudfront.FunctionCode.fromInline(`
         function handler(event) {
@@ -82,7 +85,6 @@ export class FrontendStack extends cdk.Stack {
       ],
     });
 
-    // Create App Client
     const appClient = userPool.addClient("ControllerAppClient", {
       oAuth: {
         flows: {
@@ -99,13 +101,13 @@ export class FrontendStack extends cdk.Stack {
       },
     });
 
-    // Configure IAM Identity Center as identity provider
     const identityProvider = new cognito.CfnUserPoolIdentityProvider(this, "IdentityCenterProvider", {
       userPoolId: userPool.userPoolId,
       providerName: "IdentityCenter",
       providerType: "SAML",
       providerDetails: {
-        MetadataURL: "https://portal.sso.us-east-1.amazonaws.com/saml/metadata", // Replace with your IAM Identity Center metadata URL
+        // Configured in IAM Identity Center Applications
+        MetadataURL: "https://portal.sso.us-east-1.amazonaws.com/saml/metadata/NzQ2NjY5MTk2MzE2X2lucy0wMjA1N2ZhNzE4MDc5Y2U2",
       },
       attributeMapping: {
         email: "email",
