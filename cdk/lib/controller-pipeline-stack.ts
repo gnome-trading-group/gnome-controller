@@ -27,6 +27,8 @@ export class ControllerPipelineStack extends cdk.Stack {
         input: pipelines.CodePipelineSource.gitHub(GITHUB_REPO, GITHUB_BRANCH),
         commands: [
           'echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" > ~/.npmrc',
+          "npm ci",
+          "npm run build",
           "cd cdk/",
           "npm ci",
           "npx cdk synth"
