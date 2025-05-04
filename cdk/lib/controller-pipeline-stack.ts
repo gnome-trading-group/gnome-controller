@@ -6,9 +6,7 @@ import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { CONFIGS, GITHUB_BRANCH, GITHUB_REPO, ControllerConfig } from "./config";
 import { FrontendStack } from "./stacks/frontend-stack";
 
-
 class AppStage extends cdk.Stage {
-
   constructor(scope: Construct, id: string, config: ControllerConfig) {
     super(scope, id, { env: config.account.environment });
 
@@ -25,18 +23,16 @@ export class ControllerPipelineStack extends cdk.Stack {
     const pipeline = new pipelines.CodePipeline(this, "ControllerPipeline", {
       crossAccountKeys: true,
       pipelineName: "ControllerPipeline",
-      synth: new pipelines.ShellStep("deploy", {
+      synth: new pipelines.ShellStep("Synth", {
         input: pipelines.CodePipelineSource.gitHub(GITHUB_REPO, GITHUB_BRANCH),
         commands: [
           'echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" > ~/.npmrc',
-          "npm ci",
-          "npm run build",
           "cd cdk/",
           "npm ci",
           "npx cdk synth"
         ],
         env: {
-          NPM_TOKEN: npmSecret.secretValue.unsafeUnwrap()
+          NPM_TOKEN: npmSecret.secretValue.unsafeUnwrap(),
         },
         primaryOutputDirectory: 'cdk/cdk.out',
       }),
@@ -46,12 +42,31 @@ export class ControllerPipelineStack extends cdk.Stack {
     // const staging = new AppStage(this, "Staging", CONFIGS[Stage.STAGING]!);
     const prod = new AppStage(this, "Prod", CONFIGS[Stage.PROD]!);
 
-    pipeline.addStage(dev);
-    // pipeline.addStage(staging, {
-    //   pre: [new pipelines.ManualApprovalStep('ApproveStaging')],
-    // });
+    // Dev stage with its own build
+    pipeline.addStage(dev, {
+      pre: [
+        new pipelines.ShellStep("BuildDev", {
+          commands: [
+            "npm ci",
+            "cp .env.development .env",
+            "npm run build"
+          ],
+        }),
+      ],
+    });
+
+    // Prod stage with its own build
     pipeline.addStage(prod, {
-      pre: [new pipelines.ManualApprovalStep('ApproveProd')],
+      pre: [
+        new pipelines.ManualApprovalStep('ApproveProd'),
+        new pipelines.ShellStep("BuildProd", {
+          commands: [
+            "npm ci",
+            "cp .env.production .env",
+            "npm run build"
+          ],
+        }),
+      ],
     });
 
     pipeline.buildPipeline();

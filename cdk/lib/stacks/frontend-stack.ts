@@ -4,7 +4,6 @@ import * as s3deploy from "aws-cdk-lib/aws-s3-deployment";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cognito from "aws-cdk-lib/aws-cognito";
-import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 import * as path from "path";
 
@@ -31,6 +30,9 @@ export class FrontendStack extends cdk.Stack {
           mutable: true,
         },
       },
+      autoVerify: {
+        email: true,
+      },
     });
 
     const domain = userPool.addDomain("CognitoDomain", {
@@ -42,38 +44,12 @@ export class FrontendStack extends cdk.Stack {
     const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, "ControllerOAI");
     websiteBucket.grantRead(originAccessIdentity);
 
-    const authFunction = new cloudfront.Function(this, "AuthFunction", {
-      code: cloudfront.FunctionCode.fromInline(`
-        function handler(event) {
-          var request = event.request;
-          var headers = request.headers;
-          
-          // Check for auth token
-          if (!headers.cookie || !headers.cookie.value.includes('id_token')) {
-            return {
-              statusCode: 302,
-              statusDescription: 'Found',
-              headers: {
-                'location': { value: '/auth' }
-              }
-            };
-          }
-          
-          return request;
-        }
-      `),
-    });
-
     const distribution = new cloudfront.Distribution(this, "ControllerDistribution", {
       defaultBehavior: {
         origin: new origins.S3Origin(websiteBucket, {
           originAccessIdentity,
         }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        functionAssociations: [{
-          function: authFunction,
-          eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
-        }],
       },
       defaultRootObject: "index.html",
       errorResponses: [
@@ -97,7 +73,23 @@ export class FrontendStack extends cdk.Stack {
         ],
         callbackUrls: [
           `https://${distribution.distributionDomainName}`,
+          'http://localhost:5173',
+          'http://localhost:3000',
+          'http://localhost:8080',
         ],
+        logoutUrls: [
+          `https://${distribution.distributionDomainName}`,
+          'http://localhost:5173',
+          'http://localhost:3000',
+          'http://localhost:8080',
+        ],
+      },
+      preventUserExistenceErrors: true,
+      authFlows: {
+        adminUserPassword: false,
+        custom: false,
+        userPassword: false,
+        userSrp: false,
       },
     });
 
@@ -106,7 +98,6 @@ export class FrontendStack extends cdk.Stack {
       providerName: "IdentityCenter",
       providerType: "SAML",
       providerDetails: {
-        // Configured in IAM Identity Center Applications
         MetadataURL: "https://portal.sso.us-east-1.amazonaws.com/saml/metadata/NzQ2NjY5MTk2MzE2X2lucy0wMjA1N2ZhNzE4MDc5Y2U2",
       },
       attributeMapping: {
@@ -114,6 +105,9 @@ export class FrontendStack extends cdk.Stack {
         username: "username",
       },
     });
+
+    const userPoolClient = appClient.node.defaultChild as cognito.CfnUserPoolClient;
+    userPoolClient.supportedIdentityProviders = ['IdentityCenter'];
 
     new s3deploy.BucketDeployment(this, "DeployControllerUI", {
       sources: [s3deploy.Source.asset(path.join(__dirname, '..', '..', '..', 'dist'))],
