@@ -129,7 +129,7 @@ export class FrontendStack extends cdk.Stack {
             `cp .env.${props.stage} .env`,
             'npm ci',
             'npm run build',
-            'cp -r dist /asset-output',
+            'cp -r dist/* /asset-output',
           ].join(' && ')
         ],
       },
