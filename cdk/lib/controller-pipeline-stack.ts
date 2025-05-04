@@ -10,7 +10,9 @@ class AppStage extends cdk.Stage {
   constructor(scope: Construct, id: string, config: ControllerConfig) {
     super(scope, id, { env: config.account.environment });
 
-    new FrontendStack(this, "ControllerFrontendStack");
+    new FrontendStack(this, "ControllerFrontendStack", {
+      stage: config.account.stage,
+    });
   }
 }
 
@@ -27,8 +29,6 @@ export class ControllerPipelineStack extends cdk.Stack {
         input: pipelines.CodePipelineSource.gitHub(GITHUB_REPO, GITHUB_BRANCH),
         commands: [
           'echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" > ~/.npmrc',
-          "npm ci",
-          "npm run build",
           "cd cdk/",
           "npm ci",
           "npx cdk synth"
@@ -44,31 +44,10 @@ export class ControllerPipelineStack extends cdk.Stack {
     // const staging = new AppStage(this, "Staging", CONFIGS[Stage.STAGING]!);
     const prod = new AppStage(this, "Prod", CONFIGS[Stage.PROD]!);
 
-    // Dev stage with its own build
-    pipeline.addStage(dev, {
-      pre: [
-        new pipelines.ShellStep("BuildDev", {
-          commands: [
-            "npm ci",
-            "cp .env.development .env",
-            "npm run build"
-          ],
-        }),
-      ],
-    });
+    pipeline.addStage(dev);
 
-    // Prod stage with its own build
     pipeline.addStage(prod, {
-      pre: [
-        new pipelines.ManualApprovalStep('ApproveProd'),
-        new pipelines.ShellStep("BuildProd", {
-          commands: [
-            "npm ci",
-            "cp .env.production .env",
-            "npm run build"
-          ],
-        }),
-      ],
+      pre: [new pipelines.ManualApprovalStep('ApproveProd')],
     });
 
     pipeline.buildPipeline();

@@ -6,9 +6,14 @@ import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import { Construct } from "constructs";
 import * as path from "path";
+import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
+
+interface FrontendStackProps extends cdk.StackProps {
+  stage: Stage;
+}
 
 export class FrontendStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: FrontendStackProps) {
     super(scope, id, props);
 
     const websiteBucket = new s3.Bucket(this, "ControllerBucket", {
@@ -109,8 +114,29 @@ export class FrontendStack extends cdk.Stack {
     const userPoolClient = appClient.node.defaultChild as cognito.CfnUserPoolClient;
     userPoolClient.supportedIdentityProviders = ['IdentityCenter'];
 
+    const asset = new cdk.AssetStaging(this, "ControllerUIAsset", {
+      sourcePath: path.join(__dirname, '..', '..', '..'),
+      bundling: {
+        image: cdk.DockerImage.fromRegistry('node:18'),
+        local: {
+          tryBundle(outputDir: string): boolean {
+            return false;
+          },
+        },
+        command: [
+          'bash', '-c',
+          [
+            `cp .env.${props.stage} .env`,
+            'npm ci',
+            'npm run build',
+            'cp -r dist /asset-output',
+          ].join(' && ')
+        ],
+      },
+    });
+
     new s3deploy.BucketDeployment(this, "DeployControllerUI", {
-      sources: [s3deploy.Source.asset(path.join(__dirname, '..', '..', '..', 'dist'))],
+      sources: [s3deploy.Source.asset(asset.relativeStagedPath(this))],
       destinationBucket: websiteBucket,
       distribution,
       distributionPaths: ["/*"],
