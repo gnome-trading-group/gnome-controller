@@ -136,7 +136,7 @@ export class FrontendStack extends cdk.Stack {
     });
 
     new s3deploy.BucketDeployment(this, "DeployControllerUI", {
-      sources: [s3deploy.Source.asset(asset.relativeStagedPath(this))],
+      sources: [s3deploy.Source.asset(asset.absoluteStagedPath)],
       destinationBucket: websiteBucket,
       distribution,
       distributionPaths: ["/*"],
