@@ -1,10 +1,12 @@
 import * as cdk from "aws-cdk-lib";
 import * as pipelines from "aws-cdk-lib/pipelines";
+import * as codebuild from "aws-cdk-lib/aws-codebuild";
 import * as secrets from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from "constructs";
 import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { CONFIGS, GITHUB_BRANCH, GITHUB_REPO, ControllerConfig } from "./config";
 import { FrontendStack } from "./stacks/frontend-stack";
+import { BackendStack } from "./stacks/backend-stack";
 
 class AppStage extends cdk.Stage {
   constructor(scope: Construct, id: string, config: ControllerConfig) {
@@ -13,6 +15,8 @@ class AppStage extends cdk.Stage {
     new FrontendStack(this, "ControllerFrontendStack", {
       stage: config.account.stage,
     });
+
+    new BackendStack(this, "ControllerBackendStack");
   }
 }
 
@@ -21,6 +25,7 @@ export class ControllerPipelineStack extends cdk.Stack {
     super(scope, id, props);
 
     const npmSecret = secrets.Secret.fromSecretNameV2(this, 'NPMToken', 'npm-token');
+    const dockerHubCredentials = secrets.Secret.fromSecretNameV2(this, 'DockerHub', 'docker-hub-credentials');
 
     const pipeline = new pipelines.CodePipeline(this, "ControllerPipeline", {
       crossAccountKeys: true,
@@ -33,11 +38,33 @@ export class ControllerPipelineStack extends cdk.Stack {
           "npm ci",
           "npx cdk synth"
         ],
+        
         env: {
           NPM_TOKEN: npmSecret.secretValue.unsafeUnwrap(),
         },
         primaryOutputDirectory: 'cdk/cdk.out',
       }),
+      dockerCredentials: [
+        pipelines.DockerCredential.dockerHub(dockerHubCredentials),
+      ],
+    });
+
+    pipeline.addWave("BuildLayers", {
+      post: [
+        new pipelines.CodeBuildStep("BuildPythonLayer", {
+          buildEnvironment: {
+            buildImage: codebuild.LinuxBuildImage.STANDARD_7_0,
+            privileged: true,
+          },
+          commands: [
+            "cd cdk/",
+            "python -m pip install --upgrade pip",
+            "pip install -r lambda/layers/common/requirements.txt -t lambda/layers/common/python",
+            "cd lambda/layers/common",
+            "zip -r layer.zip python",
+          ],
+        }),
+      ],
     });
 
     const dev = new AppStage(this, "Dev", CONFIGS[Stage.DEV]!);
