@@ -33,19 +33,19 @@ function MarketData() {
     }
   };
 
-  const handleCreateCollector = async (listingId: number) => {
-    try {
-      setError(null);
-      await collectorsApi.create(listingId);
-      await loadCollectors();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Failed to create collector');
-      }
-    }
-  };
+  // const handleCreateCollector = async (listingId: number) => {
+  //   try {
+  //     setError(null);
+  //     await collectorsApi.create(listingId);
+  //     await loadCollectors();
+  //   } catch (err) {
+  //     if (err instanceof ApiError) {
+  //       setError(err.message);
+  //     } else {
+  //       setError('Failed to create collector');
+  //     }
+  //   }
+  // };
 
   const handleDeleteCollector = async (listingId: number) => {
     try {
