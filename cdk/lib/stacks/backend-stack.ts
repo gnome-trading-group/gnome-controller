@@ -28,7 +28,7 @@ export class BackendStack extends cdk.Stack {
     });
 
     const exampleFunction = new lambda.Function(this, "ExampleFunction", {
-      runtime: lambda.Runtime.PYTHON_3_11,
+      runtime: lambda.Runtime.PYTHON_3_13,
       handler: "index.handler",
       code: lambda.Code.fromAsset("lambda/functions/example"),
       layers: [commonLayer],
@@ -37,7 +37,6 @@ export class BackendStack extends cdk.Stack {
       },
     });
 
-    // Add API Gateway integration
     const exampleResource = api.root.addResource("example");
     exampleResource.addMethod(
       "GET",
