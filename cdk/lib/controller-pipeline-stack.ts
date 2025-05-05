@@ -7,6 +7,7 @@ import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { CONFIGS, GITHUB_BRANCH, GITHUB_REPO, ControllerConfig } from "./config";
 import { FrontendStack } from "./stacks/frontend-stack";
 import { BackendStack } from "./stacks/backend-stack";
+import { DatabaseStack } from "./stacks/database-stack";
 
 class AppStage extends cdk.Stage {
   constructor(scope: Construct, id: string, config: ControllerConfig) {
@@ -16,8 +17,11 @@ class AppStage extends cdk.Stage {
       stage: config.account.stage,
     });
 
+    const databaseStack = new DatabaseStack(this, "ControllerDatabaseStack");
+
     new BackendStack(this, "ControllerBackendStack", {
       userPool: frontendStack.userPool,
+      collectorsTable: databaseStack.collectorsTable,
     });
   }
 }
