@@ -2,10 +2,15 @@ import * as cdk from "aws-cdk-lib";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as cognito from "aws-cdk-lib/aws-cognito";
 import { Construct } from "constructs";
 
+interface BackendStackProps extends cdk.StackProps {
+  userPool: cognito.IUserPool;
+}
+
 export class BackendStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: BackendStackProps) {
     super(scope, id, props);
 
     const api = new apigateway.RestApi(this, "ControllerApi", {
@@ -17,8 +22,13 @@ export class BackendStack extends cdk.Stack {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
-        allowHeaders: apigateway.Cors.DEFAULT_HEADERS,
+        allowHeaders: [...apigateway.Cors.DEFAULT_HEADERS, 'Authorization'],
       },
+    });
+
+    const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "CognitoAuthorizer", {
+      cognitoUserPools: [props.userPool],
+      identitySource: 'method.request.header.Authorization',
     });
 
     const commonLayer = new lambda.LayerVersion(this, "CommonLayer", {
@@ -40,7 +50,11 @@ export class BackendStack extends cdk.Stack {
     const exampleResource = api.root.addResource("example");
     exampleResource.addMethod(
       "GET",
-      new apigateway.LambdaIntegration(exampleFunction)
+      new apigateway.LambdaIntegration(exampleFunction),
+      {
+        authorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+      }
     );
 
     new cdk.CfnOutput(this, "ApiUrl", {

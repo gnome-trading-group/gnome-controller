@@ -12,11 +12,13 @@ class AppStage extends cdk.Stage {
   constructor(scope: Construct, id: string, config: ControllerConfig) {
     super(scope, id, { env: config.account.environment });
 
-    new FrontendStack(this, "ControllerFrontendStack", {
+    const frontendStack = new FrontendStack(this, "ControllerFrontendStack", {
       stage: config.account.stage,
     });
 
-    new BackendStack(this, "ControllerBackendStack");
+    new BackendStack(this, "ControllerBackendStack", {
+      userPool: frontendStack.userPool,
+    });
   }
 }
 

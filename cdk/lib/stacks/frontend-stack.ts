@@ -13,6 +13,8 @@ interface FrontendStackProps extends cdk.StackProps {
 }
 
 export class FrontendStack extends cdk.Stack {
+  public readonly userPool: cognito.UserPool;
+
   constructor(scope: Construct, id: string, props: FrontendStackProps) {
     super(scope, id, props);
 
@@ -23,7 +25,7 @@ export class FrontendStack extends cdk.Stack {
       autoDeleteObjects: true,
     });
 
-    const userPool = new cognito.UserPool(this, "ControllerUserPool", {
+    this.userPool = new cognito.UserPool(this, "ControllerUserPool", {
       userPoolName: "gnome-controller-users",
       selfSignUpEnabled: false,
       signInAliases: {
@@ -40,7 +42,7 @@ export class FrontendStack extends cdk.Stack {
       },
     });
 
-    const domain = userPool.addDomain("CognitoDomain", {
+    const domain = this.userPool.addDomain("CognitoDomain", {
       cognitoDomain: {
         domainPrefix: "gnome-controller",
       },
@@ -66,7 +68,7 @@ export class FrontendStack extends cdk.Stack {
       ],
     });
 
-    const appClient = userPool.addClient("ControllerAppClient", {
+    const appClient = this.userPool.addClient("ControllerAppClient", {
       oAuth: {
         flows: {
           authorizationCodeGrant: true,
@@ -99,7 +101,7 @@ export class FrontendStack extends cdk.Stack {
     });
 
     const identityProvider = new cognito.CfnUserPoolIdentityProvider(this, "IdentityCenterProvider", {
-      userPoolId: userPool.userPoolId,
+      userPoolId: this.userPool.userPoolId,
       providerName: "IdentityCenter",
       providerType: "SAML",
       providerDetails: {
@@ -148,7 +150,7 @@ export class FrontendStack extends cdk.Stack {
     });
 
     new cdk.CfnOutput(this, "UserPoolId", {
-      value: userPool.userPoolId,
+      value: this.userPool.userPoolId,
       description: "Cognito User Pool ID",
     });
 
