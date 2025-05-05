@@ -1,30 +1,23 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { signInWithRedirect } from 'aws-amplify/auth';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { signInWithRedirect, signOut } from 'aws-amplify/auth';
 import { useAuthenticator, Authenticator } from '@aws-amplify/ui-react';
-import { Container, Button, Stack } from '@mantine/core';
+import { Container, Button, Stack, AppShell, Text } from '@mantine/core';
 import logo from './assets/logo.svg';
 import './App.css';
 import './amplify-config';
+import Navbar from './components/Navbar/Navbar';
+import MarketData from './pages/MarketData/MarketData';
 
 function LoginScreen() {
-  const { authStatus } = useAuthenticator();
   const handleLogin = () => {
     signInWithRedirect();
   };
-
-  if (authStatus === 'authenticated') {
-    return null; // This will be handled by the router
-  }
 
   return (
     <Container size="xs" h="100vh">
       <Stack align="center" justify="center" h="100%">
         <img src={logo} alt="Gnome Trading Group Logo" className="logo" />
-        <Button 
-          size="sm" 
-          onClick={handleLogin}
-          variant='light'
-        >
+        <Button size="sm" onClick={handleLogin} variant="light">
           Sign in with SSO
         </Button>
       </Stack>
@@ -32,28 +25,58 @@ function LoginScreen() {
   );
 }
 
-function HomeScreen() {
-  const { user } = useAuthenticator();
-
+function Dashboard() {
   return (
-    <div className="home-container">
-      <h2>Welcome, {user.username}!</h2>
-    </div>
+    <Container>
+      <Text size="xl">Dashboard</Text>
+    </Container>
   );
+}
+
+function Settings() {
+  return (
+    <Container>
+      <Text size="md">I mean, cmon, what settings did you think we'd have?</Text>
+    </Container>
+  );
+}
+
+function Logout() {
+  const navigate = useNavigate();
+  
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/');
+  };
+
+  handleLogout();
+  return null;
 }
 
 function AppContent() {
   const { authStatus } = useAuthenticator();
 
+  if (authStatus !== 'authenticated') {
+    return <LoginScreen />;
+  }
+
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={
-          authStatus === 'authenticated' 
-            ? <HomeScreen />
-            : <LoginScreen />
-        } />
-      </Routes>
+      <AppShell
+        navbar={{ width: 80, breakpoint: 'sm' }}
+        padding="md"
+      >
+        <Navbar />
+        <AppShell.Main>
+          <Routes>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/market-data" element={<MarketData />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/logout" element={<Logout />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </AppShell.Main>
+      </AppShell>
     </Router>
   );
 }

@@ -1,0 +1,42 @@
+.navbar {
+  background-color: var(--mantine-primary-color-light);
+}
+
+.link {
+    width: 50px;
+    height: 50px;
+    border-radius: var(--mantine-radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--mantine-primary-color-light-color);
+  
+    &:hover {
+      background-color: var(--mantine-primary-color-light-hover);
+    }
+  
+    &[data-active] {
+      &,
+      &:hover {
+        box-shadow: var(--mantine-shadow-sm);
+        background-color: var(--mantine-primary-color-filled-hover);
+        color: var(--mantine-primary-color-filled-color);
+      }
+    }
+  }
+
+.logoContainer {
+  background: var(--mantine-color-dark-6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--mantine-color-dark-4);
+}
+
+.logo {
+  height: 1.25rem;
+  width: auto;
+}
+  
