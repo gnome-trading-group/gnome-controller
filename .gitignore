@@ -12,7 +12,6 @@ dist
 dist-ssr
 *.local
 .env
-cdk/lambda/layers/common/python
 
 # Editor directories and files
 .vscode/*
