@@ -1,4 +1,4 @@
-import { IconSettings, IconGauge, IconLogout, IconArchive } from "@tabler/icons-react";
+import { IconSettings, IconGauge, IconLogout, IconArchive, IconLockSquareRounded } from "@tabler/icons-react";
 import { Stack, AppShell, UnstyledButton, Tooltip, Center, Space, Paper } from '@mantine/core';
 import { Link, useLocation } from 'react-router-dom';
 import logo from '../../assets/logo.svg';
@@ -24,6 +24,7 @@ function NavbarLink({ icon: Icon, label, active, route }: NavbarLinkProps) {
 const routes = [
   { icon: IconGauge, label: 'Dashboard', route: '/dashboard' },
   { icon: IconArchive, label: 'Market Data', route: '/market-data' },
+  { icon: IconLockSquareRounded, label: 'Security Master', route: '/security-master' },
   { icon: IconSettings, label: 'Settings', route: '/settings' },
 ];
 

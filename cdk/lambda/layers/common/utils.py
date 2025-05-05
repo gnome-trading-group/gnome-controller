@@ -1,17 +1,27 @@
 import json
 from typing import Any, Callable, Dict
 
+CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
+}
+
+def create_response(status_code: int, body: Any) -> Dict[str, Any]:
+    """Create a standardized API response with CORS headers."""
+    return {
+        'statusCode': status_code,
+        'headers': CORS_HEADERS,
+        'body': json.dumps(body)
+    }
+
 def lambda_handler(func: Callable) -> Callable:
+    """Decorator to handle Lambda function responses and errors."""
     def wrapper(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         try:
             result = func(event, context)
-            return {
-                'statusCode': 200,
-                'body': json.dumps(result)
-            }
+            return create_response(200, result)
         except Exception as e:
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'error': str(e)})
-            }
+            return create_response(400, {'error': str(e)})
     return wrapper 

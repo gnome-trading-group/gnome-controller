@@ -7,6 +7,7 @@ import './App.css';
 import './amplify-config';
 import Navbar from './components/Navbar/Navbar';
 import MarketData from './pages/MarketData/MarketData';
+import SecurityMaster from './pages/SecurityMaster/SecurityMaster';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -71,6 +72,7 @@ function AppContent() {
           <Routes>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/market-data" element={<MarketData />} />
+            <Route path="/security-master" element={<SecurityMaster />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/logout" element={<Logout />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
