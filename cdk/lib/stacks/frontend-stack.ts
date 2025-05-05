@@ -117,7 +117,7 @@ export class FrontendStack extends cdk.Stack {
     const asset = new cdk.AssetStaging(this, "ControllerUIAsset", {
       sourcePath: path.join(__dirname, '..', '..', '..'),
       bundling: {
-        image: cdk.DockerImage.fromRegistry('node:18'),
+        image: cdk.DockerImage.fromRegistry('public.ecr.aws/docker/library/node:18'),
         local: {
           tryBundle(outputDir: string): boolean {
             return false;
