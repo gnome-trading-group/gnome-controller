@@ -3,11 +3,14 @@ import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 
 interface BackendStackProps extends cdk.StackProps {
   userPool: cognito.IUserPool;
   collectorsTable: dynamodb.ITable;
+  collectorClusterName: string;
+  collectorTaskDefinition: string;
 }
 
 interface EndpointConfig {
@@ -60,9 +63,21 @@ export class BackendStack extends cdk.Stack {
         layers: [commonLayer],
         environment: {
           COLLECTORS_TABLE_NAME: props.collectorsTable.tableName,
+          COLLECTOR_ECS_CLUSTER: props.collectorClusterName,
+          COLLECTOR_ECS_TASK_DEFINITION: props.collectorTaskDefinition,
         },
       });
       props.collectorsTable.grantReadWriteData(fn);
+      
+      fn.addToRolePolicy(new iam.PolicyStatement({
+        actions: [
+          'ecs:RunTask',
+          'ecs:StopTask',
+          'ecs:DescribeTasks',
+        ],
+        resources: ['*'],  // TODO: Restrict to specific task definition
+      }));
+      
       return fn;
     };
 
@@ -112,6 +127,12 @@ export class BackendStack extends cdk.Stack {
         path: "collectors/heartbeat",
         method: "POST",
         handlerPath: "heartbeat",
+      },
+      {
+        name: "UpdateCollector",
+        path: "collectors",
+        method: "PUT",
+        handlerPath: "update",
       },
     ];
 

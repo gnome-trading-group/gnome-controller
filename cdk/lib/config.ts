@@ -7,10 +7,16 @@ export interface ControllerConfig {
   slackWorkspaceId: string;
   slackChannelConfigurationName: string;
   slackChannelId: string;
+
+  // Collector settings
+  collectorClusterName: string;
+  collectorTaskDefinition: string;
 }
 
 const defaultConfig = {
   slackWorkspaceId: "T08K71WNHSR",
+  collectorClusterName: 'CollectorCluster',
+  collectorTaskDefinition: 'CollectorTaskDefinition:1',
 }
 
 export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
@@ -21,13 +27,13 @@ export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
     slackChannelConfigurationName: "gnome-alerts-dev",
     slackChannelId: "C08KX2GAUE4",
   },
-  [Stage.STAGING]: {
-    ...defaultConfig,
-    account: GnomeAccount.InfraStaging,
+  // [Stage.STAGING]: {
+  //   ...defaultConfig,
+  //   account: GnomeAccount.InfraStaging,
 
-    slackChannelConfigurationName: "gnome-alerts-staging",
-    slackChannelId: "C08KL9PGAQZ",
-  },
+  //   slackChannelConfigurationName: "gnome-alerts-staging",
+  //   slackChannelId: "C08KL9PGAQZ",
+  // },
   [Stage.PROD]: {
     ...defaultConfig,
     account: GnomeAccount.InfraProd,
