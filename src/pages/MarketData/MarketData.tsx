@@ -15,6 +15,8 @@ import {
   Container,
   Paper,
   Badge,
+  Loader,
+  Center,
 } from '@mantine/core';
 import { IconPlus, IconTrash, IconRefresh } from '@tabler/icons-react';
 
@@ -127,48 +129,54 @@ function MarketData() {
       )}
 
       <Paper shadow="sm" p="md">
-        <Table striped highlightOnHover>
-          <thead>
-            <tr>
-              <th>Listing ID</th>
-              <th>Status</th>
-              <th>Last Heartbeat</th>
-              <th>Last Status Change</th>
-              <th>Failure Reason</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {collectors.map(collector => (
-              <tr 
-                key={collector.listingId}
-                style={{ cursor: 'pointer' }}
-                onClick={() => navigate(`/collectors/${collector.listingId}`)}
-              >
-                <td>{collector.listingId}</td>
-                <td>
-                  <Badge color={getStatusColor(collector.status)}>
-                    {collector.status}
-                  </Badge>
-                </td>
-                <td>{new Date(collector.lastHeartbeat).toLocaleString()}</td>
-                <td>{new Date(collector.lastStatusChange).toLocaleString()}</td>
-                <td>{collector.failureReason || '-'}</td>
-                <td>
-                  <ActionIcon 
-                    color="red" 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteCollector(collector.listingId);
-                    }}
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                </td>
+        {loading ? (
+          <Center p="xl">
+            <Loader />
+          </Center>
+        ) : (
+          <Table striped highlightOnHover>
+            <thead>
+              <tr>
+                <th>Listing ID</th>
+                <th>Status</th>
+                <th>Last Heartbeat</th>
+                <th>Last Status Change</th>
+                <th>Failure Reason</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
+            </thead>
+            <tbody>
+              {collectors.map(collector => (
+                <tr 
+                  key={collector.listingId}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => navigate(`/collectors/${collector.listingId}`)}
+                >
+                  <td>{collector.listingId}</td>
+                  <td>
+                    <Badge color={getStatusColor(collector.status)}>
+                      {collector.status}
+                    </Badge>
+                  </td>
+                  <td>{new Date(collector.lastHeartbeat).toLocaleString()}</td>
+                  <td>{new Date(collector.lastStatusChange).toLocaleString()}</td>
+                  <td>{collector.failureReason || '-'}</td>
+                  <td>
+                    <ActionIcon 
+                      color="red" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCollector(collector.listingId);
+                      }}
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
       </Paper>
 
       <Modal
