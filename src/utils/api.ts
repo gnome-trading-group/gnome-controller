@@ -2,11 +2,6 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-interface ApiResponse {
-  statusCode: number;
-  body: string;
-}
-
 export class ApiError extends Error {
   constructor(public statusCode: number, message: string) {
     super(message);
@@ -14,7 +9,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(
+export async function sendApiRequest<T>(
   endpoint: string,
   method: 'GET' | 'POST' | 'DELETE' = 'GET',
   body?: any
@@ -34,26 +29,24 @@ export async function apiRequest<T>(
       body: body ? JSON.stringify(body) : undefined
     });
 
-    const data: ApiResponse = await response.json();
-    
+    const data = await response.json();
     if (response.ok) {
-      return JSON.parse(data.body);
+      return data as T;
     } else {
-      const error = JSON.parse(data.body);
-      throw new ApiError(response.status, error.error || 'An error occurred');
+      const error = typeof data.body === 'string' ? data.body : data.body?.error || 'An error occurred';
+      throw new ApiError(response.status, error);
     }
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
     }
-    throw new ApiError(500, 'Failed to make API request');
+    throw new ApiError(500, `Failed to make API request: ${error}`);
   }
 }
 
 // Collector-specific API methods
 export const collectorsApi = {
-  list: () => apiRequest<{ collectors: any[] }>('/collectors'),
-  create: (listingId: number) => apiRequest<{ message: string }>('/collectors', 'POST', { listingId }),
-  delete: (listingId: number) => apiRequest<{ message: string }>('/collectors', 'DELETE', { listingId }),
-  heartbeat: (listingId: number) => apiRequest<{ message: string }>('/collectors/heartbeat', 'POST', { listingId })
+  list: () => sendApiRequest<{ collectors: any[] }>('/collectors'),
+  create: (listingId: number) => sendApiRequest<{ message: string }>('/collectors', 'POST', { listingId }),
+  delete: (listingId: number) => sendApiRequest<{ message: string }>('/collectors', 'DELETE', { listingId }),
 }; 

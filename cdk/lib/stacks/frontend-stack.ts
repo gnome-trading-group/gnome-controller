@@ -19,7 +19,7 @@ export class FrontendStack extends cdk.Stack {
     super(scope, id, props);
 
     const websiteBucket = new s3.Bucket(this, "ControllerBucket", {
-      bucketName: "gnome-controller-frontend",
+      bucketName: `gnome-controller-frontend-${props.stage}`,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,

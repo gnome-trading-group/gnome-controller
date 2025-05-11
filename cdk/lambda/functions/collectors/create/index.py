@@ -2,11 +2,9 @@ import os
 import boto3
 from db import DynamoDBClient
 from utils import lambda_handler
-from constants import Status
 
 @lambda_handler
-def handler(event, context):
-    body = event['body']
+def handler(body):
     listing_id = int(body['listingId'])
     
     ecs = boto3.client('ecs')
@@ -53,9 +51,4 @@ def handler(event, context):
         }
         
     except Exception as e:
-        return {
-            'statusCode': 500,
-            'body': {
-                'error': f'Failed to create collector: {str(e)}'
-            }
-        } 
+        raise Exception(f'Failed to create collector: {str(e)}') 

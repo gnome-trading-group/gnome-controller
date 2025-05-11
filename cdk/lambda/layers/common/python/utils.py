@@ -1,4 +1,5 @@
 import json
+import functools
 from typing import Any, Callable, Dict
 
 CORS_HEADERS = {
@@ -16,11 +17,12 @@ def create_response(status_code: int, body: Any) -> Dict[str, Any]:
         'body': json.dumps(body)
     }
 
-def lambda_handler(func: Callable) -> Callable:
-    """Decorator to handle Lambda function responses and errors."""
+def lambda_handler(func: Callable[[Dict[str, Any]], Dict[str, Any]]) -> Callable[[Dict[str, Any], Any], Dict[str, Any]]:
+    @functools.wraps(func)
     def wrapper(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         try:
-            result = func(event, context)
+            body = json.loads(event.get('body', '{}'))
+            result = func(body)
             return create_response(200, result)
         except Exception as e:
             return create_response(400, {'error': str(e)})

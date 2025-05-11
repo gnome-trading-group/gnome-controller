@@ -5,8 +5,7 @@ from utils import lambda_handler
 from constants import Status
 
 @lambda_handler
-def handler(event, context):
-    body = event['body']
+def handler(body):
     listing_id = int(body['listingId'])
     
     ecs = boto3.client('ecs')
@@ -16,12 +15,7 @@ def handler(event, context):
     
     collector = db.get_item(listing_id)
     if not collector:
-        return {
-            'statusCode': 404,
-            'body': {
-                'error': f'Collector with listing ID {listing_id} not found'
-            }
-        }
+        raise Exception(f'Collector with listing ID {listing_id} not found')
     
     if 'taskArn' in collector:
         try:
