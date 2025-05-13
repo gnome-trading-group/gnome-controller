@@ -30,7 +30,7 @@ def handler(body):
             launchType='EC2',
             overrides={
                 'containerOverrides': [{
-                    'name': f'collector-{listing_id}',
+                    'name': 'CollectorContainer',
                     'environment': [
                         {
                             'name': 'LISTING_ID',
