@@ -61,6 +61,7 @@ export class BackendStack extends cdk.Stack {
         handler: "index.handler",
         code: lambda.Code.fromAsset(handlerPath),
         layers: [commonLayer],
+        timeout: cdk.Duration.seconds(30),
         environment: {
           COLLECTORS_TABLE_NAME: props.collectorsTable.tableName,
           COLLECTOR_ECS_CLUSTER: props.collectorClusterName,

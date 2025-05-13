@@ -21,7 +21,7 @@ def lambda_handler(func: Callable[[Dict[str, Any]], Dict[str, Any]]) -> Callable
     @functools.wraps(func)
     def wrapper(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         try:
-            body = json.loads(event.get('body', '{}'))
+            body = json.loads(event.get('body') or '{}')
             result = func(body)
             return create_response(200, result)
         except Exception as e:
