@@ -75,6 +75,7 @@ export class BackendStack extends cdk.Stack {
           'ecs:RunTask',
           'ecs:StopTask',
           'ecs:DescribeTasks',
+          'iam:PassRole'
         ],
         resources: ['*'],  // TODO: Restrict to specific task definition
       }));

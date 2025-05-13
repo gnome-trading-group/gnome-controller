@@ -35,6 +35,7 @@ function MarketData() {
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [newListingId, setNewListingId] = useState<number | ''>('');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     loadCollectors();
@@ -62,6 +63,7 @@ function MarketData() {
     
     try {
       setError(null);
+      setCreating(true);
       await collectorsApi.create(newListingId);
       setCreateModalOpen(false);
       setNewListingId('');
@@ -72,6 +74,8 @@ function MarketData() {
       } else {
         setError('Failed to create collector');
       }
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -192,7 +196,7 @@ function MarketData() {
             placeholder="Enter listing ID"
             required
           />
-          <Button onClick={handleCreateCollector}>
+          <Button onClick={handleCreateCollector} loading={creating} disabled={creating}>
             Create Collector
           </Button>
         </Stack>
