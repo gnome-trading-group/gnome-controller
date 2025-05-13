@@ -6,6 +6,7 @@ import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import { Construct } from "constructs";
 import * as path from "path";
+import { execSync } from "child_process";
 import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 
 interface FrontendStackProps extends cdk.StackProps {
@@ -116,13 +117,21 @@ export class FrontendStack extends cdk.Stack {
     const userPoolClient = appClient.node.defaultChild as cognito.CfnUserPoolClient;
     userPoolClient.supportedIdentityProviders = ['IdentityCenter'];
 
+    const uiPath = path.join(__dirname, "..", "..", "..");
+
     const asset = new cdk.AssetStaging(this, "ControllerUIAsset", {
-      sourcePath: path.join(__dirname, '..', '..', '..'),
+      sourcePath: uiPath,
       bundling: {
         image: cdk.DockerImage.fromRegistry('public.ecr.aws/docker/library/node:18'),
         local: {
           tryBundle(outputDir: string): boolean {
-            return false;
+            try {
+              // If you're running locally, make sure to run `npm run build` in the UI beforehand
+              execSync(`cp -r ${uiPath}/dist/* ${path.join(outputDir)}`)
+            } catch {
+              return false
+            }
+            return true
           },
         },
         command: [
