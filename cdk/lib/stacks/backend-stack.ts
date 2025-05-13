@@ -11,6 +11,8 @@ interface BackendStackProps extends cdk.StackProps {
   collectorsTable: dynamodb.ITable;
   collectorClusterName: string;
   collectorTaskDefinition: string;
+  collectorSecurityGroupId: string;
+  collectorSubnetIds: string[];
 }
 
 interface EndpointConfig {
@@ -66,6 +68,8 @@ export class BackendStack extends cdk.Stack {
           COLLECTORS_TABLE_NAME: props.collectorsTable.tableName,
           COLLECTOR_ECS_CLUSTER: props.collectorClusterName,
           COLLECTOR_ECS_TASK_DEFINITION: props.collectorTaskDefinition,
+          COLLECTOR_SECURITY_GROUP_ID: props.collectorSecurityGroupId,
+          COLLECTOR_SUBNET_IDS: props.collectorSubnetIds.join(','),
         },
       });
       props.collectorsTable.grantReadWriteData(fn);

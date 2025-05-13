@@ -9,14 +9,16 @@ export interface ControllerConfig {
   slackChannelId: string;
 
   // Collector settings
+  collectorOrchestratorVersion: string;
   collectorClusterName: string;
   collectorTaskDefinition: string;
 }
 
 const defaultConfig = {
   slackWorkspaceId: "T08K71WNHSR",
-  collectorClusterName: 'CollectorCluster',
-  collectorTaskDefinition: 'CollectorTaskDefinition:3',
+  collectorOrchestratorVersion: "1.0.21",
+  collectorClusterName: "CollectorCluster",
+  collectorTaskDefinition: "CollectorTaskDefinition",
 }
 
 export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {

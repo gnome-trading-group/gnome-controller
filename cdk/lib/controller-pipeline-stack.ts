@@ -8,6 +8,8 @@ import { CONFIGS, GITHUB_BRANCH, GITHUB_REPO, ControllerConfig } from "./config"
 import { FrontendStack } from "./stacks/frontend-stack";
 import { BackendStack } from "./stacks/backend-stack";
 import { DatabaseStack } from "./stacks/database-stack";
+import { MonitoringStack } from "./stacks/monitoring-stack";
+import { CollectorEcsStack } from "./stacks/collector-ecs-stack";
 
 class AppStage extends cdk.Stage {
   constructor(scope: Construct, id: string, config: ControllerConfig) {
@@ -18,12 +20,19 @@ class AppStage extends cdk.Stage {
     });
 
     const databaseStack = new DatabaseStack(this, "ControllerDatabaseStack");
+    const monitoringStack = new MonitoringStack(this, "ControllerMonitoringStack");
+    const collectorEcsStack = new CollectorEcsStack(this, "ControllerCollectorEcsStack", {
+      config,
+      monitoringStack,
+    });
 
     new BackendStack(this, "ControllerBackendStack", {
       userPool: frontendStack.userPool,
       collectorsTable: databaseStack.collectorsTable,
       collectorClusterName: config.collectorClusterName,
       collectorTaskDefinition: config.collectorTaskDefinition,
+      collectorSecurityGroupId: collectorEcsStack.securityGroup.securityGroupId,
+      collectorSubnetIds: collectorEcsStack.vpc.publicSubnets.map(subnet => subnet.subnetId),
     });
   }
 }

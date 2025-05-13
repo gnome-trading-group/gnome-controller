@@ -10,6 +10,8 @@ def handler(body):
     ecs = boto3.client('ecs')
     cluster = os.environ['COLLECTOR_ECS_CLUSTER']
     task_definition = os.environ['COLLECTOR_ECS_TASK_DEFINITION']
+    security_group_id = os.environ['COLLECTOR_SECURITY_GROUP_ID']
+    subnet_ids = os.environ['COLLECTOR_SUBNET_IDS'].split(',')
     
     try:
         db = DynamoDBClient()
@@ -27,7 +29,14 @@ def handler(body):
         response = ecs.run_task(
             cluster=cluster,
             taskDefinition=task_definition,
-            launchType='EC2',
+            launchType='FARGATE',
+            networkConfiguration={
+                'awsvpcConfiguration': {
+                    'subnets': subnet_ids,
+                    'securityGroups': [security_group_id],
+                    'assignPublicIp': 'ENABLED'
+                }
+            },
             overrides={
                 'containerOverrides': [{
                     'name': 'CollectorContainer',
