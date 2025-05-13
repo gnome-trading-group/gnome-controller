@@ -7,7 +7,6 @@ import {
   Button,
   ActionIcon,
   Group,
-  Text,
   Modal,
   NumberInput,
   Stack,
