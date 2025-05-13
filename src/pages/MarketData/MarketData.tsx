@@ -17,6 +17,7 @@ import {
   Badge,
   Loader,
   Center,
+  Notification,
 } from '@mantine/core';
 import { IconPlus, IconTrash, IconRefresh } from '@tabler/icons-react';
 
@@ -129,7 +130,14 @@ function MarketData() {
       </Group>
 
       {error && (
-        <Text color="red" mb="md">{error}</Text>
+        <Notification 
+          color="red" 
+          title="Error" 
+          onClose={() => setError(null)}
+          mb="md"
+        >
+          {error}
+        </Notification>
       )}
 
       <Paper shadow="sm" p="md">

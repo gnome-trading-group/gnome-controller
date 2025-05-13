@@ -16,7 +16,7 @@ export interface ControllerConfig {
 const defaultConfig = {
   slackWorkspaceId: "T08K71WNHSR",
   collectorClusterName: 'CollectorCluster',
-  collectorTaskDefinition: 'CollectorTaskDefinition:1',
+  collectorTaskDefinition: 'CollectorTaskDefinition:2',
 }
 
 export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
