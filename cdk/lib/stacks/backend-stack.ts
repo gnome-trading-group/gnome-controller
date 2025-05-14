@@ -23,6 +23,7 @@ interface EndpointConfig {
   path: string;
   method: string;
   handlerPath: string;
+  authType: 'cognito' | 'apiKey';
 }
 
 export class BackendStack extends cdk.Stack {
@@ -53,6 +54,23 @@ export class BackendStack extends cdk.Stack {
       cognitoUserPools: [props.userPool],
       identitySource: 'method.request.header.Authorization',
     });
+
+    const apiKey = new apigateway.ApiKey(this, "ControllerApiKey", {
+      apiKeyName: "controller-api-key",
+      description: "API key for controller endpoints",
+    });
+
+    const usagePlan = new apigateway.UsagePlan(this, "ControllerUsagePlan", {
+      name: "controller-usage-plan",
+      apiStages: [
+        {
+          api,
+          stage: api.deploymentStage,
+        },
+      ],
+    });
+
+    usagePlan.addApiKey(apiKey);
 
     const commonLayer = new lambda.LayerVersion(this, "CommonLayer", {
       code: lambda.Code.fromAsset("lambda/layers/common"),
@@ -102,13 +120,18 @@ export class BackendStack extends cdk.Stack {
         resource = resource.getResource(part) || resource.addResource(part);
       }
 
+      const methodOptions: apigateway.MethodOptions = {
+        apiKeyRequired: config.authType === 'apiKey',
+        authorizationType: config.authType === 'apiKey' 
+          ? apigateway.AuthorizationType.NONE 
+          : apigateway.AuthorizationType.COGNITO,
+        authorizer: config.authType === 'apiKey' ? undefined : authorizer,
+      };
+
       resource.addMethod(
         config.method,
         new apigateway.LambdaIntegration(fn),
-        {
-          authorizer,
-          authorizationType: apigateway.AuthorizationType.COGNITO,
-        }
+        methodOptions
       );
     };
 
@@ -118,30 +141,35 @@ export class BackendStack extends cdk.Stack {
         path: "collectors",
         method: "POST",
         handlerPath: "create",
+        authType: "cognito"
       },
       {
         name: "ListCollectors",
         path: "collectors",
         method: "GET",
         handlerPath: "list",
+        authType: "cognito"
       },
       {
         name: "DeleteCollector",
         path: "collectors",
         method: "DELETE",
         handlerPath: "delete",
+        authType: "cognito"
       },
       {
         name: "HeartbeatCollector",
         path: "collectors/heartbeat",
         method: "POST",
         handlerPath: "heartbeat",
+        authType: "apiKey"
       },
       {
         name: "UpdateCollector",
         path: "collectors",
         method: "PUT",
         handlerPath: "update",
+        authType: "cognito"
       },
     ];
 
@@ -176,6 +204,11 @@ export class BackendStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ApiUrl", {
       value: api.url,
       description: "API Gateway URL",
+    });
+
+    new cdk.CfnOutput(this, "ApiKey", {
+      value: apiKey.keyId,
+      description: "API Key ID for controller endpoints",
     });
   }
 } 

@@ -14,7 +14,7 @@ export interface ControllerConfig {
 
 const defaultConfig = {
   slackWorkspaceId: "T08K71WNHSR",
-  collectorOrchestratorVersion: "1.0.21",
+  collectorOrchestratorVersion: "1.0.22",
 }
 
 export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
