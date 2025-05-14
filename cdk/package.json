@@ -8,7 +8,8 @@
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "diff-substacks": "npx cdk diff '**' -a 'npx ts-node ./bin/cdk.ts'"
   },
   "devDependencies": {
     "@gnome-trading-group/gnome-shared-cdk": "^1.0.7",

@@ -1,6 +1,13 @@
 import json
 import functools
 from typing import Any, Callable, Dict
+from decimal import Decimal
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return int(obj)
+        return super().default(obj)
 
 CORS_HEADERS = {
     'Access-Control-Allow-Origin': '*',
@@ -14,7 +21,7 @@ def create_response(status_code: int, body: Any) -> Dict[str, Any]:
     return {
         'statusCode': status_code,
         'headers': CORS_HEADERS,
-        'body': json.dumps(body)
+        'body': json.dumps(body, cls=DecimalEncoder)
     }
 
 def lambda_handler(func: Callable[[Dict[str, Any]], Dict[str, Any]]) -> Callable[[Dict[str, Any], Any], Dict[str, Any]]:

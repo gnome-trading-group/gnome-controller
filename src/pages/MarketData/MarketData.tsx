@@ -17,14 +17,16 @@ import {
   Loader,
   Center,
   Notification,
+  Text,
 } from '@mantine/core';
-import { IconPlus, IconTrash, IconRefresh } from '@tabler/icons-react';
+import { IconPlus, IconPlayerPause, IconRefresh } from '@tabler/icons-react';
+import ReactTimeAgo from 'react-time-ago';
 
 interface Collector {
   listingId: number;
   status: string;
-  lastHeartbeat: string;
-  lastStatusChange: string;
+  lastHeartbeat: number;
+  lastStatusChange: number;
   failureReason: string | null;
 }
 
@@ -36,14 +38,26 @@ function MarketData() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [newListingId, setNewListingId] = useState<number | ''>('');
   const [creating, setCreating] = useState(false);
+  const [stopModalOpen, setStopModalOpen] = useState(false);
+  const [collectorToStop, setCollectorToStop] = useState<number | null>(null);
 
   useEffect(() => {
     loadCollectors();
   }, []);
 
-  const loadCollectors = async () => {
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadCollectors(false);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadCollectors = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       setError(null);
       const response = await collectorsApi.list();
       setCollectors(response.collectors);
@@ -54,7 +68,9 @@ function MarketData() {
         setError('Failed to load collectors');
       }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -79,7 +95,7 @@ function MarketData() {
     }
   };
 
-  const handleDeleteCollector = async (listingId: number) => {
+  const handleStopCollector = async (listingId: number) => {
     try {
       setError(null);
       await collectorsApi.delete(listingId);
@@ -88,18 +104,20 @@ function MarketData() {
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
-        setError('Failed to delete collector');
+        setError('Failed to stop collector');
       }
+    } finally {
+      setStopModalOpen(false);
+      setCollectorToStop(null);
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'PENDING': return 'yellow';
-      case 'RUNNING': return 'green';
-      case 'COMPLETED': return 'blue';
-      case 'FAILED': return 'red';
+      case 'ACTIVE': return 'green';
       case 'INACTIVE': return 'gray';
+      case 'PENDING': return 'blue';
+      case 'FAILED': return 'red';
       default: return 'gray';
     }
   };
@@ -113,7 +131,7 @@ function MarketData() {
             size="lg" 
             variant="filled" 
             color="green"
-            onClick={loadCollectors}
+            onClick={() => loadCollectors(true)}
           >
             <IconRefresh size={20} />
           </ActionIcon>
@@ -169,19 +187,22 @@ function MarketData() {
                       {collector.status}
                     </Badge>
                   </td>
-                  <td>{new Date(collector.lastHeartbeat).toLocaleString()}</td>
-                  <td>{new Date(collector.lastStatusChange).toLocaleString()}</td>
+                  <td>{collector.lastHeartbeat ? <ReactTimeAgo date={collector.lastHeartbeat * 1000} /> : '-'}</td>
+                  <td>{collector.lastStatusChange ? <ReactTimeAgo date={collector.lastStatusChange * 1000} /> : '-'}</td>
                   <td>{collector.failureReason || '-'}</td>
                   <td>
-                    <ActionIcon 
-                      color="red" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteCollector(collector.listingId);
-                      }}
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
+                    {collector.status === 'ACTIVE' && (
+                      <ActionIcon 
+                        color="red" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCollectorToStop(collector.listingId);
+                          setStopModalOpen(true);
+                        }}
+                      >
+                        <IconPlayerPause size={16} />
+                      </ActionIcon>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -206,6 +227,33 @@ function MarketData() {
           <Button onClick={handleCreateCollector} loading={creating} disabled={creating}>
             Create Collector
           </Button>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={stopModalOpen}
+        onClose={() => {
+          setStopModalOpen(false);
+          setCollectorToStop(null);
+        }}
+        title="Stop Collector"
+      >
+        <Stack>
+          <Text>Are you sure you want to stop this collector?</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => {
+              setStopModalOpen(false);
+              setCollectorToStop(null);
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              color="red" 
+              onClick={() => collectorToStop && handleStopCollector(collectorToStop)}
+            >
+              Stop Collector
+            </Button>
+          </Group>
         </Stack>
       </Modal>
     </Container>

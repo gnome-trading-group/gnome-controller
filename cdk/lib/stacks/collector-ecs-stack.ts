@@ -20,6 +20,8 @@ export interface CollectorEcsStackProps extends cdk.StackProps {
 export class CollectorEcsStack extends cdk.Stack {
   public readonly vpc: ec2.Vpc;
   public readonly securityGroup: ec2.SecurityGroup;
+  public readonly cluster: ecs.Cluster;
+  public readonly taskDefinitionFamily: string;
 
   constructor(scope: Construct, id: string, props: CollectorEcsStackProps) {
     super(scope, id, props);
@@ -57,13 +59,14 @@ export class CollectorEcsStack extends cdk.Stack {
     });
     bucket.grantReadWrite(taskRole);
 
-    const cluster = new ecs.Cluster(this, 'CollectorEcsCluster', { 
+    this.cluster = new ecs.Cluster(this, 'CollectorEcsCluster', { 
       clusterName: 'CollectorCluster',
       vpc: this.vpc,
     });
 
-    const taskDef = new ecs.FargateTaskDefinition(this, 'CollectorTaskDefinition', {
-      family: 'CollectorTaskDefinition',
+    this.taskDefinitionFamily = 'CollectorTaskDefinition';
+    const taskDefinition = new ecs.FargateTaskDefinition(this, 'CollectorTaskDefinition', {
+      family: this.taskDefinitionFamily,
       taskRole,
       memoryLimitMiB: 1024,
       cpu: 512,
@@ -76,7 +79,7 @@ export class CollectorEcsStack extends cdk.Stack {
       },
     });
 
-    taskDef.addContainer('CollectorContainer', {
+    taskDefinition.addContainer('CollectorContainer', {
       image: ecs.ContainerImage.fromDockerImageAsset(dockerImage),
       portMappings: [{ containerPort: 8080 }],
       environment: {
@@ -96,8 +99,8 @@ export class CollectorEcsStack extends cdk.Stack {
     });
 
     new ecs.FargateService(this, 'CollectorService', {
-      cluster,
-      taskDefinition: taskDef,
+      cluster: this.cluster,
+      taskDefinition,
       desiredCount: 0,
       assignPublicIp: true,
       securityGroups: [this.securityGroup],

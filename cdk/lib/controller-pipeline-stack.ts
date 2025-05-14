@@ -29,8 +29,8 @@ class AppStage extends cdk.Stage {
     new BackendStack(this, "ControllerBackendStack", {
       userPool: frontendStack.userPool,
       collectorsTable: databaseStack.collectorsTable,
-      collectorClusterName: config.collectorClusterName,
-      collectorTaskDefinition: config.collectorTaskDefinition,
+      collectorCluster: collectorEcsStack.cluster,
+      collectorTaskDefinition: collectorEcsStack.taskDefinitionFamily,
       collectorSecurityGroupId: collectorEcsStack.securityGroup.securityGroupId,
       collectorSubnetIds: collectorEcsStack.vpc.publicSubnets.map(subnet => subnet.subnetId),
     });

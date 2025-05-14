@@ -1,6 +1,6 @@
-from enum import Enum
+from enum import StrEnum
 
-class Status(Enum):
+class Status(StrEnum):
     ACTIVE = 'ACTIVE'
     INACTIVE = 'INACTIVE'
     PENDING = 'PENDING'

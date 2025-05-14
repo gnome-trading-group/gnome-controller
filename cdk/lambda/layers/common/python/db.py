@@ -36,13 +36,19 @@ class DynamoDBClient:
             )
     
     def update_status(self, listing_id: int, status: Status, failureReason: Optional[str] = None, taskArn: Optional[str] = None) -> Dict:
-        update_expr = 'SET status = :status, lastStatusChange = :now'
+        update_expr = 'SET #s = :status, lastStatusChange = :now'
         expr_values = {
             ':status': status.value,
-            ':now': int(time.time()),
-            ':reason': failureReason
+            ':now': int(time.time())
+        }
+        expr_names = {
+            '#s': 'status'
         }
         
+        if failureReason is not None:
+            update_expr += ', failureReason = :reason'
+            expr_values[':reason'] = failureReason
+            
         if taskArn:
             update_expr += ', taskArn = :taskArn'
             expr_values[':taskArn'] = taskArn
@@ -50,7 +56,8 @@ class DynamoDBClient:
         return self.table.update_item(
             Key={'listingId': listing_id},
             UpdateExpression=update_expr,
-            ExpressionAttributeValues=expr_values
+            ExpressionAttributeValues=expr_values,
+            ExpressionAttributeNames=expr_names
         )
 
     def update_heartbeat(self, listing_id: int) -> Dict:

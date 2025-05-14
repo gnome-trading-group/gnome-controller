@@ -4,12 +4,15 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as ecs from "aws-cdk-lib/aws-ecs";
+import * as events from "aws-cdk-lib/aws-events";
+import * as targets from "aws-cdk-lib/aws-events-targets";
 import { Construct } from "constructs";
 
 interface BackendStackProps extends cdk.StackProps {
   userPool: cognito.IUserPool;
   collectorsTable: dynamodb.ITable;
-  collectorClusterName: string;
+  collectorCluster: ecs.ICluster; 
   collectorTaskDefinition: string;
   collectorSecurityGroupId: string;
   collectorSubnetIds: string[];
@@ -66,7 +69,7 @@ export class BackendStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(30),
         environment: {
           COLLECTORS_TABLE_NAME: props.collectorsTable.tableName,
-          COLLECTOR_ECS_CLUSTER: props.collectorClusterName,
+          COLLECTOR_ECS_CLUSTER: props.collectorCluster.clusterName,
           COLLECTOR_ECS_TASK_DEFINITION: props.collectorTaskDefinition,
           COLLECTOR_SECURITY_GROUP_ID: props.collectorSecurityGroupId,
           COLLECTOR_SUBNET_IDS: props.collectorSubnetIds.join(','),
@@ -143,6 +146,32 @@ export class BackendStack extends cdk.Stack {
     ];
 
     endpoints.forEach(createEndpoint);
+
+    const collectorEcsMonitorLambda = new lambda.Function(this, "CollectorEcsMonitorLambda", {
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: "index.lambda_handler",
+      code: lambda.Code.fromAsset("lambda/functions/collectors/ecs-monitor"),
+      environment: {
+        COLLECTORS_TABLE_NAME: props.collectorsTable.tableName,
+      },
+      layers: [commonLayer],
+      timeout: cdk.Duration.seconds(30),
+    });
+
+    props.collectorsTable.grantReadWriteData(collectorEcsMonitorLambda);
+
+    const collectorEcsTaskStateRule = new events.Rule(this, "CollectorEcsTaskStateRule", {
+      eventPattern: {
+        source: ["aws.ecs"],
+        detailType: ["ECS Task State Change"],
+        detail: {
+          clusterArn: [props.collectorCluster.clusterArn],
+          lastStatus: ["RUNNING", "STOPPED", "PENDING"],
+        },
+      },
+    });
+
+    collectorEcsTaskStateRule.addTarget(new targets.LambdaFunction(collectorEcsMonitorLambda));
 
     new cdk.CfnOutput(this, "ApiUrl", {
       value: api.url,

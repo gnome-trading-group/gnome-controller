@@ -23,7 +23,8 @@ def handler(body):
                     cluster=cluster,
                     task=existing_collector['taskArn']
                 )
-            except ecs.exceptions.ClientError:
+            except ecs.exceptions.ClientError as e:
+                print(e)
                 pass
         
         response = ecs.run_task(

@@ -17,15 +17,16 @@ def handler(body):
     if not collector:
         raise Exception(f'Collector with listing ID {listing_id} not found')
     
+    db.update_status(listing_id, Status.INACTIVE)
+
     if 'taskArn' in collector:
         try:
             ecs.stop_task(
                 cluster=cluster,
                 task=collector['taskArn']
             )
-        except ecs.exceptions.ClientError:
+        except ecs.exceptions.ClientError as e:
+            print(e)
             pass
-    
-    db.update_status(listing_id, Status.INACTIVE)
     
     return {'message': 'Collector stopped successfully'} 
