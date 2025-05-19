@@ -83,8 +83,14 @@ export class CollectorEcsStack extends cdk.Stack {
       image: ecs.ContainerImage.fromDockerImageAsset(dockerImage),
       portMappings: [{ containerPort: 8080 }],
       environment: {
-        MAIN_CLASS: 'group.gnometrading.collectors.HyperliquidCollectorOrchestrator',
-      }, // TODO: Delete this
+        MAIN_CLASS: 'group.gnometrading.collectors.DelegatingCollectorOrchestrator',
+        OUTPUT_BUCKET: bucket.bucketName,
+        CONTROLLER_URL: props.config.controllerUrl,
+        CONTROLLER_API_KEY: props.config.controllerApiKey,
+        REGISTRY_URL: props.config.registryUrl,
+        REGISTRY_API_KEY: props.config.registryApiKey,
+        STAGE: props.config.account.stage,
+      },
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'collector',
         logGroup: ecsLogGroup,
