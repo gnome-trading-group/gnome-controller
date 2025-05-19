@@ -43,7 +43,7 @@ def handler(body):
                     'name': 'CollectorContainer',
                     'environment': [
                         {
-                            'name': 'LISTING_ID',
+                            'name': 'LISTING_IDS',
                             'value': str(listing_id)
                         }
                     ]
