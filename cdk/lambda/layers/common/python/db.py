@@ -36,19 +36,16 @@ class DynamoDBClient:
             )
     
     def update_status(self, listing_id: int, status: Status, failureReason: Optional[str] = None, taskArn: Optional[str] = None) -> Dict:
-        update_expr = 'SET #s = :status, lastStatusChange = :now'
+        update_expr = 'SET #s = :status, lastStatusChange = :now, failureReason = :reason'
         expr_values = {
             ':status': status.value,
-            ':now': int(time.time())
+            ':now': int(time.time()),
+            ':reason': failureReason
         }
         expr_names = {
             '#s': 'status'
         }
         
-        if failureReason is not None:
-            update_expr += ', failureReason = :reason'
-            expr_values[':reason'] = failureReason
-            
         if taskArn:
             update_expr += ', taskArn = :taskArn'
             expr_values[':taskArn'] = taskArn
