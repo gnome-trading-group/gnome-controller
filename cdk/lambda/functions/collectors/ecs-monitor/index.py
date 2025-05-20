@@ -24,7 +24,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> None:
         raise Exception(f"No collector found with task ARN {task_arn}")
     
     if last_status == 'RUNNING':
-        db.update_status(target_collector['listingId'], Status.ACTIVE)
+        if desired_status != 'STOPPED':
+            db.update_status(target_collector['listingId'], Status.ACTIVE)
     elif last_status == 'STOPPED':
         if target_collector['status'] != Status.INACTIVE:
             db.update_status(target_collector['listingId'], Status.FAILED, stopped_reason)

@@ -201,6 +201,31 @@ export class BackendStack extends cdk.Stack {
 
     collectorEcsTaskStateRule.addTarget(new targets.LambdaFunction(collectorEcsMonitorLambda));
 
+    const heartbeatMonitorLambda = new lambda.Function(this, "CollectorHeartbeatMonitorLambda", {
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: "index.lambda_handler",
+      code: lambda.Code.fromAsset("lambda/functions/collectors/heartbeat-monitor"),
+      environment: {
+        COLLECTORS_TABLE_NAME: props.collectorsTable.tableName,
+        COLLECTOR_ECS_CLUSTER: props.collectorCluster.clusterName,
+      },
+      layers: [commonLayer],
+      timeout: cdk.Duration.seconds(30),
+    });
+
+    props.collectorsTable.grantReadWriteData(heartbeatMonitorLambda);
+    
+    heartbeatMonitorLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ecs:StopTask'],
+      resources: [`arn:aws:ecs:${this.region}:${this.account}:task/${props.collectorCluster.clusterName}/*`],
+    }));
+
+    const heartbeatMonitorRule = new events.Rule(this, "CollectorHeartbeatMonitorRule", {
+      schedule: events.Schedule.rate(cdk.Duration.minutes(30)),
+    });
+
+    heartbeatMonitorRule.addTarget(new targets.LambdaFunction(heartbeatMonitorLambda));
+
     new cdk.CfnOutput(this, "ApiUrl", {
       value: api.url,
       description: "API Gateway URL",
