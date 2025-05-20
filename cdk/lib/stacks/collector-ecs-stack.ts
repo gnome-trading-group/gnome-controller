@@ -95,13 +95,6 @@ export class CollectorEcsStack extends cdk.Stack {
         streamPrefix: 'collector',
         logGroup: ecsLogGroup,
       }),
-      healthCheck: {
-        command: ['CMD-SHELL', 'curl -f http://localhost:8080/health || exit 1'],
-        interval: cdk.Duration.seconds(30),
-        timeout: cdk.Duration.seconds(5),
-        retries: 3,
-        startPeriod: cdk.Duration.seconds(10),
-      },
     });
 
     new ecs.FargateService(this, 'CollectorService', {
