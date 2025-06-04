@@ -29,7 +29,6 @@ class DynamoDBClient:
                     'listingId': listing_id,
                     'status': Status.PENDING,
                     'taskArn': taskArn,
-                    'lastHeartbeat': None,
                     'lastStatusChange': int(time.time()),
                     'failureReason': None,
                 }

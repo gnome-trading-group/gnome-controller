@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { collectorsApi } from '../../utils/api';
 import { ApiError } from '../../utils/api';
 import {
-  Table,
   Button,
   ActionIcon,
   Group,
@@ -12,15 +11,13 @@ import {
   Stack,
   Title,
   Container,
-  Paper,
   Badge,
-  Loader,
-  Center,
   Notification,
   Text,
 } from '@mantine/core';
 import { IconPlus, IconPlayerPause, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
+import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 
 interface Collector {
   listingId: number;
@@ -122,6 +119,79 @@ function MarketData() {
     }
   };
 
+  const columns: MRT_ColumnDef<Collector>[] = [
+    {
+      accessorKey: 'listingId',
+      header: 'Listing ID',
+      enableSorting: true,
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      enableSorting: true,
+      Cell: ({ row }: { row: MRT_Row<Collector> }) => (
+        <Badge color={getStatusColor(row.original.status)}>
+          {row.original.status}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: 'lastHeartbeat',
+      header: 'Last Heartbeat',
+      enableSorting: true,
+      Cell: ({ row }: { row: MRT_Row<Collector> }) => 
+        row.original.lastHeartbeat ? 
+          <ReactTimeAgo date={row.original.lastHeartbeat * 1000} timeStyle="round" /> : 
+          '-',
+    },
+    {
+      accessorKey: 'lastStatusChange',
+      header: 'Last Status Change',
+      enableSorting: true,
+      Cell: ({ row }: { row: MRT_Row<Collector> }) => 
+        row.original.lastStatusChange ? 
+          <ReactTimeAgo date={row.original.lastStatusChange * 1000} timeStyle="round" /> : 
+          '-',
+    },
+    {
+      accessorKey: 'failureReason',
+      header: 'Failure Reason',
+      Cell: ({ row }: { row: MRT_Row<Collector> }) => row.original.failureReason || '-',
+    },
+  ];
+
+  const table = useMantineReactTable({
+    columns,
+    data: collectors,
+    enableColumnFilters: true,
+    enableColumnActions: true,
+    enableRowActions: true,
+    positionActionsColumn: 'last',
+    renderRowActions: ({ row }) => (
+      row.original.status === 'ACTIVE' && (
+        <ActionIcon 
+          color="red" 
+          onClick={(e) => {
+            e.stopPropagation();
+            setCollectorToStop(row.original.listingId);
+            setStopModalOpen(true);
+          }}
+        >
+          <IconPlayerPause size={16} />
+        </ActionIcon>
+      )
+    ),
+    enablePagination: true,
+    enableBottomToolbar: true,
+    enableTopToolbar: true,
+    initialState: { density: 'xs' },
+    state: { isLoading: loading },
+    mantineTableBodyRowProps: ({ row }) => ({
+      onClick: () => navigate(`/collectors/${row.original.listingId}`),
+      style: { cursor: 'pointer' },
+    }),
+  });
+
   return (
     <Container size="xl" py="xl">
       <Group justify="space-between" mb="md">
@@ -157,59 +227,7 @@ function MarketData() {
         </Notification>
       )}
 
-      <Paper shadow="sm" p="md">
-        {loading ? (
-          <Center p="xl">
-            <Loader />
-          </Center>
-        ) : (
-          <Table striped highlightOnHover>
-            <thead>
-              <tr>
-                <th>Listing ID</th>
-                <th>Status</th>
-                <th>Last Heartbeat</th>
-                <th>Last Status Change</th>
-                <th>Failure Reason</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {collectors.map(collector => (
-                <tr 
-                  key={collector.listingId}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => navigate(`/collectors/${collector.listingId}`)}
-                >
-                  <td>{collector.listingId}</td>
-                  <td>
-                    <Badge color={getStatusColor(collector.status)}>
-                      {collector.status}
-                    </Badge>
-                  </td>
-                  <td>{collector.lastHeartbeat ? <ReactTimeAgo date={collector.lastHeartbeat * 1000} /> : '-'}</td>
-                  <td>{collector.lastStatusChange ? <ReactTimeAgo date={collector.lastStatusChange * 1000} /> : '-'}</td>
-                  <td>{collector.failureReason || '-'}</td>
-                  <td>
-                    {collector.status === 'ACTIVE' && (
-                      <ActionIcon 
-                        color="red" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCollectorToStop(collector.listingId);
-                          setStopModalOpen(true);
-                        }}
-                      >
-                        <IconPlayerPause size={16} />
-                      </ActionIcon>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-      </Paper>
+      <MantineReactTable table={table} />
 
       <Modal
         opened={createModalOpen}
