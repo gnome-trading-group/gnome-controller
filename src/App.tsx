@@ -8,6 +8,7 @@ import './amplify-config';
 import Navbar from './components/Navbar/Navbar';
 import MarketData from './pages/MarketData/MarketData';
 import SecurityMaster from './pages/SecurityMaster/SecurityMaster';
+import { GlobalStateProvider } from './context/GlobalStateContext';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -86,7 +87,9 @@ function AppContent() {
 function App() {
   return (
     <Authenticator.Provider>
-      <AppContent />
+      <GlobalStateProvider>
+        <AppContent />
+      </GlobalStateProvider>
     </Authenticator.Provider>
   );
 }

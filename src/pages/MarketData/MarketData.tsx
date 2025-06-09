@@ -22,7 +22,6 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 interface Collector {
   listingId: number;
   status: string;
-  lastHeartbeat: number;
   lastStatusChange: number;
   failureReason: string | null;
 }
@@ -134,15 +133,6 @@ function MarketData() {
           {row.original.status}
         </Badge>
       ),
-    },
-    {
-      accessorKey: 'lastHeartbeat',
-      header: 'Last Heartbeat',
-      enableSorting: true,
-      Cell: ({ row }: { row: MRT_Row<Collector> }) => 
-        row.original.lastHeartbeat ? 
-          <ReactTimeAgo date={row.original.lastHeartbeat * 1000} timeStyle="round" /> : 
-          '-',
     },
     {
       accessorKey: 'lastStatusChange',
