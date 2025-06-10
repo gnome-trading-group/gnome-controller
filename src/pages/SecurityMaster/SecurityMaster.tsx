@@ -70,7 +70,6 @@ function SecurityMaster() {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       
-      // Process each sheet
       const processSheet = async (sheetName: string, processFn: (row: any) => Promise<void>) => {
         const sheet = workbook.Sheets[sheetName];
         if (!sheet) return;
@@ -85,22 +84,18 @@ function SecurityMaster() {
         }
       };
 
-      // Process exchanges
       await processSheet('Exchanges', async (row) => {
         await registryApi.createExchange(row);
       });
 
-      // Process securities
       await processSheet('Securities', async (row) => {
         await registryApi.createSecurity(row);
       });
 
-      // Process listings
       await processSheet('Listings', async (row) => {
         await registryApi.createListing(row);
       });
 
-      // Refresh all data
       await handleRefresh();
       setUploadModalOpen(false);
       setUploadFile(null);
@@ -129,17 +124,14 @@ function SecurityMaster() {
       exchangeSecuritySymbol: 'BTC',
     }];
 
-    // Create worksheets
     const exchangesWs = XLSX.utils.json_to_sheet(exchangesData);
     const securitiesWs = XLSX.utils.json_to_sheet(securitiesData);
     const listingsWs = XLSX.utils.json_to_sheet(listingsData);
 
-    // Add worksheets to workbook
     XLSX.utils.book_append_sheet(wb, exchangesWs, 'Exchanges');
     XLSX.utils.book_append_sheet(wb, securitiesWs, 'Securities');
     XLSX.utils.book_append_sheet(wb, listingsWs, 'Listings');
 
-    // Generate and download the file
     XLSX.writeFile(wb, 'security_master_template.xlsx');
   };
 
@@ -260,7 +252,7 @@ function SecurityMaster() {
       header: 'Symbol',
       enableSorting: true,
       enableEditing: true,
-      Edit: ({ cell, row, table }) => (
+      Edit: ({ cell, row }) => (
         <TextInput
           defaultValue={cell.getValue<string>()}
           onChange={(e) => {
@@ -274,7 +266,7 @@ function SecurityMaster() {
       header: 'Type',
       enableSorting: true,
       enableEditing: true,
-      Edit: ({ cell, row, table }) => (
+      Edit: ({ cell, row }) => (
         <Select
           defaultValue={cell.getValue<number>().toString()}
           data={[
@@ -299,7 +291,7 @@ function SecurityMaster() {
       header: 'Description',
       enableSorting: true,
       enableEditing: true,
-      Edit: ({ cell, row, table }) => (
+      Edit: ({ cell, row }) => (
         <TextInput
           defaultValue={cell.getValue<string>()}
           onChange={(e) => {
@@ -342,7 +334,7 @@ function SecurityMaster() {
       header: 'Name',
       enableSorting: true,
       enableEditing: true,
-      Edit: ({ cell, row, table }) => (
+      Edit: ({ cell, row }) => (
         <TextInput
           defaultValue={cell.getValue<string>()}
           onChange={(e) => {
@@ -385,7 +377,7 @@ function SecurityMaster() {
       header: 'Security ID',
       enableSorting: true,
       enableEditing: true,
-      Edit: ({ cell, row, table }) => (
+      Edit: ({ cell, row }) => (
         <NumberInput
           defaultValue={cell.getValue<number>()}
           onChange={(value) => {
@@ -399,7 +391,7 @@ function SecurityMaster() {
       header: 'Exchange ID',
       enableSorting: true,
       enableEditing: true,
-      Edit: ({ cell, row, table }) => (
+      Edit: ({ cell, row }) => (
         <NumberInput
           defaultValue={cell.getValue<number>()}
           onChange={(value) => {
@@ -413,7 +405,7 @@ function SecurityMaster() {
       header: 'Exchange Security ID',
       enableSorting: true,
       enableEditing: true,
-      Edit: ({ cell, row, table }) => (
+      Edit: ({ cell, row }) => (
         <TextInput
           defaultValue={cell.getValue<string>()}
           onChange={(e) => {
@@ -427,7 +419,7 @@ function SecurityMaster() {
       header: 'Exchange Symbol',
       enableSorting: true,
       enableEditing: true,
-      Edit: ({ cell, row, table }) => (
+      Edit: ({ cell, row }) => (
         <TextInput
           defaultValue={cell.getValue<string>()}
           onChange={(e) => {
