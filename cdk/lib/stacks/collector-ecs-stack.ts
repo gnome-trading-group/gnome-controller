@@ -143,22 +143,24 @@ export class CollectorEcsStack extends cdk.Stack {
     monitoringStack: MonitoringStack,
   ) {
     const filter = logGroup.addMetricFilter('ErrorMetricFilter', {
-      filterPattern: logs.FilterPattern.anyTerm('Exception', 'ERROR'),
+      filterPattern: logs.FilterPattern.anyTerm('Exception', 'ERROR', 'Error', 'error', 'exception'),
       metricName: 'ErrorCount',
       metricNamespace: 'CollectorLogs',
     });
 
     const metric = filter.metric({
-      statistic: 'sum',
+      statistic: 'max',
       period: cdk.Duration.minutes(1),
     });
 
     const alarm = new cw.Alarm(this, 'CollectorEcsErrorAlarm', {
       metric,
-      threshold: 1,
+      threshold: 0,
       evaluationPeriods: 1,
-      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      alarmDescription: 'Triggers when there are errors in any collector log streams',
+      datapointsToAlarm: 1,
+      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      treatMissingData: cw.TreatMissingData.NOT_BREACHING,
+      alarmDescription: 'Triggers when there are any errors in collector log streams',
     });
 
     monitoringStack.subscribeSlackAlarm(alarm);
