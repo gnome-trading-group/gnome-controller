@@ -45,7 +45,7 @@ export class FrontendStack extends cdk.Stack {
 
     const domain = this.userPool.addDomain("CognitoDomain", {
       cognitoDomain: {
-        domainPrefix: "gnome-controller",
+        domainPrefix: `gnome-controller-${props.stage}`,
       },
     });
 
