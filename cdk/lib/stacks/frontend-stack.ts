@@ -99,6 +99,9 @@ export class FrontendStack extends cdk.Stack {
         userPassword: false,
         userSrp: false,
       },
+      refreshTokenValidity: cdk.Duration.days(30),
+      accessTokenValidity: cdk.Duration.hours(24),
+      idTokenValidity: cdk.Duration.hours(24),
     });
 
     const identityProvider = new cognito.CfnUserPoolIdentityProvider(this, "IdentityCenterProvider", {
