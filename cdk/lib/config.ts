@@ -12,8 +12,7 @@ export interface ControllerConfig {
   collectorOrchestratorVersion: string;
 
   // Controller settings
-  controllerUrl: string;
-  controllerApiKey: string;
+  controllerIdentityProviderUrl: string;
 
   // Registry settings
   registryUrl: string;
@@ -33,8 +32,7 @@ export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
     slackChannelConfigurationName: "gnome-alerts-dev",
     slackChannelId: "C08KX2GAUE4",
 
-    controllerUrl: "vfrw3nc037.execute-api.us-east-1.amazonaws.com",
-    controllerApiKey: "hPwjA5UPkk2quShy8Dwod84LRgbDa7UC2uDTr2iX",
+    controllerIdentityProviderUrl: "https://portal.sso.us-east-1.amazonaws.com/saml/metadata/NzQ2NjY5MTk2MzE2X2lucy0wMjA1N2ZhNzE4MDc5Y2U2",
 
     registryUrl: "i3116oczxe.execute-api.us-east-1.amazonaws.com",
     registryApiKey: "9WPV7CfeqXa578yVYlxdG3kCPFzACr7YaMU0UVma",
@@ -53,11 +51,10 @@ export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
     slackChannelConfigurationName: "gnome-alerts-prod",
     slackChannelId: "C08KD27QZKN",
 
-    controllerUrl: "TODO",
-    controllerApiKey: "TODO",
+    controllerIdentityProviderUrl: "https://portal.sso.us-east-1.amazonaws.com/saml/metadata/NzQ2NjY5MTk2MzE2X2lucy02OTNjMzFlYTA0YjJjMmRi",
 
-    registryUrl: "TODO",
-    registryApiKey: "TODO",
+    registryUrl: "n5dxpwnij0.execute-api.us-east-1.amazonaws.com",
+    registryApiKey: "Smr7Jrmr8j93MMymhYdebaoRbV2T6TkX7phGPnrd",
   },
 }
 

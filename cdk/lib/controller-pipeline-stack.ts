@@ -17,6 +17,7 @@ class AppStage extends cdk.Stage {
 
     const frontendStack = new FrontendStack(this, "ControllerFrontendStack", {
       stage: config.account.stage,
+      metadataUrl: config.controllerIdentityProviderUrl,
     });
 
     const databaseStack = new DatabaseStack(this, "ControllerDatabaseStack");

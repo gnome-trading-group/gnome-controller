@@ -85,8 +85,6 @@ export class CollectorEcsStack extends cdk.Stack {
       environment: {
         MAIN_CLASS: 'group.gnometrading.collectors.DelegatingCollectorOrchestrator',
         OUTPUT_BUCKET: bucket.bucketName,
-        CONTROLLER_URL: props.config.controllerUrl,
-        CONTROLLER_API_KEY: props.config.controllerApiKey,
         REGISTRY_URL: props.config.registryUrl,
         REGISTRY_API_KEY: props.config.registryApiKey,
         STAGE: props.config.account.stage,

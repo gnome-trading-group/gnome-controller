@@ -11,6 +11,7 @@ import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 
 interface FrontendStackProps extends cdk.StackProps {
   stage: Stage;
+  metadataUrl: string;
 }
 
 export class FrontendStack extends cdk.Stack {
@@ -109,7 +110,7 @@ export class FrontendStack extends cdk.Stack {
       providerName: "IdentityCenter",
       providerType: "SAML",
       providerDetails: {
-        MetadataURL: "https://portal.sso.us-east-1.amazonaws.com/saml/metadata/NzQ2NjY5MTk2MzE2X2lucy0wMjA1N2ZhNzE4MDc5Y2U2",
+        MetadataURL: props.metadataUrl,
       },
       attributeMapping: {
         email: "email",
@@ -143,6 +144,8 @@ export class FrontendStack extends cdk.Stack {
             `cp .env.${props.stage} .env`,
             'npm ci',
             'npm run build',
+            'echo "HELLO!!!!"',
+            `echo "STAGE: ${props.stage}"`,
             'cp -r dist/* /asset-output',
           ].join(' && ')
         ],
