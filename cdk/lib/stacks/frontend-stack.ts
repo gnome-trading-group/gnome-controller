@@ -129,13 +129,14 @@ export class FrontendStack extends cdk.Stack {
         image: cdk.DockerImage.fromRegistry('public.ecr.aws/docker/library/node:18'),
         local: {
           tryBundle(outputDir: string): boolean {
-            try {
-              // If you're running locally, make sure to run `npm run build` in the UI beforehand
-              execSync(`cp -r ${uiPath}/dist/* ${path.join(outputDir)}`)
-            } catch {
-              return false
-            }
-            return true
+            return false;
+            // try {
+            //   // If you're running locally, make sure to run `npm run build` in the UI beforehand
+            //   execSync(`cp -r ${uiPath}/dist/* ${path.join(outputDir)}`)
+            // } catch {
+            //   return false
+            // }
+            // return true
           },
         },
         command: [
@@ -144,8 +145,6 @@ export class FrontendStack extends cdk.Stack {
             `cp .env.${props.stage} .env`,
             'npm ci',
             'npm run build',
-            'echo "HELLO!!!!"',
-            `echo "STAGE: ${props.stage}"`,
             'cp -r dist/* /asset-output',
           ].join(' && ')
         ],
