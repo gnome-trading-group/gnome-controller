@@ -10,6 +10,7 @@ import { BackendStack } from "./stacks/backend-stack";
 import { DatabaseStack } from "./stacks/database-stack";
 import { MonitoringStack } from "./stacks/monitoring-stack";
 import { CollectorEcsStack } from "./stacks/collector-ecs-stack";
+import { SlackStack } from "./stacks/slack-stack";
 
 class AppStage extends cdk.Stage {
   constructor(scope: Construct, id: string, config: ControllerConfig) {
@@ -22,6 +23,10 @@ class AppStage extends cdk.Stage {
 
     const databaseStack = new DatabaseStack(this, "ControllerDatabaseStack");
     const monitoringStack = new MonitoringStack(this, "ControllerMonitoringStack");
+    const slackStack = new SlackStack(this, "ControllerSlackStack", {
+      config,
+      topics: [monitoringStack.slackSnsTopic],
+    });
     const collectorEcsStack = new CollectorEcsStack(this, "ControllerCollectorEcsStack", {
       config,
       monitoringStack,
