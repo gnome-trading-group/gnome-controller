@@ -29,7 +29,7 @@ export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
     ...defaultConfig,
     account: GnomeAccount.InfraDev,
 
-    slackChannelConfigurationName: "gnome-alerts-dev",
+    slackChannelConfigurationName: "controller-alerts-dev",
     slackChannelId: "C08KX2GAUE4",
 
     controllerIdentityProviderUrl: "https://portal.sso.us-east-1.amazonaws.com/saml/metadata/NzQ2NjY5MTk2MzE2X2lucy0wMjA1N2ZhNzE4MDc5Y2U2",
@@ -48,7 +48,7 @@ export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
     ...defaultConfig,
     account: GnomeAccount.InfraProd,
 
-    slackChannelConfigurationName: "gnome-alerts-prod",
+    slackChannelConfigurationName: "controller-alerts-prod",
     slackChannelId: "C08KD27QZKN",
 
     controllerIdentityProviderUrl: "https://portal.sso.us-east-1.amazonaws.com/saml/metadata/NzQ2NjY5MTk2MzE2X2lucy02OTNjMzFlYTA0YjJjMmRi",
