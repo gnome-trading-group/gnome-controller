@@ -18,42 +18,64 @@ class DynamoDBClient:
         response = self.table.get_item(Key={'listingId': listing_id})
         return response.get('Item')
 
-    def put_item(self, listing_id: int, taskArn: str) -> Dict:
+    def put_item(self, listing_id: int, serviceArn: str, deploymentVersion: str) -> Dict:
+        """Create or update a collector with service-based deployment info"""
         existing_item = self.get_item(listing_id)
-        
+
         if existing_item:
-            return self.update_status(listing_id, Status.PENDING, None, taskArn)
+            return self.update_service(listing_id, serviceArn, deploymentVersion, Status.PENDING)
         else:
             return self.table.put_item(
                 Item={
                     'listingId': listing_id,
-                    'status': Status.PENDING,
-                    'taskArn': taskArn,
+                    'status': Status.PENDING.value,
+                    'serviceArn': serviceArn,
+                    'deploymentVersion': deploymentVersion,
+                    'taskArns': [],  # Will be populated by ECS monitor
                     'lastStatusChange': int(time.time()),
                     'failureReason': None,
                 }
             )
-    
-    def update_status(self, listing_id: int, status: Status, failureReason: Optional[str] = None, taskArn: Optional[str] = None) -> Dict:
-        update_expr = 'SET #s = :status, lastStatusChange = :now, failureReason = :reason'
-        expr_values = {
-            ':status': status.value,
-            ':now': int(time.time()),
-            ':reason': failureReason
-        }
-        expr_names = {
-            '#s': 'status'
-        }
-        
-        if taskArn:
-            update_expr += ', taskArn = :taskArn'
-            expr_values[':taskArn'] = taskArn
-            
+
+    def update_service(self, listing_id: int, serviceArn: str, deploymentVersion: str, status: Status) -> Dict:
+        """Update service ARN and deployment version"""
         return self.table.update_item(
             Key={'listingId': listing_id},
-            UpdateExpression=update_expr,
-            ExpressionAttributeValues=expr_values,
-            ExpressionAttributeNames=expr_names
+            UpdateExpression='SET serviceArn = :serviceArn, deploymentVersion = :version, #s = :status, lastStatusChange = :now',
+            ExpressionAttributeValues={
+                ':serviceArn': serviceArn,
+                ':version': deploymentVersion,
+                ':status': status.value,
+                ':now': int(time.time())
+            },
+            ExpressionAttributeNames={
+                '#s': 'status'
+            }
+        )
+
+    def update_status(self, listing_id: int, status: Status, failureReason: Optional[str] = None) -> Dict:
+        """Update collector status"""
+        return self.table.update_item(
+            Key={'listingId': listing_id},
+            UpdateExpression='SET #s = :status, lastStatusChange = :now, failureReason = :reason',
+            ExpressionAttributeValues={
+                ':status': status.value,
+                ':now': int(time.time()),
+                ':reason': failureReason
+            },
+            ExpressionAttributeNames={
+                '#s': 'status'
+            }
+        )
+
+    def update_task_arns(self, listing_id: int, task_arns: List[str]) -> Dict:
+        """Update the list of running task ARNs for a collector"""
+        return self.table.update_item(
+            Key={'listingId': listing_id},
+            UpdateExpression='SET taskArns = :taskArns',
+            ExpressionAttributeValues={
+                ':taskArns': task_arns
+            }
         )
 
     def update_heartbeat(self, listing_id: int) -> Dict:
@@ -61,4 +83,4 @@ class DynamoDBClient:
             Key={'listingId': listing_id},
             UpdateExpression='SET lastHeartbeat = :now',
             ExpressionAttributeValues={':now': int(time.time())}
-        ) 
+        )

@@ -12,21 +12,27 @@ import { Construct } from 'constructs';
 import { ControllerConfig } from "../config";
 import { MonitoringStack } from "./monitoring-stack";
 
-export interface CollectorEcsStackProps extends cdk.StackProps {
+export interface CollectorStackProps extends cdk.StackProps {
   config: ControllerConfig;
   monitoringStack: MonitoringStack;
 }
 
-export class CollectorEcsStack extends cdk.Stack {
+export class CollectorStack extends cdk.Stack {
   public readonly vpc: ec2.Vpc;
   public readonly securityGroup: ec2.SecurityGroup;
   public readonly cluster: ecs.Cluster;
   public readonly taskDefinitionFamily: string;
+  public readonly taskDefinitionArn: string;
+  public readonly collectorOrchestratorVersion: string;
 
-  constructor(scope: Construct, id: string, props: CollectorEcsStackProps) {
+  constructor(scope: Construct, id: string, props: CollectorStackProps) {
     super(scope, id, props);
 
-    const bucket = new s3.Bucket(this, 'CollectorRawBucket', {
+    const rawBucket = new s3.Bucket(this, 'CollectorRawBucket', {
+      bucketName: `gnome-market-data-raw-${props.config.account.stage}`,
+    });
+
+    const bucket = new s3.Bucket(this, 'CollectorBucket', {
       bucketName: `gnome-market-data-${props.config.account.stage}`,
     });
 
@@ -95,15 +101,14 @@ export class CollectorEcsStack extends cdk.Stack {
       }),
     });
 
-    new ecs.FargateService(this, 'CollectorService', {
-      cluster: this.cluster,
-      taskDefinition,
-      desiredCount: 0,
-      assignPublicIp: true,
-      securityGroups: [this.securityGroup],
-      vpcSubnets: {
-        subnetType: ec2.SubnetType.PUBLIC,
-      },
+    // Export task definition ARN and version for use by Lambda functions
+    this.taskDefinitionArn = taskDefinition.taskDefinitionArn;
+    this.collectorOrchestratorVersion = props.config.collectorOrchestratorVersion;
+
+    // Output the task definition ARN for reference
+    new cdk.CfnOutput(this, 'TaskDefinitionArn', {
+      value: this.taskDefinitionArn,
+      description: 'Collector Task Definition ARN',
     });
   }
 

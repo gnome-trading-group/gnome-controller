@@ -12,10 +12,11 @@ import { Construct } from "constructs";
 interface BackendStackProps extends cdk.StackProps {
   userPool: cognito.IUserPool;
   collectorsTable: dynamodb.ITable;
-  collectorCluster: ecs.ICluster; 
+  collectorCluster: ecs.ICluster;
   collectorTaskDefinition: string;
   collectorSecurityGroupId: string;
   collectorSubnetIds: string[];
+  collectorDeploymentVersion: string;
 }
 
 interface EndpointConfig {
@@ -91,20 +92,27 @@ export class BackendStack extends cdk.Stack {
           COLLECTOR_ECS_TASK_DEFINITION: props.collectorTaskDefinition,
           COLLECTOR_SECURITY_GROUP_ID: props.collectorSecurityGroupId,
           COLLECTOR_SUBNET_IDS: props.collectorSubnetIds.join(','),
+          COLLECTOR_DEPLOYMENT_VERSION: props.collectorDeploymentVersion,
         },
       });
       props.collectorsTable.grantReadWriteData(fn);
-      
+
       fn.addToRolePolicy(new iam.PolicyStatement({
         actions: [
           'ecs:RunTask',
           'ecs:StopTask',
           'ecs:DescribeTasks',
+          'ecs:CreateService',
+          'ecs:UpdateService',
+          'ecs:DeleteService',
+          'ecs:DescribeServices',
+          'ecs:DescribeTaskDefinition',
+          'ecs:RegisterTaskDefinition',
           'iam:PassRole'
         ],
-        resources: ['*'],  // TODO: Restrict to specific task definition
+        resources: ['*'],  // TODO: Restrict to specific resources
       }));
-      
+
       return fn;
     };
 
@@ -162,6 +170,13 @@ export class BackendStack extends cdk.Stack {
         path: "collectors",
         method: "PUT",
         handlerPath: "update",
+        authType: "cognito"
+      },
+      {
+        name: "RedeployCollectors",
+        path: "collectors/redeploy",
+        method: "POST",
+        handlerPath: "redeploy",
         authType: "cognito"
       },
     ];

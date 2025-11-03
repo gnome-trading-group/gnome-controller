@@ -9,7 +9,7 @@ import { FrontendStack } from "./stacks/frontend-stack";
 import { BackendStack } from "./stacks/backend-stack";
 import { DatabaseStack } from "./stacks/database-stack";
 import { MonitoringStack } from "./stacks/monitoring-stack";
-import { CollectorEcsStack } from "./stacks/collector-ecs-stack";
+import { CollectorStack } from "./stacks/collector-stack";
 import { SlackStack } from "./stacks/slack-stack";
 
 class AppStage extends cdk.Stage {
@@ -27,7 +27,7 @@ class AppStage extends cdk.Stage {
       config,
       topics: [monitoringStack.slackSnsTopic],
     });
-    const collectorEcsStack = new CollectorEcsStack(this, "ControllerCollectorEcsStack", {
+    const collectorStack = new CollectorStack(this, "ControllerCollectorStack", {
       config,
       monitoringStack,
     });
@@ -35,10 +35,11 @@ class AppStage extends cdk.Stage {
     new BackendStack(this, "ControllerBackendStack", {
       userPool: frontendStack.userPool,
       collectorsTable: databaseStack.collectorsTable,
-      collectorCluster: collectorEcsStack.cluster,
-      collectorTaskDefinition: collectorEcsStack.taskDefinitionFamily,
-      collectorSecurityGroupId: collectorEcsStack.securityGroup.securityGroupId,
-      collectorSubnetIds: collectorEcsStack.vpc.publicSubnets.map(subnet => subnet.subnetId),
+      collectorCluster: collectorStack.cluster,
+      collectorTaskDefinition: collectorStack.taskDefinitionFamily,
+      collectorSecurityGroupId: collectorStack.securityGroup.securityGroupId,
+      collectorSubnetIds: collectorStack.vpc.publicSubnets.map(subnet => subnet.subnetId),
+      collectorDeploymentVersion: collectorStack.collectorOrchestratorVersion,
     });
   }
 }
