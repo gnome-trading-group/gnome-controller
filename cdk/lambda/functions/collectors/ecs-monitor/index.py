@@ -1,5 +1,4 @@
 import json
-import os
 import boto3
 from typing import Dict, Any, List
 from db import DynamoDBClient, Status

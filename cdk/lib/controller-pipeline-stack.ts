@@ -40,6 +40,7 @@ class AppStage extends cdk.Stage {
       collectorSecurityGroupId: collectorStack.securityGroup.securityGroupId,
       collectorSubnetIds: collectorStack.vpc.publicSubnets.map(subnet => subnet.subnetId),
       collectorDeploymentVersion: collectorStack.collectorOrchestratorVersion,
+      collectorLogGroupName: collectorStack.logGroup.logGroupName,
     });
   }
 }

@@ -24,6 +24,7 @@ export class CollectorStack extends cdk.Stack {
   public readonly taskDefinitionFamily: string;
   public readonly taskDefinitionArn: string;
   public readonly collectorOrchestratorVersion: string;
+  public readonly logGroup: logs.LogGroup;
 
   constructor(scope: Construct, id: string, props: CollectorStackProps) {
     super(scope, id, props);
@@ -53,12 +54,12 @@ export class CollectorStack extends cdk.Stack {
       allowAllOutbound: true,
     });
 
-    const ecsLogGroup = new logs.LogGroup(this, 'CollectorEcsLogGroup', {
+    this.logGroup = new logs.LogGroup(this, 'CollectorEcsLogGroup', {
       logGroupName: '/ecs/collector',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       retention: logs.RetentionDays.ONE_WEEK,
     });
-    this.buildMonitoring(ecsLogGroup, props.monitoringStack);
+    this.buildMonitoring(this.logGroup, props.monitoringStack);
 
     const taskRole = new iam.Role(this, 'EcsTaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
@@ -98,7 +99,7 @@ export class CollectorStack extends cdk.Stack {
       },
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'collector',
-        logGroup: ecsLogGroup,
+        logGroup: this.logGroup,
       }),
       memoryLimitMiB: 512,
       cpu: 256,

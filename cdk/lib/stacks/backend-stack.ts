@@ -17,6 +17,7 @@ interface BackendStackProps extends cdk.StackProps {
   collectorSecurityGroupId: string;
   collectorSubnetIds: string[];
   collectorDeploymentVersion: string;
+  collectorLogGroupName: string;
 }
 
 interface EndpointConfig {
@@ -93,6 +94,7 @@ export class BackendStack extends cdk.Stack {
           COLLECTOR_SECURITY_GROUP_ID: props.collectorSecurityGroupId,
           COLLECTOR_SUBNET_IDS: props.collectorSubnetIds.join(','),
           COLLECTOR_DEPLOYMENT_VERSION: props.collectorDeploymentVersion,
+          COLLECTOR_LOG_GROUP_NAME: props.collectorLogGroupName,
         },
       });
       props.collectorsTable.grantReadWriteData(fn);
@@ -100,7 +102,9 @@ export class BackendStack extends cdk.Stack {
       fn.addToRolePolicy(new iam.PolicyStatement({
         actions: [
           'ecs:*',
-          'iam:PassRole'
+          'iam:PassRole',
+          'logs:DescribeLogStreams',
+          'logs:GetLogEvents',
         ],
         resources: ['*'],  // TODO: Restrict to specific resources
       }));
@@ -151,6 +155,13 @@ export class BackendStack extends cdk.Stack {
         authType: "cognito"
       },
       {
+        name: "GetCollector",
+        path: "collectors/{listingId}",
+        method: "GET",
+        handlerPath: "get",
+        authType: "cognito"
+      },
+      {
         name: "DeleteCollector",
         path: "collectors/delete",
         method: "DELETE",
@@ -164,6 +175,13 @@ export class BackendStack extends cdk.Stack {
         handlerPath: "redeploy",
         authType: "cognito"
       },
+      {
+        name: "CollectorLogs",
+        path: "collectors/{listingId}/logs",
+        method: "GET",
+        handlerPath: "logs",
+        authType: "cognito"
+      },
     ];
 
     endpoints.forEach(createEndpoint);
@@ -172,10 +190,10 @@ export class BackendStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_13,
       handler: "index.lambda_handler",
       code: lambda.Code.fromAsset("lambda/functions/collectors/ecs-monitor"),
+      layers: [commonLayer],
       environment: {
         COLLECTORS_TABLE_NAME: props.collectorsTable.tableName,
       },
-      layers: [commonLayer],
       timeout: cdk.Duration.seconds(30),
     });
 
