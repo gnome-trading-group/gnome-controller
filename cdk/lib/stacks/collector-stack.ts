@@ -64,6 +64,7 @@ export class CollectorStack extends cdk.Stack {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
     bucket.grantReadWrite(taskRole);
+    rawBucket.grantReadWrite(taskRole);
 
     this.cluster = new ecs.Cluster(this, 'CollectorEcsCluster', { 
       clusterName: 'CollectorCluster',
@@ -90,7 +91,7 @@ export class CollectorStack extends cdk.Stack {
       portMappings: [{ containerPort: 8080 }],
       environment: {
         MAIN_CLASS: 'group.gnometrading.collectors.DelegatingCollectorOrchestrator',
-        OUTPUT_BUCKET: bucket.bucketName,
+        OUTPUT_BUCKET: rawBucket.bucketName,
         REGISTRY_URL: props.config.registryUrl,
         REGISTRY_API_KEY: props.config.registryApiKey,
         STAGE: props.config.account.stage,
