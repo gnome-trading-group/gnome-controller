@@ -34,34 +34,25 @@ def handler(event, context):
             log_stream_prefix = f"collector/CollectorContainer/{task_id}"
             
             try:
-                streams_response = logs_client.describe_log_streams(
-                    logGroupName=log_group_name,
-                    logStreamNamePrefix=log_stream_prefix,
-                    orderBy='LastEventTime',
-                    descending=True,
-                    limit=10
-                )
-                
                 log_events = []
                 
-                for stream in streams_response.get('logStreams', []):
-                    try:
-                        events_response = logs_client.get_log_events(
-                            logGroupName=log_group_name,
-                            logStreamName=stream['logStreamName'],
-                            startTime=int(start_time.timestamp() * 1000),
-                            endTime=int(end_time.timestamp() * 1000),
-                            limit=100
-                        )
-                        
-                        for event in events_response.get('events', []):
-                            log_events.append({
-                                'timestamp': event['timestamp'],
-                                'message': event['message'],
-                                'logStreamName': stream['logStreamName']
-                            })
-                    except Exception as e:
-                        print(f"Error fetching events from stream {stream['logStreamName']}: {e}")
+                try:
+                    events_response = logs_client.get_log_events(
+                        logGroupName=log_group_name,
+                        logStreamName=log_stream_prefix,
+                        startTime=int(start_time.timestamp() * 1000),
+                        endTime=int(end_time.timestamp() * 1000),
+                        limit=500
+                    )
+                    
+                    for event in events_response.get('events', []):
+                        log_events.append({
+                            'timestamp': event['timestamp'],
+                            'message': event['message'],
+                            'logStreamName': log_stream_prefix
+                        })
+                except Exception as e:
+                    print(f"Error fetching events from stream {log_stream_prefix}: {e}")
                 
                 # Convert datetime objects to timestamps
                 for log_event in log_events:
