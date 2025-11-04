@@ -63,6 +63,11 @@ def handler(event, context):
                     except Exception as e:
                         print(f"Error fetching events from stream {stream['logStreamName']}: {e}")
                 
+                # Convert datetime objects to timestamps
+                for log_event in log_events:
+                    if 'timestamp' in log_event and isinstance(log_event['timestamp'], datetime):
+                        log_event['timestamp'] = int(log_event['timestamp'].timestamp() * 1000)
+                
                 log_events.sort(key=lambda x: x['timestamp'], reverse=True)
                 
                 region = boto3.Session().region_name
@@ -77,7 +82,7 @@ def handler(event, context):
             except Exception as e:
                 print(f"Error fetching logs: {e}")
                 result = {
-                    'logs': {},
+                    'logs': [],
                     'error': str(e)
                 }
                 return create_response(500, result)

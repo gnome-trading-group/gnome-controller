@@ -2,11 +2,14 @@ import json
 import functools
 from typing import Any, Callable, Dict
 from decimal import Decimal
+import datetime
 
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):
             return int(obj)
+        if isinstance(obj, datetime.datetime):
+            return obj.isoformat()
         return super().default(obj)
 
 CORS_HEADERS = {
