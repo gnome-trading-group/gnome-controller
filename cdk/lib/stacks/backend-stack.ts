@@ -138,30 +138,23 @@ export class BackendStack extends cdk.Stack {
     const endpoints: EndpointConfig[] = [
       {
         name: "CreateCollector",
-        path: "collectors",
+        path: "collectors/create",
         method: "POST",
         handlerPath: "create",
         authType: "cognito"
       },
       {
         name: "ListCollectors",
-        path: "collectors",
+        path: "collectors/list",
         method: "GET",
         handlerPath: "list",
         authType: "cognito"
       },
       {
         name: "DeleteCollector",
-        path: "collectors",
+        path: "collectors/delete",
         method: "DELETE",
         handlerPath: "delete",
-        authType: "cognito"
-      },
-      {
-        name: "UpdateCollector",
-        path: "collectors",
-        method: "PUT",
-        handlerPath: "update",
         authType: "cognito"
       },
       {

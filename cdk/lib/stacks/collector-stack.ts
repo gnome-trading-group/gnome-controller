@@ -75,8 +75,8 @@ export class CollectorStack extends cdk.Stack {
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'CollectorTaskDefinition', {
       family: this.taskDefinitionFamily,
       taskRole,
-      memoryLimitMiB: 1024,
-      cpu: 512,
+      memoryLimitMiB: 512,
+      cpu: 256,
     });
 
     const dockerImage = new ecrAssets.DockerImageAsset(this, 'JavaAppImage', {
@@ -100,13 +100,13 @@ export class CollectorStack extends cdk.Stack {
         streamPrefix: 'collector',
         logGroup: ecsLogGroup,
       }),
+      memoryLimitMiB: 512,
+      cpu: 256,
     });
 
-    // Export task definition ARN and version for use by Lambda functions
     this.taskDefinitionArn = taskDefinition.taskDefinitionArn;
     this.collectorOrchestratorVersion = props.config.collectorOrchestratorVersion;
 
-    // Output the task definition ARN for reference
     new cdk.CfnOutput(this, 'TaskDefinitionArn', {
       value: this.taskDefinitionArn,
       description: 'Collector Task Definition ARN',
@@ -147,22 +147,22 @@ export class CollectorStack extends cdk.Stack {
     monitoringStack: MonitoringStack,
   ) {
     const filter = logGroup.addMetricFilter('ErrorMetricFilter', {
-      filterPattern: logs.FilterPattern.anyTerm('Exception', 'ERROR', 'Error', 'error', 'exception'),
+      filterPattern: logs.FilterPattern.anyTerm('Exception', 'ERROR', 'Error', 'error', 'exception', 'UNKNOWN_ERROR'),
       metricName: 'ErrorCount',
       metricNamespace: 'CollectorLogs',
     });
 
     const metric = filter.metric({
-      statistic: 'max',
+      statistic: 'min',
       period: cdk.Duration.minutes(1),
     });
 
     const alarm = new cw.Alarm(this, 'CollectorEcsErrorAlarm', {
       metric,
-      threshold: 0,
+      threshold: 1,
       evaluationPeriods: 1,
       datapointsToAlarm: 1,
-      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
       treatMissingData: cw.TreatMissingData.NOT_BREACHING,
       alarmDescription: 'Triggers when there are any errors in collector log streams',
     });

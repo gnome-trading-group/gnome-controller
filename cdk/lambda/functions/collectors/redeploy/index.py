@@ -7,24 +7,41 @@ from constants import Status
 @lambda_handler
 def handler(body):
     """
-    Force redeployment of all active collectors to pick up new task definition version.
+    Force redeployment of all active collectors or a specific collector to pick up new task definition version.
     This should be called after updating the collectorOrchestratorVersion in config.
     """
     ecs = boto3.client('ecs')
     cluster = os.environ['COLLECTOR_ECS_CLUSTER']
     base_task_definition = os.environ['COLLECTOR_ECS_TASK_DEFINITION']
-    deployment_version = os.environ.get('COLLECTOR_DEPLOYMENT_VERSION', 'unknown')
-    
+    deployment_version = os.environ['COLLECTOR_DEPLOYMENT_VERSION']
+
+    target_listing_id = body.get('listingId')
+
     db = DynamoDBClient()
-    collectors = db.get_all_items()
-    
-    # Filter for active collectors only
-    active_collectors = [c for c in collectors if c.get('status') == Status.ACTIVE.value]
+
+    if target_listing_id:
+        # Redeploy specific collector
+        target_listing_id = int(target_listing_id)
+        collector = db.get_item(target_listing_id)
+        
+        if not collector:
+            raise Exception(f'Collector with listing ID {target_listing_id} not found')
+        
+        if collector.get('status') != Status.ACTIVE.value:
+            raise Exception(f'Collector {target_listing_id} is not active (status: {collector.get("status")})')
+        
+        collectors_to_redeploy = [collector]
+        operation_type = f'single collector {target_listing_id}'
+    else:
+        # Redeploy all active collectors
+        collectors = db.get_all_items()
+        collectors_to_redeploy = [c for c in collectors if c.get('status') == Status.ACTIVE.value]
+        operation_type = 'all active collectors'
     
     results = []
     errors = []
     
-    for collector in active_collectors:
+    for collector in collectors_to_redeploy:
         listing_id = collector['listingId']
         service_name = f'collector-{listing_id}'
         
@@ -93,11 +110,11 @@ def handler(body):
             })
     
     return {
-        'message': f'Redeployment initiated for {len(results)} collectors',
+        'message': f'Redeployment initiated for {operation_type} ({len(results)} collectors) with deployment version {deployment_version}',
         'deploymentVersion': deployment_version,
         'redeployed': results,
         'errors': errors,
-        'totalActive': len(active_collectors),
+        'totalActive': len(collectors_to_redeploy),
         'successCount': len(results),
         'errorCount': len(errors)
     }
