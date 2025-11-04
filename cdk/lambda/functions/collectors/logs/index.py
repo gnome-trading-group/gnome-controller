@@ -24,9 +24,9 @@ def handler(event, context):
 
         task_arns = collector.get('taskArns', [])
         if not task_arns:
-            return create_response(200, {'logs': {}})
+            return create_response(200, {'logs': []})
         
-        logs = {}
+        logs = []
 
         # Get logs for each task
         for task_arn in task_arns:
@@ -68,10 +68,11 @@ def handler(event, context):
                 region = boto3.Session().region_name
                 console_url = f"https://{region}.console.aws.amazon.com/cloudwatch/home?region={region}#logsV2:log-groups/log-group/{log_group_name.replace('/', '%2F')}"
                 
-                logs[task_arn] = {
+                logs.append({
+                    'taskArn': task_arn,
                     'logs': log_events[:500],
                     'consoleUrl': console_url,
-                }
+                })
                 
             except Exception as e:
                 print(f"Error fetching logs: {e}")
@@ -81,7 +82,7 @@ def handler(event, context):
                 }
                 return create_response(500, result)
 
-        return create_response(200, { logs })
+        return create_response(200, { 'logs': logs })
                 
     except Exception as e:
         return create_response(400, {'error': str(e)})
