@@ -99,15 +99,7 @@ export class BackendStack extends cdk.Stack {
 
       fn.addToRolePolicy(new iam.PolicyStatement({
         actions: [
-          'ecs:RunTask',
-          'ecs:StopTask',
-          'ecs:DescribeTasks',
-          'ecs:CreateService',
-          'ecs:UpdateService',
-          'ecs:DeleteService',
-          'ecs:DescribeServices',
-          'ecs:DescribeTaskDefinition',
-          'ecs:RegisterTaskDefinition',
+          'ecs:*',
           'iam:PassRole'
         ],
         resources: ['*'],  // TODO: Restrict to specific resources
