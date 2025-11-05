@@ -28,7 +28,6 @@ def handler(event, context):
         
         logs = []
 
-        # Get logs for each task
         for task_arn in task_arns:
             task_id = task_arn.split('/')[-1]
             log_stream_prefix = f"collector/CollectorContainer/{task_id}"
@@ -54,7 +53,6 @@ def handler(event, context):
                 except Exception as e:
                     print(f"Error fetching events from stream {log_stream_prefix}: {e}")
                 
-                # Convert datetime objects to timestamps
                 for log_event in log_events:
                     if 'timestamp' in log_event and isinstance(log_event['timestamp'], datetime):
                         log_event['timestamp'] = int(log_event['timestamp'].timestamp() * 1000)
@@ -62,7 +60,7 @@ def handler(event, context):
                 log_events.sort(key=lambda x: x['timestamp'], reverse=True)
                 
                 region = boto3.Session().region_name
-                console_url = f"https://{region}.console.aws.amazon.com/cloudwatch/home?region={region}#logsV2:log-groups/log-group/{log_group_name.replace('/', '%2F')}"
+                console_url = f"https://{region}.console.aws.amazon.com/cloudwatch/home?region={region}#logsV2:log-groups/log-group/{log_group_name.replace('/', '%2F')}/log-events/{log_stream_prefix.replace('/', '%2F')}"
                 
                 logs.append({
                     'taskArn': task_arn,

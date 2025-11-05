@@ -14,8 +14,9 @@ import {
   Badge,
   Notification,
   Text,
+  Tooltip,
 } from '@mantine/core';
-import { IconPlus, IconPlayerPause, IconRefresh } from '@tabler/icons-react';
+import { IconPlus, IconRefresh, IconPlayerStop, IconAB2 } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 
@@ -36,6 +37,9 @@ function MarketData() {
   const [creating, setCreating] = useState(false);
   const [stopModalOpen, setStopModalOpen] = useState(false);
   const [collectorToStop, setCollectorToStop] = useState<number | null>(null);
+  const [redeployModalOpen, setRedeployModalOpen] = useState(false);
+  const [collectorToRedeploy, setCollectorToRedeploy] = useState<number | null>(null);
+  const [redeployAllModalOpen, setRedeployAllModalOpen] = useState(false);
 
   useEffect(() => {
     loadCollectors();
@@ -108,6 +112,23 @@ function MarketData() {
     }
   };
 
+  const handleRedeployCollector = async (listingId?: number) => {
+    try {
+      setError(null);
+      await collectorsApi.redeploy(listingId);
+      await loadCollectors();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Failed to redeploy collector');
+      }
+    } finally {
+      setRedeployModalOpen(false);
+      setCollectorToRedeploy(null);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'ACTIVE': return 'green';
@@ -159,16 +180,36 @@ function MarketData() {
     positionActionsColumn: 'last',
     renderRowActions: ({ row }) => (
       row.original.status === 'ACTIVE' && (
-        <ActionIcon 
-          color="red" 
-          onClick={(e) => {
-            e.stopPropagation();
-            setCollectorToStop(row.original.listingId);
-            setStopModalOpen(true);
-          }}
+        <Group
+          gap={4}
+          justify="flex-start"
+          wrap="nowrap"
         >
-          <IconPlayerPause size={16} />
-        </ActionIcon>
+          <Tooltip label="Stop" position="bottom" withArrow openDelay={500}>
+            <ActionIcon 
+              color="red" 
+              onClick={(e) => {
+                e.stopPropagation();
+                setCollectorToStop(row.original.listingId);
+                setStopModalOpen(true);
+              }}
+            >
+              <IconPlayerStop size={16} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Redeploy" position="bottom" withArrow openDelay={500}>
+            <ActionIcon 
+              color="blue" 
+              onClick={(e) => {
+                e.stopPropagation();
+                setCollectorToRedeploy(row.original.listingId);
+                setRedeployModalOpen(true);
+              }}
+            >
+              <IconAB2 size={16} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
       )
     ),
     enablePagination: true,
@@ -187,22 +228,36 @@ function MarketData() {
       <Group justify="space-between" mb="md">
         <Title order={2}>Active Collectors</Title>
         <Group>
-          <ActionIcon 
-            size="lg" 
-            variant="filled" 
-            color="green"
-            onClick={() => loadCollectors(true)}
-          >
-            <IconRefresh size={20} />
-          </ActionIcon>
-          <ActionIcon 
-            size="lg" 
-            variant="filled" 
-            color="green"
-            onClick={() => setCreateModalOpen(true)}
-          >
-            <IconPlus size={20} />
-          </ActionIcon>
+          <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
+            <ActionIcon 
+              size="lg" 
+              variant="filled" 
+              color="green"
+              onClick={() => loadCollectors(true)}
+            >
+              <IconRefresh size={20} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Create" position="bottom" withArrow openDelay={500}>
+            <ActionIcon 
+              size="lg" 
+              variant="filled" 
+              color="green"
+              onClick={() => setCreateModalOpen(true)}
+            >
+              <IconPlus size={20} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Redeploy All" position="bottom" withArrow openDelay={500}>
+            <ActionIcon 
+              size="lg" 
+              variant="filled" 
+              color="blue"
+              onClick={() => setRedeployAllModalOpen(true)}
+            >
+              <IconAB2 size={20} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
       </Group>
 
@@ -260,6 +315,56 @@ function MarketData() {
               onClick={() => collectorToStop && handleStopCollector(collectorToStop)}
             >
               Stop Collector
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={redeployModalOpen}
+        onClose={() => {
+          setRedeployModalOpen(false);
+          setCollectorToRedeploy(null);
+        }}
+        title="Redeploy Collector"
+      >
+        <Stack>
+          <Text>Are you sure you want to redeploy this collector?</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => {
+              setRedeployModalOpen(false);
+              setCollectorToRedeploy(null);
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              color="blue" 
+              onClick={() => collectorToRedeploy && handleRedeployCollector(collectorToRedeploy)}
+            >
+              Redeploy Collector
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal
+        opened={redeployAllModalOpen}
+        onClose={() => setRedeployAllModalOpen(false)}
+        title="Redeploy All Collectors"
+      >
+        <Stack>
+          <Text>Are you sure you want to redeploy all active collectors?</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setRedeployAllModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              color="blue" 
+              onClick={() => {
+                setRedeployAllModalOpen(false);
+                handleRedeployCollector();
+              }}
+            >
+              Redeploy All
             </Button>
           </Group>
         </Stack>

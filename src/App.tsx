@@ -9,6 +9,7 @@ import Navbar from './components/Navbar/Navbar';
 import MarketData from './pages/MarketData/MarketData';
 import SecurityMaster from './pages/SecurityMaster/SecurityMaster';
 import { GlobalStateProvider } from './context/GlobalStateContext';
+import CollectorDetail from './pages/CollectorDetail/CollectorDetail';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -76,6 +77,7 @@ function AppContent() {
             <Route path="/security-master" element={<SecurityMaster />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/logout" element={<Logout />} />
+            <Route path="/collectors/:listingId" element={<CollectorDetail />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </AppShell.Main>
