@@ -439,7 +439,7 @@ function CollectorDetail() {
                         </Stack>
                       </Stack>
                     </Center>
-                  ) : logs.find(log => log.taskArn === task.taskArn)?.logs?.length > 0 ? (
+                  ) : logs.find(log => log.taskArn === task.taskArn)?.logs?.length || 0 > 0 ? (
                     <Stack gap="xs">
                       {logs.find(log => log.taskArn === task.taskArn)?.logs.map((logEvent, index) => (
                         <div key={index}>
@@ -451,7 +451,7 @@ function CollectorDetail() {
                               {logEvent.message}
                             </Code>
                           </Group>
-                          {index < logs.find(log => log.taskArn === task.taskArn)?.logs.length - 1 && <Divider size="xs" />}
+                          {index < (logs.find(log => log.taskArn === task.taskArn)?.logs.length || 0) - 1 && <Divider size="xs" />}
                         </div>
                       ))}
                     </Stack>
