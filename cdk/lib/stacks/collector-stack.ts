@@ -124,6 +124,10 @@ export class CollectorStack extends cdk.Stack {
 
     bucket.grantReadWrite(aggregatorLambda.lambdaInstance);
     rawBucket.grantReadWrite(aggregatorLambda.lambdaInstance);
+    aggregatorLambda.lambdaInstance.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cloudwatch:PutMetricData'],
+      resources: ['*'],
+    }));
 
     const aggregatorRule = new events.Rule(this, 'CollectorAggregatorRule', {
       schedule: events.Schedule.rate(cdk.Duration.hours(3)),
