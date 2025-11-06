@@ -6,11 +6,14 @@ import * as ecrAssets from 'aws-cdk-lib/aws-ecr-assets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cw from 'aws-cdk-lib/aws-cloudwatch';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Construct } from 'constructs';
 import { ControllerConfig } from "../config";
 import { MonitoringStack } from "./monitoring-stack";
+import { OrchestratorLambda } from "@gnome-trading-group/gnome-shared-cdk";
 
 export interface CollectorStackProps extends cdk.StackProps {
   config: ControllerConfig;
@@ -107,6 +110,25 @@ export class CollectorStack extends cdk.Stack {
 
     this.taskDefinitionArn = taskDefinition.taskDefinitionArn;
     this.collectorOrchestratorVersion = props.config.collectorOrchestratorVersion;
+
+    const aggregatorLambda = new OrchestratorLambda(this, 'CollectorAggregatorLambda', {
+      orchestratorVersion: props.config.collectorOrchestratorVersion,
+      classPath: 'group.gnometrading.collectors.AggregatorOrchestrator',
+      lambdaName: 'CollectorAggregatorLambda',
+      region: props.config.account.region,
+      environmentVariables: {
+        OUTPUT_BUCKET: bucket.bucketName,
+        INPUT_BUCKET: rawBucket.bucketName,
+      },
+    });
+
+    bucket.grantReadWrite(aggregatorLambda.lambdaInstance);
+    rawBucket.grantReadWrite(aggregatorLambda.lambdaInstance);
+
+    const aggregatorRule = new events.Rule(this, 'CollectorAggregatorRule', {
+      schedule: events.Schedule.rate(cdk.Duration.hours(3)),
+    });
+    aggregatorRule.addTarget(new targets.LambdaFunction(aggregatorLambda.lambdaInstance));
 
     new cdk.CfnOutput(this, 'TaskDefinitionArn', {
       value: this.taskDefinitionArn,
