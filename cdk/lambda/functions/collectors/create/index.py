@@ -23,14 +23,14 @@ def handler(body):
         base_task_def_response = ecs.describe_task_definition(taskDefinition=base_task_definition)
         base_task_def = base_task_def_response['taskDefinition']
 
-        # Create a new task definition for this specific collector with LISTING_IDS env var
+        # Create a new task definition for this specific collector with LISTING env var
         container_def = base_task_def['containerDefinitions'][0].copy()
 
-        # Add LISTING_IDS to environment variables
+        # Add LISTING to environment variables
         if 'environment' not in container_def:
             container_def['environment'] = []
         container_def['environment'].append({
-            'name': 'LISTING_IDS',
+            'name': 'LISTING',
             'value': str(listing_id)
         })
 
