@@ -15,20 +15,20 @@ export class SlackStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: SlackStackProps) {
     super(scope, id, props);
 
-    // const role = new iam.Role(this, 'ChatBotRole', {
-    //   assumedBy: new iam.ServicePrincipal('chatbot.amazonaws.com'),
-    //   description: 'Role for AWS ChatBot',
-    //   managedPolicies: [
-    //     iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchReadOnlyAccess'),
-    //   ]
-    // });
+    const role = new iam.Role(this, 'ControllerChatBotRole', {
+      assumedBy: new iam.ServicePrincipal('chatbot.amazonaws.com'),
+      description: 'Role for AWS ChatBot',
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchReadOnlyAccess'),
+      ]
+    });
 
-    // new chatbot.SlackChannelConfiguration(this, 'SlackChannelConfiguration', {
-    //   slackChannelConfigurationName: props.config.slackChannelConfigurationName,
-    //   slackWorkspaceId: props.config.slackWorkspaceId,
-    //   slackChannelId: props.config.slackChannelId,
-    //   notificationTopics: props.topics,
-    //   role,
-    // });
+    new chatbot.SlackChannelConfiguration(this, 'ControllerSlackChannelConfiguration', {
+      slackChannelConfigurationName: props.config.slackChannelConfigurationName,
+      slackWorkspaceId: props.config.slackWorkspaceId,
+      slackChannelId: props.config.slackChannelId,
+      notificationTopics: props.topics,
+      role,
+    });
   }
 }
