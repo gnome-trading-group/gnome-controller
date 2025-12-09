@@ -29,7 +29,7 @@ class AppStage extends cdk.Stage {
       collectorLogGroup: collectorStack.collectorLogGroup,
     });
 
-    new BackendStack(this, "ControllerBackendStack", {
+    const backendStack = new BackendStack(this, "ControllerBackendStack", {
       userPool: frontendStack.userPool,
       collectorsTable: databaseStack.collectorsTable,
       collectorCluster: collectorStack.cluster,

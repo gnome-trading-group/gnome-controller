@@ -13,22 +13,18 @@ export interface MonitoringStackProps extends cdk.StackProps {
 
 export class MonitoringStack extends cdk.Stack {
 
-  public readonly dashboard: cw.Dashboard;
-  public readonly slackSnsTopic: sns.Topic;
-
   constructor(scope: Construct, id: string, props: MonitoringStackProps) {
     super(scope, id, props);
 
-    this.slackSnsTopic = new sns.Topic(this, 'SlackAlarmTopic');
-    this.dashboard = new cw.Dashboard(this, 'MonitoringDashboard', {
-      dashboardName: 'ControllerDashboard',
-    });
+    const slackSnsTopic = sns.Topic.fromTopicArn(
+      this, 'ImportedSlackSnsTopic', cdk.Fn.importValue('SlackSnsTopicArn')
+    );
 
-    const monitoring = new MonitoringFacade(this, 'Monitoring', {
+    const monitoring = new MonitoringFacade(this, 'ControllerDashboard', {
       alarmFactoryDefaults: {
         actionsEnabled: true,
         alarmNamePrefix: 'Controller-',
-        action: new SnsAlarmActionStrategy({ onAlarmTopic: this.slackSnsTopic }),
+        action: new SnsAlarmActionStrategy({ onAlarmTopic: slackSnsTopic }),
         datapointsToAlarm: 1,
       },
     });
