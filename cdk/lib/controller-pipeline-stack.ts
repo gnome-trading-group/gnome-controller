@@ -22,14 +22,16 @@ class AppStage extends cdk.Stage {
     });
 
     const databaseStack = new DatabaseStack(this, "ControllerDatabaseStack");
-    const monitoringStack = new MonitoringStack(this, "ControllerMonitoringStack");
+    const collectorStack = new CollectorStack(this, "ControllerCollectorStack", {
+      config,
+    });
+    const monitoringStack = new MonitoringStack(this, "ControllerMonitoringStack", {
+      aggregatorLambda: collectorStack.aggregatorLambda,
+      collectorLogGroup: collectorStack.collectorLogGroup,
+    });
     const slackStack = new SlackStack(this, "ControllerSlackStack", {
       config,
       topics: [monitoringStack.slackSnsTopic],
-    });
-    const collectorStack = new CollectorStack(this, "ControllerCollectorStack", {
-      config,
-      monitoringStack,
     });
 
     new BackendStack(this, "ControllerBackendStack", {
@@ -40,7 +42,7 @@ class AppStage extends cdk.Stage {
       collectorSecurityGroupId: collectorStack.securityGroup.securityGroupId,
       collectorSubnetIds: collectorStack.vpc.publicSubnets.map(subnet => subnet.subnetId),
       collectorDeploymentVersion: collectorStack.collectorOrchestratorVersion,
-      collectorLogGroupName: collectorStack.logGroup.logGroupName,
+      collectorLogGroupName: collectorStack.collectorLogGroup.logGroupName,
     });
   }
 }

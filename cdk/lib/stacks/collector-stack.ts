@@ -5,19 +5,15 @@ import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecrAssets from 'aws-cdk-lib/aws-ecr-assets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import * as cw from 'aws-cdk-lib/aws-cloudwatch';
 import * as events from 'aws-cdk-lib/aws-events';
-import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Construct } from 'constructs';
 import { ControllerConfig } from "../config";
-import { MonitoringStack } from "./monitoring-stack";
 import { OrchestratorLambda } from "@gnome-trading-group/gnome-shared-cdk";
 
 export interface CollectorStackProps extends cdk.StackProps {
   config: ControllerConfig;
-  monitoringStack: MonitoringStack;
 }
 
 export class CollectorStack extends cdk.Stack {
@@ -27,7 +23,8 @@ export class CollectorStack extends cdk.Stack {
   public readonly taskDefinitionFamily: string;
   public readonly taskDefinitionArn: string;
   public readonly collectorOrchestratorVersion: string;
-  public readonly logGroup: logs.LogGroup;
+  public readonly collectorLogGroup: logs.LogGroup;
+  public readonly aggregatorLambda: OrchestratorLambda;
 
   constructor(scope: Construct, id: string, props: CollectorStackProps) {
     super(scope, id, props);
@@ -60,7 +57,7 @@ export class CollectorStack extends cdk.Stack {
       allowAllOutbound: true,
     });
 
-    this.logGroup = new logs.LogGroup(this, 'CollectorEcsLogGroup', {
+    this.collectorLogGroup = new logs.LogGroup(this, 'CollectorEcsLogGroup', {
       logGroupName: '/ecs/collector',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       retention: logs.RetentionDays.ONE_WEEK,
@@ -103,7 +100,7 @@ export class CollectorStack extends cdk.Stack {
       },
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'collector',
-        logGroup: this.logGroup,
+        logGroup: this.collectorLogGroup,
       }),
       memoryLimitMiB: 512,
       cpu: 256,
@@ -117,7 +114,7 @@ export class CollectorStack extends cdk.Stack {
       retention: logs.RetentionDays.ONE_WEEK,
     });
 
-    const aggregatorLambda = new OrchestratorLambda(this, 'CollectorAggregatorLambda', {
+    this.aggregatorLambda = new OrchestratorLambda(this, 'CollectorAggregatorLambda', {
       orchestratorVersion: props.config.collectorOrchestratorVersion,
       classPath: 'group.gnometrading.collectors.AggregatorOrchestrator',
       lambdaName: 'CollectorAggregatorLambda',
@@ -130,16 +127,14 @@ export class CollectorStack extends cdk.Stack {
       logGroup: aggregatorLogGroup, 
     });
 
-    rawBucket.grantReadWrite(aggregatorLambda.lambdaInstance);
-    archiveBucket.grantReadWrite(aggregatorLambda.lambdaInstance);
-    bucket.grantReadWrite(aggregatorLambda.lambdaInstance);
+    rawBucket.grantReadWrite(this.aggregatorLambda.lambdaInstance);
+    archiveBucket.grantReadWrite(this.aggregatorLambda.lambdaInstance);
+    bucket.grantReadWrite(this.aggregatorLambda.lambdaInstance);
 
     const aggregatorRule = new events.Rule(this, 'CollectorAggregatorRule', {
       schedule: events.Schedule.rate(cdk.Duration.hours(3)),
     });
     // aggregatorRule.addTarget(new targets.LambdaFunction(aggregatorLambda.lambdaInstance));
-
-    this.buildMonitoring(this.logGroup, props.monitoringStack, aggregatorLambda);
 
     new cdk.CfnOutput(this, 'TaskDefinitionArn', {
       value: this.taskDefinitionArn,
@@ -174,66 +169,5 @@ export class CollectorStack extends cdk.Stack {
 
     fs.writeFileSync(path.join(dockerDir, 'Dockerfile'), dockerfileContent);
     return dockerDir;
-  }
-
-  private buildMonitoring(
-    logGroup: logs.LogGroup,
-    monitoringStack: MonitoringStack,
-    aggregatorLambda: OrchestratorLambda,
-  ) {
-    const filter = logGroup.addMetricFilter('ErrorMetricFilter', {
-      filterPattern: logs.FilterPattern.anyTerm('Exception', 'ERROR', 'Error', 'error', 'exception', 'UNKNOWN_ERROR'),
-      metricName: 'ErrorCount',
-      metricNamespace: 'CollectorLogs',
-    });
-
-    const metric = filter.metric({
-      statistic: 'min',
-      period: cdk.Duration.minutes(1),
-    });
-
-    const ecsAlarm = new cw.Alarm(this, 'CollectorEcsErrorAlarm', {
-      metric,
-      threshold: 1,
-      evaluationPeriods: 1,
-      datapointsToAlarm: 1,
-      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cw.TreatMissingData.NOT_BREACHING,
-      alarmDescription: 'Triggers when there are any errors in collector log streams',
-    });
-
-    monitoringStack.subscribeSlackAlarm(ecsAlarm);
-    monitoringStack.dashboard.addWidgets(new cw.GraphWidget({
-      title: "Collector Log Errors",
-      width: 12,
-      left: [
-        metric,
-      ],
-      leftAnnotations: [
-        ecsAlarm.toAnnotation(),
-      ],
-    }));
-
-    const aggregatorAlarm = new cw.Alarm(this, 'CollectorAggregatorErrorAlarm', {
-      metric: aggregatorLambda.lambdaInstance.metricErrors(),
-      threshold: 1,
-      evaluationPeriods: 1,
-      datapointsToAlarm: 1,
-      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      treatMissingData: cw.TreatMissingData.NOT_BREACHING,
-      alarmDescription: 'Triggers when there are any errors in the collector Aggregator Lambda',
-    });
-
-    monitoringStack.subscribeSlackAlarm(aggregatorAlarm);
-    monitoringStack.dashboard.addWidgets(new cw.GraphWidget({
-      title: "Collector Aggregator Errors",
-      width: 12,
-      left: [
-        aggregatorLambda.lambdaInstance.metricErrors(),
-      ],
-      leftAnnotations: [
-        aggregatorAlarm.toAnnotation(),
-      ],
-    }));
   }
 }

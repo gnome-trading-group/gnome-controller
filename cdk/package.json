@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "aws-cdk-lib": "2.176.0",
+    "cdk-monitoring-constructs": "^9.17.1",
     "constructs": "^10.0.0"
   }
 }
