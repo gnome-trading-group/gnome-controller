@@ -15,11 +15,13 @@ import {
   Button,
   Stack,
   Text,
+  Tooltip,
 } from '@mantine/core';
 import { IconPlus, IconEdit, IconRefresh, IconTrash, IconUpload, IconDownload } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row, type MRT_TableInstance } from 'mantine-react-table';
-import { useGlobalState, type Security, type Exchange, type Listing } from '../../context/GlobalStateContext';
+import { useGlobalState } from '../../context/GlobalStateContext';
+import { Exchange, Listing, Security, SchemaType } from '../../types';
 import { registryApi } from '../../utils/api';
 import * as XLSX from 'xlsx';
 
@@ -122,6 +124,7 @@ function SecurityMaster() {
       securityId: 1,
       exchangeSecurityId: 'BTC',
       exchangeSecuritySymbol: 'BTC',
+      schemaType: 'mbp-10',
     }];
 
     const exchangesWs = XLSX.utils.json_to_sheet(exchangesData);
@@ -133,6 +136,20 @@ function SecurityMaster() {
     XLSX.utils.book_append_sheet(wb, listingsWs, 'Listings');
 
     XLSX.writeFile(wb, 'security_master_template.xlsx');
+  };
+
+  const handleDownloadData = () => {
+    const wb = XLSX.utils.book_new();
+
+    const exchangesWs = XLSX.utils.json_to_sheet(exchanges);
+    const securitiesWs = XLSX.utils.json_to_sheet(securities);
+    const listingsWs = XLSX.utils.json_to_sheet(listings);
+
+    XLSX.utils.book_append_sheet(wb, exchangesWs, 'Exchanges');
+    XLSX.utils.book_append_sheet(wb, securitiesWs, 'Securities');
+    XLSX.utils.book_append_sheet(wb, listingsWs, 'Listings');
+
+    XLSX.writeFile(wb, 'security_master_data.xlsx');
   };
 
   const getDefaultTableProps = () => ({
@@ -429,6 +446,21 @@ function SecurityMaster() {
       ),
     },
     {
+      accessorKey: 'schemaType',
+      header: 'Schema Type',
+      enableSorting: true,
+      enableEditing: true,
+      Edit: ({ cell, row }) => (
+        <Select
+          defaultValue={cell.getValue<string>()}
+          data={Object.values(SchemaType)}
+          onChange={(value) => {
+            row.original.schemaType = value || '';
+          }}
+        />
+      ),
+    },
+    {
       accessorKey: 'dateCreated',
       header: 'Created',
       enableSorting: true,
@@ -503,22 +535,36 @@ function SecurityMaster() {
       <Group justify="space-between" mb="md">
         <Title order={2}>Security Master</Title>
         <Group>
-          <ActionIcon 
-            size="lg" 
-            variant="filled" 
-            color="green"
-            onClick={handleRefresh}
-          >
-            <IconRefresh size={20} />
-          </ActionIcon>
-          <ActionIcon 
-            size="lg" 
-            variant="filled" 
-            color="green"
-            onClick={() => setUploadModalOpen(true)}
-          >
-            <IconPlus size={20} />
-          </ActionIcon>
+          <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
+            <ActionIcon 
+              size="lg" 
+              variant="filled" 
+              color="green"
+              onClick={handleRefresh}
+            >
+              <IconRefresh size={20} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Download Data" position="bottom" withArrow openDelay={500}>
+            <ActionIcon 
+              size="lg" 
+              variant="filled" 
+              color="blue"
+              onClick={handleDownloadData}
+            >
+              <IconDownload size={20} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Upload New Data" position="bottom" withArrow openDelay={500}>
+            <ActionIcon 
+              size="lg" 
+              variant="filled" 
+              color="green"
+              onClick={() => setUploadModalOpen(true)}
+            >
+              <IconPlus size={20} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
       </Group>
 

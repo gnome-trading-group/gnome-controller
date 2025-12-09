@@ -35,6 +35,9 @@ export class CollectorStack extends cdk.Stack {
     const rawBucket = new s3.Bucket(this, 'CollectorRawBucket', {
       bucketName: `gnome-market-data-raw-${props.config.account.stage}`,
     });
+    const archiveBucket = new s3.Bucket(this, 'CollectorArchiveBucket', {
+      bucketName: `gnome-market-data-archive-${props.config.account.stage}`,
+    });
 
     const bucket = new s3.Bucket(this, 'CollectorBucket', {
       bucketName: `gnome-market-data-${props.config.account.stage}`,
@@ -62,12 +65,10 @@ export class CollectorStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       retention: logs.RetentionDays.ONE_WEEK,
     });
-    this.buildMonitoring(this.logGroup, props.monitoringStack);
 
     const taskRole = new iam.Role(this, 'EcsTaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
-    bucket.grantReadWrite(taskRole);
     rawBucket.grantReadWrite(taskRole);
 
     this.cluster = new ecs.Cluster(this, 'CollectorEcsCluster', { 
@@ -111,6 +112,11 @@ export class CollectorStack extends cdk.Stack {
     this.taskDefinitionArn = taskDefinition.taskDefinitionArn;
     this.collectorOrchestratorVersion = props.config.collectorOrchestratorVersion;
 
+    const aggregatorLogGroup = new logs.LogGroup(this, 'AggregatorLogGroup', {
+      logGroupName: '/aws/lambda/market-data-aggregator',
+      retention: logs.RetentionDays.ONE_WEEK,
+    });
+
     const aggregatorLambda = new OrchestratorLambda(this, 'CollectorAggregatorLambda', {
       orchestratorVersion: props.config.collectorOrchestratorVersion,
       classPath: 'group.gnometrading.collectors.AggregatorOrchestrator',
@@ -119,20 +125,21 @@ export class CollectorStack extends cdk.Stack {
       environmentVariables: {
         OUTPUT_BUCKET: bucket.bucketName,
         INPUT_BUCKET: rawBucket.bucketName,
+        ARCHIVE_BUCKET: archiveBucket.bucketName,
       },
+      logGroup: aggregatorLogGroup, 
     });
 
-    bucket.grantReadWrite(aggregatorLambda.lambdaInstance);
     rawBucket.grantReadWrite(aggregatorLambda.lambdaInstance);
-    aggregatorLambda.lambdaInstance.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['cloudwatch:PutMetricData'],
-      resources: ['*'],
-    }));
+    archiveBucket.grantReadWrite(aggregatorLambda.lambdaInstance);
+    bucket.grantReadWrite(aggregatorLambda.lambdaInstance);
 
     const aggregatorRule = new events.Rule(this, 'CollectorAggregatorRule', {
       schedule: events.Schedule.rate(cdk.Duration.hours(3)),
     });
-    aggregatorRule.addTarget(new targets.LambdaFunction(aggregatorLambda.lambdaInstance));
+    // aggregatorRule.addTarget(new targets.LambdaFunction(aggregatorLambda.lambdaInstance));
+
+    this.buildMonitoring(this.logGroup, props.monitoringStack, aggregatorLambda);
 
     new cdk.CfnOutput(this, 'TaskDefinitionArn', {
       value: this.taskDefinitionArn,
@@ -172,6 +179,7 @@ export class CollectorStack extends cdk.Stack {
   private buildMonitoring(
     logGroup: logs.LogGroup,
     monitoringStack: MonitoringStack,
+    aggregatorLambda: OrchestratorLambda,
   ) {
     const filter = logGroup.addMetricFilter('ErrorMetricFilter', {
       filterPattern: logs.FilterPattern.anyTerm('Exception', 'ERROR', 'Error', 'error', 'exception', 'UNKNOWN_ERROR'),
@@ -184,7 +192,7 @@ export class CollectorStack extends cdk.Stack {
       period: cdk.Duration.minutes(1),
     });
 
-    const alarm = new cw.Alarm(this, 'CollectorEcsErrorAlarm', {
+    const ecsAlarm = new cw.Alarm(this, 'CollectorEcsErrorAlarm', {
       metric,
       threshold: 1,
       evaluationPeriods: 1,
@@ -194,7 +202,7 @@ export class CollectorStack extends cdk.Stack {
       alarmDescription: 'Triggers when there are any errors in collector log streams',
     });
 
-    monitoringStack.subscribeSlackAlarm(alarm);
+    monitoringStack.subscribeSlackAlarm(ecsAlarm);
     monitoringStack.dashboard.addWidgets(new cw.GraphWidget({
       title: "Collector Log Errors",
       width: 12,
@@ -202,7 +210,29 @@ export class CollectorStack extends cdk.Stack {
         metric,
       ],
       leftAnnotations: [
-        alarm.toAnnotation(),
+        ecsAlarm.toAnnotation(),
+      ],
+    }));
+
+    const aggregatorAlarm = new cw.Alarm(this, 'CollectorAggregatorErrorAlarm', {
+      metric: aggregatorLambda.lambdaInstance.metricErrors(),
+      threshold: 1,
+      evaluationPeriods: 1,
+      datapointsToAlarm: 1,
+      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cw.TreatMissingData.NOT_BREACHING,
+      alarmDescription: 'Triggers when there are any errors in the collector Aggregator Lambda',
+    });
+
+    monitoringStack.subscribeSlackAlarm(aggregatorAlarm);
+    monitoringStack.dashboard.addWidgets(new cw.GraphWidget({
+      title: "Collector Aggregator Errors",
+      width: 12,
+      left: [
+        aggregatorLambda.lambdaInstance.metricErrors(),
+      ],
+      leftAnnotations: [
+        aggregatorAlarm.toAnnotation(),
       ],
     }));
   }

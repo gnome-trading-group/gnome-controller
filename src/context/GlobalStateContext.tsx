@@ -1,31 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { registryApi } from '../utils/api';
-
-export interface Security {
-  securityId: number;
-  symbol: string;
-  type: number;
-  description?: string;
-  dateCreated: string;
-  dateModified: string;
-}
-
-export interface Exchange {
-  exchangeId: number;
-  exchangeName: string;
-  dateCreated: string;
-  dateModified: string;
-}
-
-export interface Listing {
-  listingId: number;
-  exchangeId: number;
-  securityId: number;
-  exchangeSecurityId: string;
-  exchangeSecuritySymbol: string;
-  dateCreated: string;
-  dateModified: string;
-}
+import { Exchange, Listing, Security } from '../types';
 
 interface ErrorState {
   securities: string | null;
