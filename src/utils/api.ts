@@ -1,5 +1,6 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { Exchange, Listing, Security } from '../types';
+import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 
 const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
 const REGISTRY_API_URL = import.meta.env.VITE_REGISTRY_API_URL;
@@ -186,10 +187,19 @@ export const registryApi = {
       apiKey: REGISTRY_API_KEY,
       body: security,
     }),
-  createListing: (listing: Omit<Listing, 'listingId' | 'dateCreated' | 'dateModified'>) => 
+  createListing: (listing: Omit<Listing, 'listingId' | 'dateCreated' | 'dateModified'>) =>
     sendApiRequest<Listing>('/listings', 'POST', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       body: listing,
+    }),
+}
+
+
+export const latencyProbeApi = {
+  run: (request: LatencyProbeRequest) =>
+    sendApiRequest<LatencyProbeResponse>('/latency-probe/run', 'POST', {
+      apiUrl: CONTROLLER_API_URL,
+      body: request,
     }),
 }

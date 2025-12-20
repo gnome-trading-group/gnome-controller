@@ -8,6 +8,7 @@ import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import { Construct } from "constructs";
+import { createProbeInvokePolicy, PROBE_LAMBDA_NAME } from "./latency-probe-stack";
 
 interface BackendStackProps extends cdk.StackProps {
   userPool: cognito.IUserPool;
@@ -185,6 +186,34 @@ export class BackendStack extends cdk.Stack {
     ];
 
     endpoints.forEach(createEndpoint);
+
+    // Latency Probe Orchestrator Lambda
+    const latencyProbeOrchestratorLambda = new lambda.Function(this, "LatencyProbeOrchestratorLambda", {
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: "index.handler",
+      code: lambda.Code.fromAsset("lambda/functions/latency-probe/orchestrator"),
+      layers: [commonLayer],
+      timeout: cdk.Duration.minutes(2),
+      memorySize: 256,
+      environment: {
+        PROBE_LAMBDA_NAME: PROBE_LAMBDA_NAME,
+      },
+    });
+
+    // Grant permission to invoke probe Lambdas in all regions
+    latencyProbeOrchestratorLambda.addToRolePolicy(createProbeInvokePolicy(this.account));
+
+    // Add latency probe endpoint
+    const latencyProbeResource = api.root.addResource("latency-probe");
+    const runResource = latencyProbeResource.addResource("run");
+    runResource.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(latencyProbeOrchestratorLambda),
+      {
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizer: authorizer,
+      }
+    );
 
     const collectorEcsMonitorLambda = new lambda.Function(this, "CollectorEcsMonitorLambda", {
       runtime: lambda.Runtime.PYTHON_3_13,

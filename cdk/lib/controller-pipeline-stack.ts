@@ -10,6 +10,7 @@ import { BackendStack } from "./stacks/backend-stack";
 import { DatabaseStack } from "./stacks/database-stack";
 import { MonitoringStack } from "./stacks/monitoring-stack";
 import { CollectorStack } from "./stacks/collector-stack";
+import { LatencyProbeStack, PROBE_REGIONS } from "./stacks/latency-probe-stack";
 
 class AppStage extends cdk.Stage {
   constructor(scope: Construct, id: string, config: ControllerConfig) {
@@ -39,6 +40,16 @@ class AppStage extends cdk.Stage {
       collectorDeploymentVersion: collectorStack.collectorOrchestratorVersion,
       collectorLogGroupName: collectorStack.collectorLogGroup.logGroupName,
     });
+
+    for (const region of PROBE_REGIONS) {
+      new LatencyProbeStack(this, `LatencyProbeStack-${region}`, {
+        env: {
+          account: config.account.environment.account,
+          region: region,
+        },
+        deploymentRegion: region,
+      });
+    }
   }
 }
 
