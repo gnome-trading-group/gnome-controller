@@ -41,7 +41,16 @@ export class LatencyProbeStack extends cdk.Stack {
     super(scope, id, props);
 
     const commonLayer = new lambda.LayerVersion(this, "LatencyProbeCommonLayer", {
-      code: lambda.Code.fromAsset(path.join(__dirname, "../../lambda/layers/common")),
+      code: lambda.Code.fromAsset(path.join(__dirname, "../../lambda/layers/common"), {
+        bundling: {
+          image: lambda.Runtime.PYTHON_3_13.bundlingImage,
+          command: [
+            "bash",
+            "-c",
+            "pip install -r requirements.txt -t /asset-output/python && cp -r python/* /asset-output/python/",
+          ],
+        },
+      }),
       compatibleRuntimes: [lambda.Runtime.PYTHON_3_13],
       description: "Common utilities for latency probe Lambda",
     });

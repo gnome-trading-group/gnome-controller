@@ -76,7 +76,16 @@ export class BackendStack extends cdk.Stack {
     usagePlan.addApiKey(apiKey);
 
     const commonLayer = new lambda.LayerVersion(this, "CommonLayer", {
-      code: lambda.Code.fromAsset("lambda/layers/common"),
+      code: lambda.Code.fromAsset("lambda/layers/common", {
+        bundling: {
+          image: lambda.Runtime.PYTHON_3_13.bundlingImage,
+          command: [
+            "bash",
+            "-c",
+            "pip install -r requirements.txt -t /asset-output/python && cp -r python/* /asset-output/python/",
+          ],
+        },
+      }),
       compatibleRuntimes: [lambda.Runtime.PYTHON_3_13],
       description: "Common Python dependencies for all Lambda functions",
     });
