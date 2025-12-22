@@ -10,6 +10,7 @@ export interface Security {
 export interface Exchange {
   exchangeId: number;
   exchangeName: string;
+  region: string;
   dateCreated: string;
   dateModified: string;
 }

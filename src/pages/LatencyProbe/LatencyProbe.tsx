@@ -22,7 +22,7 @@ import {
 } from '@mantine/core';
 import { IconPlus, IconTrash, IconPlayerPlay, IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import { latencyProbeApi } from '../../utils/api';
-import { LatencyProbeResponse } from '../../types';
+import { AWS_REGIONS, LatencyProbeResponse } from '../../types';
 
 interface Target {
   id: string;
@@ -38,22 +38,6 @@ const DEFAULT_REGIONS = [
   'eu-central-1',
   'ap-northeast-1',
   'ap-southeast-1',
-];
-
-const ALL_REGIONS = [
-  { value: 'us-east-1', label: 'US East (N. Virginia)' },
-  { value: 'us-east-2', label: 'US East (Ohio)' },
-  { value: 'us-west-1', label: 'US West (N. California)' },
-  { value: 'us-west-2', label: 'US West (Oregon)' },
-  { value: 'eu-west-1', label: 'EU (Ireland)' },
-  { value: 'eu-west-2', label: 'EU (London)' },
-  { value: 'eu-central-1', label: 'EU (Frankfurt)' },
-  { value: 'ap-northeast-1', label: 'Asia Pacific (Tokyo)' },
-  { value: 'ap-northeast-2', label: 'Asia Pacific (Seoul)' },
-  { value: 'ap-southeast-1', label: 'Asia Pacific (Singapore)' },
-  { value: 'ap-southeast-2', label: 'Asia Pacific (Sydney)' },
-  { value: 'ap-south-1', label: 'Asia Pacific (Mumbai)' },
-  { value: 'sa-east-1', label: 'South America (São Paulo)' },
 ];
 
 function LatencyProbe() {
@@ -211,7 +195,7 @@ function LatencyProbe() {
             <MultiSelect
               label="Regions"
               placeholder="Select regions"
-              data={ALL_REGIONS}
+              data={AWS_REGIONS}
               value={selectedRegions}
               onChange={setSelectedRegions}
               searchable

@@ -21,7 +21,7 @@ import { IconPlus, IconEdit, IconRefresh, IconTrash, IconUpload, IconDownload } 
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row, type MRT_TableInstance } from 'mantine-react-table';
 import { useGlobalState } from '../../context/GlobalStateContext';
-import { Exchange, Listing, Security, SchemaType } from '../../types';
+import { AWS_REGIONS, Exchange, Listing, Security, SchemaType } from '../../types';
 import { registryApi } from '../../utils/api';
 import * as XLSX from 'xlsx';
 
@@ -356,6 +356,21 @@ function SecurityMaster() {
           defaultValue={cell.getValue<string>()}
           onChange={(e) => {
             row.original.exchangeName = e.target.value;
+          }}
+        />
+      ),
+    },
+    {
+      accessorKey: 'region',
+      header: 'Region',
+      enableSorting: true,
+      enableEditing: true,
+      Edit: ({ cell, row }) => (
+        <Select
+          defaultValue={cell.getValue<string>()}
+          data={AWS_REGIONS}
+          onChange={(value) => {
+            row.original.region = value || '';
           }}
         />
       ),
