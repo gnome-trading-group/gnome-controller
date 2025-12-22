@@ -72,6 +72,7 @@ class AppStage extends cdk.Stage {
     });
 
     new BackendStack(this, "ControllerBackendStack", {
+      crossRegionReferences: true,
       userPool: frontendStack.userPool,
       collectorsTable: databaseStack.collectorsTable,
       collectorRegions: collectorRegions,
