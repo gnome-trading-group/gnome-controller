@@ -22,7 +22,7 @@ export interface CollectorRegionalStackProps extends cdk.StackProps {
   config: ControllerConfig;
   deploymentRegion: string;
   rawBucketName: string;
-  primaryEventBusArn: string;
+  primaryEventBus: events.EventBus;
 }
 
 /**
@@ -137,8 +137,7 @@ export class CollectorRegionalStack extends cdk.Stack {
       },
     });
 
-    const eventBus = events.EventBus.fromEventBusArn(this, 'PrimaryEventBus', props.primaryEventBusArn);
-    ecsEventRule.addTarget(new targets.EventBus(eventBus));
+    ecsEventRule.addTarget(new targets.EventBus(props.primaryEventBus));
 
     new cdk.CfnOutput(this, 'TaskDefinitionArn', {
       value: this.taskDefinitionArn,
