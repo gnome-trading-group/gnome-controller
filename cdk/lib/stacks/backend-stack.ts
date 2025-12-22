@@ -12,10 +12,11 @@ import { createProbeInvokePolicy, PROBE_LAMBDA_NAME } from "./latency-probe-stac
 export interface CollectorRegionConfig {
   region: string;
   clusterName: string;
+  clusterArn: string;
   taskDefinitionFamily: string;
+  securityGroupId: string;
+  subnetIds: string[];
   logGroupName: string;
-  // Note: securityGroupId and subnetIds are looked up at runtime by Lambda
-  // to avoid cross-region CDK token references
 }
 
 interface BackendStackProps extends cdk.StackProps {
@@ -118,8 +119,6 @@ export class BackendStack extends cdk.Stack {
           'iam:PassRole',
           'logs:DescribeLogStreams',
           'logs:GetLogEvents',
-          'ec2:DescribeSecurityGroups',
-          'ec2:DescribeSubnets',
         ],
         resources: ['*'],  // TODO: Restrict to specific resources
       }));
