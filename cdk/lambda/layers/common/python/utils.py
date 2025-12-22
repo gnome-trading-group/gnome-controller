@@ -1,6 +1,7 @@
 import json
+import os
 import functools
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 from decimal import Decimal
 import datetime
 
@@ -11,6 +12,20 @@ class DecimalEncoder(json.JSONEncoder):
         if isinstance(obj, datetime.datetime):
             return obj.isoformat()
         return super().default(obj)
+
+
+def get_collector_regions() -> Dict[str, Dict[str, Any]]:
+    regions_json = os.environ.get('COLLECTOR_REGIONS', '{}')
+    return json.loads(regions_json)
+
+
+def get_region_config(region: str) -> Optional[Dict[str, Any]]:
+    regions = get_collector_regions()
+    return regions.get(region)
+
+
+def get_available_regions() -> list:
+    return list(get_collector_regions().keys())
 
 CORS_HEADERS = {
     'Access-Control-Allow-Origin': '*',

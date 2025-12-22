@@ -1,14 +1,14 @@
 import * as cdk from "aws-cdk-lib";
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as cw from 'aws-cdk-lib/aws-cloudwatch';
-import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import { OrchestratorLambda } from "@gnome-trading-group/gnome-shared-cdk";
-import { MonitoringFacade, SnsAlarmActionStrategy } from "cdk-monitoring-constructs";
+import { CustomMetricGroup, MonitoringFacade, SnsAlarmActionStrategy } from "cdk-monitoring-constructs";
+import { COLLECTOR_METRICS_NAMESPACE, COLLECTOR_ERROR_METRIC_NAME } from "./collector-regional-stack";
 
 export interface MonitoringStackProps extends cdk.StackProps {
-  collectorLogGroup: logs.ILogGroup;
   aggregatorLambda: OrchestratorLambda;
+  collectorRegions: string[];
 }
 
 export class MonitoringStack extends cdk.Stack {
@@ -29,18 +29,36 @@ export class MonitoringStack extends cdk.Stack {
       },
     });
 
+    const collectorLogMetrics: CustomMetricGroup[] = [];
+    for (const region of props.collectorRegions) {
+      collectorLogMetrics.push(
+        {
+          metrics: [
+            new cw.Metric({
+              namespace: COLLECTOR_METRICS_NAMESPACE,
+              metricName: COLLECTOR_ERROR_METRIC_NAME,
+              dimensionsMap: { Region: region },
+              region: region,
+              statistic: 'Sum',
+              period: cdk.Duration.minutes(1),
+            }),
+          ],
+          title: region,
+        }
+      );
+    }
+
     monitoring
       .addLargeHeader('Gnome Controller')
+      .monitorCustom({
+        alarmFriendlyName: 'CollectorECSLogErrors',
+        humanReadableName: 'Collector ECS Log Errors',
+        metricGroups: collectorLogMetrics,
+      })
       .monitorLambdaFunction({
         lambdaFunction: props.aggregatorLambda.lambdaInstance,
         humanReadableName: 'Collector Aggregator Lambda',
         alarmFriendlyName: 'CollectorAggregatorLambda',
-      })
-      .monitorLog({
-        logGroupName: props.collectorLogGroup.logGroupName,
-        pattern: "ERROR || Exception || exception || Error || error || UNKNOWN_ERROR",
-        humanReadableName: 'Collector ECS Log Group Errors',
-        alarmFriendlyName: 'CollectorEcsLogErrors',
       });
   }
 }

@@ -21,9 +21,10 @@ import { IconPlus, IconEdit, IconRefresh, IconTrash, IconUpload, IconDownload } 
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row, type MRT_TableInstance } from 'mantine-react-table';
 import { useGlobalState } from '../../context/GlobalStateContext';
-import { AWS_REGIONS, Exchange, Listing, Security, SchemaType } from '../../types';
+import { AWS_REGIONS, Exchange, Listing, Security, SchemaType, SecurityType } from '../../types';
 import { registryApi } from '../../utils/api';
 import * as XLSX from 'xlsx';
+import { formatSecurityType } from '../../utils/security-master';
 
 function SecurityMaster() {
   const [activeTab, setActiveTab] = useState<string | null>('securities');
@@ -286,21 +287,19 @@ function SecurityMaster() {
       Edit: ({ cell, row }) => (
         <Select
           defaultValue={cell.getValue<number>().toString()}
-          data={[
-            { value: '0', label: 'Spot' },
-            { value: '1', label: 'Perpetual Future' },
-          ]}
+          data={Object.entries(SecurityType)
+            .filter(([key]) => isNaN(Number(key)))
+            .map(([, value]) => ({
+              value: value.toString(),
+              label: formatSecurityType(value as number),
+            }))}
           onChange={(value) => {
             row.original.type = parseInt(value || '0');
           }}
         />
       ),
       Cell: ({ row }: { row: MRT_Row<Security> }) => {
-        switch (row.original.type) {
-          case 0: return 'Spot';
-          case 1: return 'Perpetual Future';
-          default: return `Unknown (${row.original.type})`;
-        }
+        return formatSecurityType(row.original.type);
       },
     },
     {

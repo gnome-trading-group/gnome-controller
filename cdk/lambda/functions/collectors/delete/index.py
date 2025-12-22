@@ -1,21 +1,29 @@
-import os
 import boto3
 from db import DynamoDBClient
-from utils import lambda_handler
+from utils import lambda_handler, get_region_config
 from constants import Status
 
 @lambda_handler
 def handler(body):
     listing_id = int(body['listingId'])
 
-    ecs = boto3.client('ecs')
-    cluster = os.environ['COLLECTOR_ECS_CLUSTER']
-
     db = DynamoDBClient()
 
     collector = db.get_item(listing_id)
     if not collector:
         raise Exception(f'Collector with listing ID {listing_id} not found')
+
+    region = collector.get('region')
+    if not region:
+        raise Exception(f'Collector {listing_id} does not have a region set.')
+
+    region_config = get_region_config(region)
+    if not region_config:
+        raise Exception(f'Region {region} is not configured')
+
+    cluster = region_config['clusterName']
+
+    ecs = boto3.client('ecs', region_name=region)
 
     service_name = f'collector-{listing_id}'
 
@@ -40,12 +48,14 @@ def handler(body):
 
         return {
             'message': 'Collector service deleted successfully',
-            'serviceName': service_name
+            'serviceName': service_name,
+            'region': region
         }
     except ecs.exceptions.ServiceNotFoundException:
         return {
             'message': 'Collector service not found (may have been already deleted)',
-            'serviceName': service_name
+            'serviceName': service_name,
+            'region': region
         }
     except ecs.exceptions.ClientError as e:
         print(f'Error deleting service: {e}')

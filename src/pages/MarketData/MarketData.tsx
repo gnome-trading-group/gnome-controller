@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collectorsApi } from '../../utils/api';
 import { ApiError } from '../../utils/api';
@@ -7,7 +7,6 @@ import {
   ActionIcon,
   Group,
   Modal,
-  NumberInput,
   Stack,
   Title,
   Container,
@@ -15,31 +14,63 @@ import {
   Notification,
   Text,
   Tooltip,
+  Select,
 } from '@mantine/core';
 import { IconPlus, IconRefresh, IconPlayerStop, IconAB2 } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
+import { useGlobalState } from '../../context/GlobalStateContext';
+import { formatSecurityType } from '../../utils/security-master';
 
 interface Collector {
   listingId: number;
   status: string;
   lastStatusChange: number;
   failureReason: string | null;
+  region?: string;
 }
 
 function MarketData() {
   const navigate = useNavigate();
+  const { listings, exchanges, securities } = useGlobalState();
   const [collectors, setCollectors] = useState<Collector[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [newListingId, setNewListingId] = useState<number | ''>('');
+  const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [stopModalOpen, setStopModalOpen] = useState(false);
   const [collectorToStop, setCollectorToStop] = useState<number | null>(null);
   const [redeployModalOpen, setRedeployModalOpen] = useState(false);
   const [collectorToRedeploy, setCollectorToRedeploy] = useState<number | null>(null);
   const [redeployAllModalOpen, setRedeployAllModalOpen] = useState(false);
+
+  const exchangeRegionMap = useMemo(() => {
+    const map = new Map<number, string>();
+    exchanges.forEach((exchange) => {
+      map.set(exchange.exchangeId, exchange.region);
+    });
+    return map;
+  }, [exchanges]);
+
+  const listingOptions = useMemo(() => {
+    return listings
+      .map((listing) => {
+        const exchange = exchanges.find((e) => e.exchangeId === listing.exchangeId);
+        const security = securities.find((s) => s.securityId === listing.securityId);
+        return {
+          value: String(listing.listingId),
+          label: `${listing.listingId} - ${exchange?.exchangeName} - ${security?.symbol} (${formatSecurityType(security?.type || 0)})`,
+        }
+      });
+  }, [listings, securities, exchanges]);
+
+  const selectedListingRegion = useMemo(() => {
+    if (!selectedListingId) return null;
+    const listing = listings.find((l) => l.listingId === Number(selectedListingId));
+    if (!listing) return null;
+    return exchangeRegionMap.get(listing.exchangeId) || null;
+  }, [selectedListingId, listings, exchangeRegionMap]);
 
   useEffect(() => {
     loadCollectors();
@@ -75,14 +106,14 @@ function MarketData() {
   };
 
   const handleCreateCollector = async () => {
-    if (!newListingId) return;
-    
+    if (!selectedListingId || !selectedListingRegion) return;
+
     try {
       setError(null);
       setCreating(true);
-      await collectorsApi.create(newListingId);
+      await collectorsApi.create(Number(selectedListingId), selectedListingRegion);
       setCreateModalOpen(false);
-      setNewListingId('');
+      setSelectedListingId(null);
       await loadCollectors();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -146,6 +177,12 @@ function MarketData() {
       enableSorting: true,
     },
     {
+      accessorKey: 'region',
+      header: 'Region',
+      enableSorting: true,
+      Cell: ({ row }: { row: MRT_Row<Collector> }) => row.original.region || '-',
+    },
+    {
       accessorKey: 'status',
       header: 'Status',
       enableSorting: true,
@@ -159,9 +196,9 @@ function MarketData() {
       accessorKey: 'lastStatusChange',
       header: 'Last Status Change',
       enableSorting: true,
-      Cell: ({ row }: { row: MRT_Row<Collector> }) => 
-        row.original.lastStatusChange ? 
-          <ReactTimeAgo date={row.original.lastStatusChange * 1000} timeStyle="round" /> : 
+      Cell: ({ row }: { row: MRT_Row<Collector> }) =>
+        row.original.lastStatusChange ?
+          <ReactTimeAgo date={row.original.lastStatusChange * 1000} timeStyle="round" /> :
           '-',
     },
     {
@@ -280,14 +317,25 @@ function MarketData() {
         title="Create New Collector"
       >
         <Stack>
-          <NumberInput
-            label="Listing ID"
-            value={newListingId}
-            onChange={(value) => setNewListingId(value === '' ? '' : Number(value))}
-            placeholder="Enter listing ID"
+          <Select
+            label="Listing"
+            value={selectedListingId}
+            onChange={setSelectedListingId}
+            data={listingOptions}
+            placeholder="Select a listing"
+            searchable
             required
           />
-          <Button onClick={handleCreateCollector} loading={creating} disabled={creating}>
+          {selectedListingRegion && (
+            <Text size="sm" c="dimmed">
+              Region: <Badge size="sm">{selectedListingRegion}</Badge>
+            </Text>
+          )}
+          <Button
+            onClick={handleCreateCollector}
+            loading={creating}
+            disabled={creating || !selectedListingId || !selectedListingRegion}
+          >
             Create Collector
           </Button>
         </Stack>

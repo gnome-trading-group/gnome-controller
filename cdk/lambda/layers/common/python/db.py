@@ -18,12 +18,12 @@ class DynamoDBClient:
         response = self.table.get_item(Key={'listingId': listing_id})
         return response.get('Item')
 
-    def put_item(self, listing_id: int, serviceArn: str, deploymentVersion: str) -> Dict:
+    def put_item(self, listing_id: int, serviceArn: str, deploymentVersion: str, region: str) -> Dict:
         """Create or update a collector with service-based deployment info"""
         existing_item = self.get_item(listing_id)
 
         if existing_item:
-            return self.update_service(listing_id, serviceArn, deploymentVersion, Status.PENDING)
+            return self.update_service(listing_id, serviceArn, deploymentVersion, region, Status.PENDING)
         else:
             return self.table.put_item(
                 Item={
@@ -31,25 +31,28 @@ class DynamoDBClient:
                     'status': Status.PENDING.value,
                     'serviceArn': serviceArn,
                     'deploymentVersion': deploymentVersion,
+                    'region': region,
                     'taskArns': [],  # Will be populated by ECS monitor
                     'lastStatusChange': int(time.time()),
                     'failureReason': None,
                 }
             )
 
-    def update_service(self, listing_id: int, serviceArn: str, deploymentVersion: str, status: Status) -> Dict:
-        """Update service ARN and deployment version"""
+    def update_service(self, listing_id: int, serviceArn: str, deploymentVersion: str, region: str, status: Status) -> Dict:
+        """Update service ARN, deployment version, and region"""
         return self.table.update_item(
             Key={'listingId': listing_id},
-            UpdateExpression='SET serviceArn = :serviceArn, deploymentVersion = :version, #s = :status, lastStatusChange = :now',
+            UpdateExpression='SET serviceArn = :serviceArn, deploymentVersion = :version, #r = :region, #s = :status, lastStatusChange = :now',
             ExpressionAttributeValues={
                 ':serviceArn': serviceArn,
                 ':version': deploymentVersion,
+                ':region': region,
                 ':status': status.value,
                 ':now': int(time.time())
             },
             ExpressionAttributeNames={
-                '#s': 'status'
+                '#s': 'status',
+                '#r': 'region'
             }
         )
 

@@ -6,15 +6,22 @@ import { Construct } from "constructs";
 import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { CONFIGS, GITHUB_BRANCH, GITHUB_REPO, ControllerConfig } from "./config";
 import { FrontendStack } from "./stacks/frontend-stack";
-import { BackendStack } from "./stacks/backend-stack";
+import { BackendStack, CollectorRegionConfig } from "./stacks/backend-stack";
 import { DatabaseStack } from "./stacks/database-stack";
 import { MonitoringStack } from "./stacks/monitoring-stack";
 import { CollectorStack } from "./stacks/collector-stack";
+import { CollectorRegionalStack } from "./stacks/collector-regional-stack";
+import { EventBusStack } from "./stacks/event-bus-stack";
 import { LatencyProbeStack, PROBE_REGIONS } from "./stacks/latency-probe-stack";
+
+/** Regions where collectors can be deployed */
+export const COLLECTOR_REGIONS = ["us-east-1", "ap-northeast-1"];
 
 class AppStage extends cdk.Stage {
   constructor(scope: Construct, id: string, config: ControllerConfig) {
     super(scope, id, { env: config.account.environment });
+
+    const accountId = config.account.environment.account!;
 
     const frontendStack = new FrontendStack(this, "ControllerFrontendStack", {
       stage: config.account.stage,
@@ -22,23 +29,53 @@ class AppStage extends cdk.Stage {
     });
 
     const databaseStack = new DatabaseStack(this, "ControllerDatabaseStack");
+
+    const eventBusStack = new EventBusStack(this, "ControllerEventBusStack");
+
     const collectorStack = new CollectorStack(this, "ControllerCollectorStack", {
       config,
     });
-    const monitoringStack = new MonitoringStack(this, "ControllerMonitoringStack", {
+
+    // Regional collector stacks (VPC, ECS, task definition) - one per region
+    const collectorRegionalStacks: Record<string, CollectorRegionalStack> = {};
+    for (const region of COLLECTOR_REGIONS) {
+      const regionalStack = new CollectorRegionalStack(this, `CollectorRegionalStack-${region}`, {
+        env: {
+          account: accountId,
+          region: region,
+        },
+        config,
+        deploymentRegion: region,
+        rawBucketName: collectorStack.rawBucket.bucketName,
+        primaryEventBus: eventBusStack.collectorEventBus,
+      });
+      collectorRegionalStacks[region] = regionalStack;
+    }
+
+    const collectorRegions: Record<string, CollectorRegionConfig> = {};
+    for (const [region, stack] of Object.entries(collectorRegionalStacks)) {
+      collectorRegions[region] = {
+        region: region,
+        clusterName: stack.cluster.clusterName,
+        clusterArn: stack.cluster.clusterArn,
+        taskDefinitionFamily: stack.taskDefinitionFamily,
+        securityGroupId: stack.securityGroup.securityGroupId,
+        subnetIds: stack.vpc.publicSubnets.map(subnet => subnet.subnetId),
+        logGroupName: stack.collectorLogGroup.logGroupName,
+      };
+    }
+
+    new MonitoringStack(this, "ControllerMonitoringStack", {
       aggregatorLambda: collectorStack.aggregatorLambda,
-      collectorLogGroup: collectorStack.collectorLogGroup,
+      collectorRegions: COLLECTOR_REGIONS,
     });
 
     const backendStack = new BackendStack(this, "ControllerBackendStack", {
       userPool: frontendStack.userPool,
       collectorsTable: databaseStack.collectorsTable,
-      collectorCluster: collectorStack.cluster,
-      collectorTaskDefinition: collectorStack.taskDefinitionFamily,
-      collectorSecurityGroupId: collectorStack.securityGroup.securityGroupId,
-      collectorSubnetIds: collectorStack.vpc.publicSubnets.map(subnet => subnet.subnetId),
+      collectorRegions: collectorRegions,
       collectorDeploymentVersion: collectorStack.collectorOrchestratorVersion,
-      collectorLogGroupName: collectorStack.collectorLogGroup.logGroupName,
+      collectorEventBus: eventBusStack.collectorEventBus,
     });
 
     for (const region of PROBE_REGIONS) {

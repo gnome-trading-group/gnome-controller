@@ -94,31 +94,31 @@ export async function sendApiRequest<T>(
 
 // Collector-specific API methods
 export const collectorsApi = {
-  list: () => sendApiRequest<{ collectors: any[] }>('/collectors/list', 'GET', { 
+  list: () => sendApiRequest<{ collectors: any[] }>('/collectors/list', 'GET', {
     apiUrl: CONTROLLER_API_URL,
   }),
-  create: (listingId: number) => 
-    sendApiRequest<{ message: string }>('/collectors/create', 'POST', { 
+  create: (listingId: number, region: string) =>
+    sendApiRequest<{ message: string }>('/collectors/create', 'POST', {
+      apiUrl: CONTROLLER_API_URL,
+      body: { listingId, region },
+    }),
+  delete: (listingId: number) =>
+    sendApiRequest<{ message: string }>('/collectors/delete', 'DELETE', {
       apiUrl: CONTROLLER_API_URL,
       body: { listingId },
     }),
-  delete: (listingId: number) => 
-    sendApiRequest<{ message: string }>('/collectors/delete', 'DELETE', { 
+  redeploy: (listingId?: number) =>
+    sendApiRequest<{ message: string }>('/collectors/redeploy', 'POST', {
       apiUrl: CONTROLLER_API_URL,
       body: { listingId },
     }),
-  redeploy: (listingId?: number) => 
-    sendApiRequest<{ message: string }>('/collectors/redeploy', 'POST', { 
-      apiUrl: CONTROLLER_API_URL,
-      body: { listingId },
-    }),
-  get: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}`, 'GET', { 
+  get: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}`, 'GET', {
     apiUrl: CONTROLLER_API_URL,
   }),
-  getLogs: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}/logs`, 'GET', { 
+  getLogs: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}/logs`, 'GET', {
     apiUrl: CONTROLLER_API_URL,
   }),
-}; 
+};
 
 export const registryApi = {
   listExchanges: () => sendApiRequest<any[]>('/exchanges', 'GET', { 

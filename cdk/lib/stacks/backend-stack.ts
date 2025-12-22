@@ -4,21 +4,27 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
-import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import { Construct } from "constructs";
 import { createProbeInvokePolicy, PROBE_LAMBDA_NAME } from "./latency-probe-stack";
 
+export interface CollectorRegionConfig {
+  region: string;
+  clusterName: string;
+  clusterArn: string;
+  taskDefinitionFamily: string;
+  securityGroupId: string;
+  subnetIds: string[];
+  logGroupName: string;
+}
+
 interface BackendStackProps extends cdk.StackProps {
   userPool: cognito.IUserPool;
   collectorsTable: dynamodb.ITable;
-  collectorCluster: ecs.ICluster;
-  collectorTaskDefinition: string;
-  collectorSecurityGroupId: string;
-  collectorSubnetIds: string[];
+  collectorRegions: Record<string, CollectorRegionConfig>;
   collectorDeploymentVersion: string;
-  collectorLogGroupName: string;
+  collectorEventBus: events.IEventBus;
 }
 
 interface EndpointConfig {
@@ -90,6 +96,8 @@ export class BackendStack extends cdk.Stack {
       description: "Common Python dependencies for all Lambda functions",
     });
 
+    const collectorRegionsJson = JSON.stringify(props.collectorRegions);
+
     const createLambdaFunction = (name: string, handlerPath: string): lambda.Function => {
       const fn = new lambda.Function(this, name, {
         runtime: lambda.Runtime.PYTHON_3_13,
@@ -99,12 +107,8 @@ export class BackendStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(30),
         environment: {
           COLLECTORS_TABLE_NAME: props.collectorsTable.tableName,
-          COLLECTOR_ECS_CLUSTER: props.collectorCluster.clusterName,
-          COLLECTOR_ECS_TASK_DEFINITION: props.collectorTaskDefinition,
-          COLLECTOR_SECURITY_GROUP_ID: props.collectorSecurityGroupId,
-          COLLECTOR_SUBNET_IDS: props.collectorSubnetIds.join(','),
+          COLLECTOR_REGIONS: collectorRegionsJson,
           COLLECTOR_DEPLOYMENT_VERSION: props.collectorDeploymentVersion,
-          COLLECTOR_LOG_GROUP_NAME: props.collectorLogGroupName,
         },
       });
       props.collectorsTable.grantReadWriteData(fn);
@@ -231,24 +235,25 @@ export class BackendStack extends cdk.Stack {
       layers: [commonLayer],
       environment: {
         COLLECTORS_TABLE_NAME: props.collectorsTable.tableName,
+        COLLECTOR_REGIONS: collectorRegionsJson,
       },
       timeout: cdk.Duration.seconds(30),
     });
 
     props.collectorsTable.grantReadWriteData(collectorEcsMonitorLambda);
 
-    const collectorEcsTaskStateRule = new events.Rule(this, "CollectorEcsTaskStateRule", {
+    // Rule on the collector event bus that handles all ECS events (forwarded from all regions)
+    const ecsMonitorRule = new events.Rule(this, "CollectorEcsMonitorRule", {
+      eventBus: props.collectorEventBus,
       eventPattern: {
         source: ["aws.ecs"],
         detailType: ["ECS Task State Change"],
         detail: {
-          clusterArn: [props.collectorCluster.clusterArn],
           lastStatus: ["RUNNING", "STOPPED", "PENDING"],
         },
       },
     });
-
-    collectorEcsTaskStateRule.addTarget(new targets.LambdaFunction(collectorEcsMonitorLambda));
+    ecsMonitorRule.addTarget(new targets.LambdaFunction(collectorEcsMonitorLambda));
 
     new cdk.CfnOutput(this, "ApiUrl", {
       value: api.url,

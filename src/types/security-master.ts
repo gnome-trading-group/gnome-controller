@@ -1,3 +1,8 @@
+export enum SecurityType {
+  SPOT = 0,
+  PERPETUAL_FUTURE = 1,
+}
+
 export interface Security {
   securityId: number;
   symbol: string;
