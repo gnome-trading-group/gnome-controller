@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as pipelines from "aws-cdk-lib/pipelines";
 import * as codebuild from "aws-cdk-lib/aws-codebuild";
+import * as iam from "aws-cdk-lib/aws-iam";
 import * as secrets from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from "constructs";
 import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
@@ -111,7 +112,6 @@ export class ControllerPipelineStack extends cdk.Stack {
           "npm ci",
           "npx cdk synth"
         ],
-        
         env: {
           NPM_TOKEN: npmSecret.secretValue.unsafeUnwrap(),
         },
@@ -129,6 +129,19 @@ export class ControllerPipelineStack extends cdk.Stack {
             }
           }
         },
+      },
+      synthCodeBuildDefaults: {
+        rolePolicy: [
+          new iam.PolicyStatement({
+            actions: ['sts:AssumeRole'],
+            resources: ['*'],
+            conditions: {
+              StringEquals: {
+                'iam:ResourceTag/aws-cdk:bootstrap-role': 'lookup',
+              },
+            },
+          })
+        ],
       }
     });
 
