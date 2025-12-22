@@ -44,11 +44,10 @@ class AppStage extends cdk.Stage {
           account: accountId,
           region: region,
         },
-        crossRegionReferences: true,
         config,
         deploymentRegion: region,
         rawBucketName: collectorStack.rawBucket.bucketName,
-        primaryEventBus: eventBusStack.collectorEventBus,
+        primaryEventBusArn: eventBusStack.collectorEventBus.eventBusArn,
       });
       collectorRegionalStacks[region] = regionalStack;
     }
@@ -72,7 +71,6 @@ class AppStage extends cdk.Stage {
     });
 
     new BackendStack(this, "ControllerBackendStack", {
-      crossRegionReferences: true,
       userPool: frontendStack.userPool,
       collectorsTable: databaseStack.collectorsTable,
       collectorRegions: collectorRegions,
