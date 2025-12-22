@@ -1,7 +1,7 @@
 import os
 import boto3
 from db import DynamoDBClient
-from utils import lambda_handler, get_region_config, get_available_regions
+from utils import lambda_handler, get_region_config, get_available_regions, get_collector_network_config
 
 @lambda_handler
 def handler(body):
@@ -17,9 +17,11 @@ def handler(body):
     region_config = get_region_config(region)
     cluster = region_config['clusterName']
     base_task_definition = region_config['taskDefinitionFamily']
-    security_group_id = region_config['securityGroupId']
-    subnet_ids = region_config['subnetIds']
     deployment_version = os.environ.get('COLLECTOR_DEPLOYMENT_VERSION', 'unknown')
+
+    network_config = get_collector_network_config(region)
+    security_group_id = network_config['securityGroupId']
+    subnet_ids = network_config['subnetIds']
 
     ecs = boto3.client('ecs', region_name=region)
 

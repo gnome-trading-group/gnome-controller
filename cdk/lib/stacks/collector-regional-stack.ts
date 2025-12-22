@@ -56,6 +56,7 @@ export class CollectorRegionalStack extends cdk.Stack {
 
     this.securityGroup = new ec2.SecurityGroup(this, 'CollectorSecurityGroup', {
       vpc: this.vpc,
+      securityGroupName: `CollectorSecurityGroup-${props.deploymentRegion}`,
       description: 'Security group for collector Fargate tasks',
       allowAllOutbound: true,
     });

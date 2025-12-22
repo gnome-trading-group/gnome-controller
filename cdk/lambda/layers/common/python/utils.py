@@ -1,9 +1,10 @@
 import json
 import os
 import functools
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 from decimal import Decimal
 import datetime
+import boto3
 
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -26,6 +27,40 @@ def get_region_config(region: str) -> Optional[Dict[str, Any]]:
 
 def get_available_regions() -> list:
     return list(get_collector_regions().keys())
+
+
+def get_collector_network_config(region: str) -> Dict[str, Any]:
+    """
+    Look up security group and subnets for the collector cluster in the given region.
+    This is done at runtime to avoid cross-region CDK token references.
+    """
+    ec2 = boto3.client('ec2', region_name=region)
+
+    # Find security group by name
+    sg_name = f'CollectorSecurityGroup-{region}'
+    sg_response = ec2.describe_security_groups(
+        Filters=[{'Name': 'group-name', 'Values': [sg_name]}]
+    )
+    if not sg_response['SecurityGroups']:
+        raise ValueError(f'Security group {sg_name} not found in {region}')
+    security_group_id = sg_response['SecurityGroups'][0]['GroupId']
+    vpc_id = sg_response['SecurityGroups'][0]['VpcId']
+
+    subnet_response = ec2.describe_subnets(
+        Filters=[
+            {'Name': 'vpc-id', 'Values': [vpc_id]},
+            {'Name': 'map-public-ip-on-launch', 'Values': ['true']}
+        ]
+    )
+    if not subnet_response['Subnets']:
+        raise ValueError(f'No public subnets found in VPC {vpc_id} in {region}')
+    subnet_ids = [s['SubnetId'] for s in subnet_response['Subnets']]
+
+    return {
+        'securityGroupId': security_group_id,
+        'subnetIds': subnet_ids,
+    }
+
 
 CORS_HEADERS = {
     'Access-Control-Allow-Origin': '*',

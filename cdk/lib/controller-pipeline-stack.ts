@@ -52,16 +52,14 @@ class AppStage extends cdk.Stage {
       collectorRegionalStacks[region] = regionalStack;
     }
 
+    // Build config using deterministic names (not CDK tokens) to avoid cross-region reference issues
     const collectorRegions: Record<string, CollectorRegionConfig> = {};
-    for (const [region, stack] of Object.entries(collectorRegionalStacks)) {
+    for (const region of COLLECTOR_REGIONS) {
       collectorRegions[region] = {
         region: region,
-        clusterName: stack.cluster.clusterName,
-        clusterArn: stack.cluster.clusterArn,
-        taskDefinitionFamily: stack.taskDefinitionFamily,
-        securityGroupId: stack.securityGroup.securityGroupId,
-        subnetIds: stack.vpc.publicSubnets.map(subnet => subnet.subnetId),
-        logGroupName: stack.collectorLogGroup.logGroupName,
+        clusterName: `CollectorCluster-${region}`,
+        taskDefinitionFamily: `CollectorTaskDefinition-${region}`,
+        logGroupName: `/ecs/collector-${region}`,
       };
     }
 
