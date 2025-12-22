@@ -36,8 +36,7 @@ export class MonitoringStack extends cdk.Stack {
           metrics: [
             new cw.Metric({
               namespace: COLLECTOR_METRICS_NAMESPACE,
-              metricName: COLLECTOR_ERROR_METRIC_NAME,
-              dimensionsMap: { Region: region },
+              metricName: `${COLLECTOR_ERROR_METRIC_NAME}-${region}`,
               region: region,
               statistic: 'Sum',
               period: cdk.Duration.minutes(1),

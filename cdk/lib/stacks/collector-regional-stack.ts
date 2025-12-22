@@ -67,15 +67,13 @@ export class CollectorRegionalStack extends cdk.Stack {
     });
 
     // Metric filter to count errors in the log group
+    // Note: dimensions are only supported with JSON filter patterns, so we include region in the metric name
     new logs.MetricFilter(this, 'CollectorErrorMetricFilter', {
       logGroup: this.collectorLogGroup,
       metricNamespace: COLLECTOR_METRICS_NAMESPACE,
-      metricName: COLLECTOR_ERROR_METRIC_NAME,
+      metricName: `${COLLECTOR_ERROR_METRIC_NAME}-${props.deploymentRegion}`,
       filterPattern: logs.FilterPattern.anyTerm('ERROR', 'Exception', 'exception', 'Error', 'error', 'UNKNOWN_ERROR'),
       metricValue: '1',
-      dimensions: {
-        Region: props.deploymentRegion,
-      },
     });
 
     const taskRole = new iam.Role(this, 'EcsTaskRole', {
