@@ -44,6 +44,7 @@ class AppStage extends cdk.Stage {
           account: accountId,
           region: region,
         },
+        crossRegionReferences: true,
         config,
         deploymentRegion: region,
         rawBucketName: collectorStack.rawBucket.bucketName,
@@ -70,7 +71,7 @@ class AppStage extends cdk.Stage {
       collectorRegions: COLLECTOR_REGIONS,
     });
 
-    const backendStack = new BackendStack(this, "ControllerBackendStack", {
+    new BackendStack(this, "ControllerBackendStack", {
       userPool: frontendStack.userPool,
       collectorsTable: databaseStack.collectorsTable,
       collectorRegions: collectorRegions,
