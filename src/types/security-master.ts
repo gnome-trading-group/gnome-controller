@@ -16,6 +16,7 @@ export interface Exchange {
   exchangeId: number;
   exchangeName: string;
   region: string;
+  schemaType: string;
   dateCreated: string;
   dateModified: string;
 }
@@ -26,7 +27,6 @@ export interface Listing {
   securityId: number;
   exchangeSecurityId: string;
   exchangeSecuritySymbol: string;
-  schemaType: string;
   dateCreated: string;
   dateModified: string;
 }

@@ -112,6 +112,8 @@ function SecurityMaster() {
 
     const exchangesData = [{
       exchangeName: 'Binance',
+      region: 'us-east-1',
+      schemaType: 'mbp-10',
     }];
 
     const securitiesData = [{
@@ -125,7 +127,6 @@ function SecurityMaster() {
       securityId: 1,
       exchangeSecurityId: 'BTC',
       exchangeSecuritySymbol: 'BTC',
-      schemaType: 'mbp-10',
     }];
 
     const exchangesWs = XLSX.utils.json_to_sheet(exchangesData);
@@ -375,6 +376,21 @@ function SecurityMaster() {
       ),
     },
     {
+      accessorKey: 'schemaType',
+      header: 'Schema Type',
+      enableSorting: true,
+      enableEditing: true,
+      Edit: ({ cell, row }) => (
+        <Select
+          defaultValue={cell.getValue<string>()}
+          data={Object.values(SchemaType)}
+          onChange={(value) => {
+            row.original.schemaType = value || '';
+          }}
+        />
+      ),
+    },
+    {
       accessorKey: 'dateCreated',
       header: 'Created',
       enableSorting: true,
@@ -455,21 +471,6 @@ function SecurityMaster() {
           defaultValue={cell.getValue<string>()}
           onChange={(e) => {
             row.original.exchangeSecuritySymbol = e.target.value;
-          }}
-        />
-      ),
-    },
-    {
-      accessorKey: 'schemaType',
-      header: 'Schema Type',
-      enableSorting: true,
-      enableEditing: true,
-      Edit: ({ cell, row }) => (
-        <Select
-          defaultValue={cell.getValue<string>()}
-          data={Object.values(SchemaType)}
-          onChange={(value) => {
-            row.original.schemaType = value || '';
           }}
         />
       ),
