@@ -1,5 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as events from 'aws-cdk-lib/aws-events';
 import { Construct } from 'constructs';
@@ -8,6 +9,7 @@ import { OrchestratorLambda } from "@gnome-trading-group/gnome-shared-cdk";
 
 export interface CollectorStackProps extends cdk.StackProps {
   config: ControllerConfig;
+  collectorsMetadataTable: dynamodb.ITable;
 }
 
 /**
@@ -51,6 +53,7 @@ export class CollectorStack extends cdk.Stack {
         OUTPUT_BUCKET: this.bucket.bucketName,
         INPUT_BUCKET: this.rawBucket.bucketName,
         ARCHIVE_BUCKET: this.archiveBucket.bucketName,
+        COLLECTORS_METADATA_TABLE: props.collectorsMetadataTable.tableName,
       },
       logGroup: aggregatorLogGroup,
     });

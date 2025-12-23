@@ -35,6 +35,7 @@ class AppStage extends cdk.Stage {
 
     const collectorStack = new CollectorStack(this, "ControllerCollectorStack", {
       config,
+      collectorsMetadataTable: databaseStack.collectorsMetadataTable,
     });
 
     // Regional collector stacks (VPC, ECS, task definition) - one per region
