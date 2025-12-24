@@ -48,8 +48,7 @@ export class CollectorStack extends cdk.Stack {
       orchestratorVersion: props.config.collectorOrchestratorVersion,
       classPath: 'group.gnometrading.collectors.AggregatorOrchestrator',
       lambdaName: 'CollectorAggregatorLambda',
-      region: props.config.account.region,
-      environmentVariables: {
+      environment: {
         OUTPUT_BUCKET: this.bucket.bucketName,
         INPUT_BUCKET: this.rawBucket.bucketName,
         ARCHIVE_BUCKET: this.archiveBucket.bucketName,
@@ -57,6 +56,7 @@ export class CollectorStack extends cdk.Stack {
         STAGE: props.config.account.stage,
       },
       logGroup: aggregatorLogGroup,
+      timeout: cdk.Duration.minutes(15),
     });
 
     this.rawBucket.grantReadWrite(this.aggregatorLambda.lambdaInstance);
