@@ -54,6 +54,7 @@ export class CollectorStack extends cdk.Stack {
         INPUT_BUCKET: this.rawBucket.bucketName,
         ARCHIVE_BUCKET: this.archiveBucket.bucketName,
         COLLECTORS_METADATA_TABLE: props.collectorsMetadataTable.tableName,
+        STAGE: props.config.account.stage,
       },
       logGroup: aggregatorLogGroup,
     });

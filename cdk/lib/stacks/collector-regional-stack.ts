@@ -109,8 +109,6 @@ export class CollectorRegionalStack extends cdk.Stack {
       environment: {
         MAIN_CLASS: 'group.gnometrading.collectors.DelegatingCollectorOrchestrator',
         OUTPUT_BUCKET: props.rawBucketName,
-        REGISTRY_URL: props.config.registryUrl,
-        REGISTRY_API_KEY: props.config.registryApiKey,
         STAGE: props.config.account.stage,
       },
       logging: ecs.LogDrivers.awsLogs({
