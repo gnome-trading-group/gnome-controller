@@ -117,6 +117,8 @@ export class CollectorRegionalStack extends cdk.Stack {
       }),
       memoryLimitMiB: 512,
       cpu: 256,
+      // Allow up to 75 seconds for graceful shutdown to complete the current minute file
+      stopTimeout: cdk.Duration.seconds(75),
     });
 
     this.taskDefinitionArn = taskDefinition.taskDefinitionArn;
