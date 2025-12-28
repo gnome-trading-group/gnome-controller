@@ -62,6 +62,7 @@ export class CollectorStack extends cdk.Stack {
     this.rawBucket.grantReadWrite(this.aggregatorLambda.lambdaInstance);
     this.archiveBucket.grantReadWrite(this.aggregatorLambda.lambdaInstance);
     this.bucket.grantReadWrite(this.aggregatorLambda.lambdaInstance);
+    props.collectorsMetadataTable.grantReadWriteData(this.aggregatorLambda.lambdaInstance);
 
     const aggregatorRule = new events.Rule(this, 'CollectorAggregatorRule', {
       schedule: events.Schedule.rate(cdk.Duration.hours(3)),
