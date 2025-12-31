@@ -1,8 +1,7 @@
 import * as cdk from "aws-cdk-lib";
-import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
-import * as path from "path";
+import { PythonLambdaFunction } from "../constructs/python-lambda";
 
 export const PROBE_LAMBDA_NAME = "latency-probe";
 
@@ -35,34 +34,14 @@ interface LatencyProbeStackProps extends cdk.StackProps {
  * This stack is deployed to multiple regions - one per region we want to probe from.
  */
 export class LatencyProbeStack extends cdk.Stack {
-  public readonly probeLambda: lambda.Function;
+  public readonly probeLambda: PythonLambdaFunction;
 
   constructor(scope: Construct, id: string, props: LatencyProbeStackProps) {
     super(scope, id, props);
 
-    const commonLayer = new lambda.LayerVersion(this, "LatencyProbeCommonLayer", {
-      code: lambda.Code.fromAsset(path.join(__dirname, "../../lambda/layers/common"), {
-        bundling: {
-          image: lambda.Runtime.PYTHON_3_13.bundlingImage,
-          command: [
-            "bash",
-            "-c",
-            "pip install -r requirements.txt -t /asset-output/python && cp -r python/* /asset-output/python/",
-          ],
-        },
-      }),
-      compatibleRuntimes: [lambda.Runtime.PYTHON_3_13],
-      description: "Common utilities for latency probe Lambda",
-    });
-
-    this.probeLambda = new lambda.Function(this, "LatencyProbeLambda", {
+    this.probeLambda = new PythonLambdaFunction(this, "LatencyProbeLambda", {
       functionName: PROBE_LAMBDA_NAME,
-      runtime: lambda.Runtime.PYTHON_3_13,
-      handler: "index.handler",
-      code: lambda.Code.fromAsset(
-        path.join(__dirname, "../../lambda/functions/latency-probe/probe")
-      ),
-      layers: [commonLayer],
+      codePath: "lambda/functions/latency-probe/probe",
       timeout: cdk.Duration.seconds(60),
       memorySize: 256,
       description: `Latency probe Lambda for region ${props.deploymentRegion}`,
@@ -72,7 +51,7 @@ export class LatencyProbeStack extends cdk.Stack {
     });
 
     new cdk.CfnOutput(this, "ProbeLambdaArn", {
-      value: this.probeLambda.functionArn,
+      value: this.probeLambda.function.functionArn,
       description: `Latency Probe Lambda ARN in ${props.deploymentRegion}`,
       exportName: `LatencyProbeLambdaArn-${props.deploymentRegion}`,
     });
