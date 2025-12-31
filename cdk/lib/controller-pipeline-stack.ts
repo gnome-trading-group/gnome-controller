@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as pipelines from "aws-cdk-lib/pipelines";
 import * as secrets from 'aws-cdk-lib/aws-secretsmanager';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from "constructs";
 import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { CONFIGS, GITHUB_BRANCH, GITHUB_REPO, ControllerConfig } from "./config";
@@ -62,6 +63,19 @@ export class ControllerPipelineStack extends cdk.Stack {
         },
         primaryOutputDirectory: 'cdk/cdk.out',
       }),
+      synthCodeBuildDefaults: {
+        rolePolicy: [
+          new iam.PolicyStatement({
+            actions: ['sts:AssumeRole'],
+            resources: ['*'],
+            conditions: {
+              StringEquals: {
+                'iam:ResourceTag/aws-cdk:bootstrap-role': 'lookup',
+              },
+            },
+          })
+        ],
+      }
     });
 
     const dev = new AppStage(this, "Dev", CONFIGS[Stage.DEV]!);
