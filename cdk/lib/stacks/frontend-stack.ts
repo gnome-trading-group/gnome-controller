@@ -160,16 +160,19 @@ export class FrontendStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, "ControllerDistributionDomainName", {
       value: distribution.distributionDomainName,
+      exportName: "ControllerDistributionDomainName",
       description: "Controller UI URL",
     });
 
     new cdk.CfnOutput(this, "UserPoolId", {
       value: this.userPool.userPoolId,
+      exportName: "UserPoolId",
       description: "Cognito User Pool ID",
     });
 
     new cdk.CfnOutput(this, "AppClientId", {
       value: appClient.userPoolClientId,
+      exportName: "AppClientId",
       description: "Cognito App Client ID",
     });
   }
