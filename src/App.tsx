@@ -1,12 +1,13 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { signInWithRedirect, signOut } from 'aws-amplify/auth';
 import { useAuthenticator, Authenticator } from '@aws-amplify/ui-react';
-import { Container, Button, Stack, AppShell, Text } from '@mantine/core';
+import { Container, Button, Stack, AppShell, UnstyledButton, Paper, Transition } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
 import logo from './assets/logo.svg';
 import './App.css';
 import './amplify-config';
 import Navbar from './components/Navbar/Navbar';
-import MarketData from './pages/MarketData/MarketData';
+import Collectors from './pages/MarketData/Collectors/Collectors';
 import SecurityMaster from './pages/SecurityMaster/SecurityMaster';
 import LatencyProbe from './pages/LatencyProbe/LatencyProbe';
 import { GlobalStateProvider } from './context/GlobalStateContext';
@@ -29,22 +30,6 @@ function LoginScreen() {
   );
 }
 
-function Dashboard() {
-  return (
-    <Container>
-      <Text size="xl">Dashboard</Text>
-    </Container>
-  );
-}
-
-function Settings() {
-  return (
-    <Container>
-      <Text size="md">I mean, cmon, what settings did you think we'd have?</Text>
-    </Container>
-  );
-}
-
 function Logout() {
   const navigate = useNavigate();
   
@@ -59,6 +44,7 @@ function Logout() {
 
 function AppContent() {
   const { authStatus } = useAuthenticator();
+  const [navbarOpened, { toggle: toggleNavbar }] = useDisclosure(true);
 
   if (authStatus !== 'authenticated') {
     return <LoginScreen />;
@@ -67,20 +53,54 @@ function AppContent() {
   return (
     <Router>
       <AppShell
-        navbar={{ width: 80, breakpoint: 'sm' }}
+        navbar={{
+          width: 240,
+          breakpoint: 0,
+          collapsed: { desktop: !navbarOpened },
+        }}
         padding="md"
       >
-        <Navbar />
+        <Navbar onToggle={toggleNavbar} />
         <AppShell.Main>
+          {/* Floating logo button when navbar is collapsed */}
+          <Transition mounted={!navbarOpened} transition="fade" duration={200}>
+            {(styles) => (
+              <UnstyledButton
+                onClick={toggleNavbar}
+                style={{
+                  ...styles,
+                  position: 'fixed',
+                  top: 'var(--mantine-spacing-md)',
+                  left: 'var(--mantine-spacing-md)',
+                  zIndex: 100,
+                }}
+              >
+                <Paper
+                  radius="xl"
+                  p="xs"
+                  style={{
+                    background: 'var(--mantine-primary-color-light-hover)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '2.5rem',
+                    height: '2.5rem',
+                    border: '1px solid var(--mantine-primary-color-light)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <img src={logo} alt="Logo" style={{ height: '1.25rem', width: 'auto' }} />
+                </Paper>
+              </UnstyledButton>
+            )}
+          </Transition>
           <Routes>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/market-data" element={<MarketData />} />
             <Route path="/security-master" element={<SecurityMaster />} />
-            <Route path="/latency-probe" element={<LatencyProbe />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/market-data/collectors" element={<Collectors />} />
+            <Route path="/tools/latency-probe" element={<LatencyProbe />} />
             <Route path="/logout" element={<Logout />} />
-            <Route path="/collectors/:listingId" element={<CollectorDetail />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/market-data/collectors/:listingId" element={<CollectorDetail />} />
+            <Route path="/" element={<Navigate to="/security-master" replace />} />
           </Routes>
         </AppShell.Main>
       </AppShell>

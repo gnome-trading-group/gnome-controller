@@ -27,7 +27,7 @@ import * as XLSX from 'xlsx';
 import { formatSecurityType } from '../../utils/security-master';
 
 function SecurityMaster() {
-  const [activeTab, setActiveTab] = useState<string | null>('securities');
+  const [activeTab, setActiveTab] = useState<string | null>('listings');
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -509,6 +509,7 @@ function SecurityMaster() {
     },
     initialState: {
       sorting: [{ id: 'securityId', desc: false }],
+      density: 'xs',
     },
     ...getDefaultTableProps(),
   });
@@ -525,6 +526,7 @@ function SecurityMaster() {
     },
     initialState: {
       sorting: [{ id: 'exchangeId', desc: false }],
+      density: 'xs',
     },
     ...getDefaultTableProps(),
   });
@@ -541,6 +543,7 @@ function SecurityMaster() {
     },
     initialState: {
       sorting: [{ id: 'listingId', desc: false }],
+      density: 'xs',
     },
     ...getDefaultTableProps(),
   });
@@ -679,10 +682,15 @@ function SecurityMaster() {
 
       <Tabs value={activeTab} onChange={setActiveTab}>
         <Tabs.List>
+          <Tabs.Tab value="listings">Listings</Tabs.Tab>
           <Tabs.Tab value="securities">Securities</Tabs.Tab>
           <Tabs.Tab value="exchanges">Exchanges</Tabs.Tab>
-          <Tabs.Tab value="listings">Listings</Tabs.Tab>
         </Tabs.List>
+
+        <Tabs.Panel value="listings">
+          <Space h="md" />
+          <MantineReactTable table={listingTable} />
+        </Tabs.Panel>
 
         <Tabs.Panel value="securities">
           <Space h="md" />
@@ -694,10 +702,6 @@ function SecurityMaster() {
           <MantineReactTable table={exchangeTable} />
         </Tabs.Panel>
 
-        <Tabs.Panel value="listings">
-          <Space h="md" />
-          <MantineReactTable table={listingTable} />
-        </Tabs.Panel>
       </Tabs>
     </Container>
   );

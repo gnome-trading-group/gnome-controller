@@ -24,7 +24,7 @@ import {
 } from '@mantine/core';
 import { IconRefresh, IconExternalLink, IconPlayerStop, IconAB2 } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
-import { collectorsApi } from '../../utils/api';
+import { marketDataApi } from '../../utils/api';
 
 interface Collector {
   listingId: number;
@@ -106,7 +106,7 @@ function CollectorDetail() {
         setLoading(true);
       }
       setError(null);
-      const response = await collectorsApi.get(Number(listingId));
+      const response = await marketDataApi.getCollector(Number(listingId));
       setCollector(response.collector);
       setTaskDetails(response.taskDetails || []);
     } catch (err) {
@@ -126,7 +126,7 @@ function CollectorDetail() {
       if (showLoading) {
         setLogsLoading(true);
       }
-      const response = await collectorsApi.getLogs(Number(listingId));
+      const response = await marketDataApi.getCollectorLogs(Number(listingId));
       setLogs(response.logs);
     } catch (err) {
       console.error('Failed to load logs:', err);
@@ -143,7 +143,7 @@ function CollectorDetail() {
     
     try {
       setError(null);
-      await collectorsApi.delete(Number(listingId));
+      await marketDataApi.deleteCollector(Number(listingId));
       await loadCollector();
     } catch (err) {
       if (err instanceof Error) {
@@ -161,7 +161,7 @@ function CollectorDetail() {
     
     try {
       setError(null);
-      await collectorsApi.redeploy(Number(listingId));
+      await marketDataApi.redeployCollector(Number(listingId));
       await loadCollector();
     } catch (err) {
       if (err instanceof Error) {

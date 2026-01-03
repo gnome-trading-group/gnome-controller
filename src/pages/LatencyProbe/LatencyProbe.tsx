@@ -21,7 +21,7 @@ import {
   Collapse,
 } from '@mantine/core';
 import { IconPlus, IconTrash, IconPlayerPlay, IconChevronDown, IconChevronRight } from '@tabler/icons-react';
-import { latencyProbeApi } from '../../utils/api';
+import { controllerApi } from '../../utils/api';
 import { AWS_REGIONS, LatencyProbeResponse } from '../../types';
 
 interface Target {
@@ -94,7 +94,7 @@ function LatencyProbe() {
     setResults(null);
 
     try {
-      const response = await latencyProbeApi.run({
+      const response = await controllerApi.runLatencyProbe({
         targets: validTargets.map((t) => ({
           url: t.url,
           protocol: t.protocol,

@@ -5,6 +5,7 @@ import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-prob
 const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
 const REGISTRY_API_URL = import.meta.env.VITE_REGISTRY_API_URL;
 const REGISTRY_API_KEY = import.meta.env.VITE_REGISTRY_API_KEY;
+const MARKET_DATA_API_URL = import.meta.env.VITE_MARKET_DATA_API_URL;
 
 export class ApiError extends Error {
   constructor(public statusCode: number, message: string) {
@@ -92,31 +93,30 @@ export async function sendApiRequest<T>(
   }
 }
 
-// Collector-specific API methods
-export const collectorsApi = {
-  list: () => sendApiRequest<{ collectors: any[] }>('/collectors/list', 'GET', {
-    apiUrl: CONTROLLER_API_URL,
+export const marketDataApi = {
+  listCollectors: () => sendApiRequest<{ collectors: any[] }>('/collectors/list', 'GET', {
+    apiUrl: MARKET_DATA_API_URL,
   }),
-  create: (listingId: number, region: string) =>
+  createCollector: (listingId: number, region: string) =>
     sendApiRequest<{ message: string }>('/collectors/create', 'POST', {
-      apiUrl: CONTROLLER_API_URL,
+      apiUrl: MARKET_DATA_API_URL,
       body: { listingId, region },
     }),
-  delete: (listingId: number) =>
+  deleteCollector: (listingId: number) =>
     sendApiRequest<{ message: string }>('/collectors/delete', 'DELETE', {
-      apiUrl: CONTROLLER_API_URL,
+      apiUrl: MARKET_DATA_API_URL,
       body: { listingId },
     }),
-  redeploy: (listingId?: number) =>
+  redeployCollector: (listingId?: number) =>
     sendApiRequest<{ message: string }>('/collectors/redeploy', 'POST', {
-      apiUrl: CONTROLLER_API_URL,
+      apiUrl: MARKET_DATA_API_URL,
       body: { listingId },
     }),
-  get: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}`, 'GET', {
-    apiUrl: CONTROLLER_API_URL,
+  getCollector: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}`, 'GET', {
+    apiUrl: MARKET_DATA_API_URL,
   }),
-  getLogs: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}/logs`, 'GET', {
-    apiUrl: CONTROLLER_API_URL,
+  getCollectorLogs: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}/logs`, 'GET', {
+    apiUrl: MARKET_DATA_API_URL,
   }),
 };
 
@@ -196,8 +196,8 @@ export const registryApi = {
 }
 
 
-export const latencyProbeApi = {
-  run: (request: LatencyProbeRequest) =>
+export const controllerApi = {
+  runLatencyProbe: (request: LatencyProbeRequest) =>
     sendApiRequest<LatencyProbeResponse>('/latency-probe/run', 'POST', {
       apiUrl: CONTROLLER_API_URL,
       body: request,

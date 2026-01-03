@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collectorsApi } from '../../utils/api';
-import { ApiError } from '../../utils/api';
+import { marketDataApi } from '../../../utils/api';
+import { ApiError } from '../../../utils/api';
 import {
   Button,
   ActionIcon,
@@ -19,8 +19,8 @@ import {
 import { IconPlus, IconRefresh, IconPlayerStop, IconAB2 } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
-import { useGlobalState } from '../../context/GlobalStateContext';
-import { formatSecurityType } from '../../utils/security-master';
+import { useGlobalState } from '../../../context/GlobalStateContext';
+import { formatSecurityType } from '../../../utils/security-master';
 
 interface Collector {
   listingId: number;
@@ -30,7 +30,7 @@ interface Collector {
   region?: string;
 }
 
-function MarketData() {
+function Collectors() {
   const navigate = useNavigate();
   const { listings, exchanges, securities } = useGlobalState();
   const [collectors, setCollectors] = useState<Collector[]>([]);
@@ -90,7 +90,7 @@ function MarketData() {
         setLoading(true);
       }
       setError(null);
-      const response = await collectorsApi.list();
+      const response = await marketDataApi.listCollectors();
       setCollectors(response.collectors);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -111,7 +111,7 @@ function MarketData() {
     try {
       setError(null);
       setCreating(true);
-      await collectorsApi.create(Number(selectedListingId), selectedListingRegion);
+      await marketDataApi.createCollector(Number(selectedListingId), selectedListingRegion);
       setCreateModalOpen(false);
       setSelectedListingId(null);
       await loadCollectors();
@@ -129,7 +129,7 @@ function MarketData() {
   const handleStopCollector = async (listingId: number) => {
     try {
       setError(null);
-      await collectorsApi.delete(listingId);
+      await marketDataApi.deleteCollector(listingId);
       await loadCollectors();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -146,7 +146,7 @@ function MarketData() {
   const handleRedeployCollector = async (listingId?: number) => {
     try {
       setError(null);
-      await collectorsApi.redeploy(listingId);
+      await marketDataApi.redeployCollector(listingId);
       await loadCollectors();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -255,7 +255,7 @@ function MarketData() {
     initialState: { density: 'xs' },
     state: { isLoading: loading },
     mantineTableBodyRowProps: ({ row }) => ({
-      onClick: () => navigate(`/collectors/${row.original.listingId}`),
+      onClick: () => navigate(`/market-data/collectors/${row.original.listingId}`),
       style: { cursor: 'pointer' },
     }),
   });
@@ -421,4 +421,4 @@ function MarketData() {
   );
 }
 
-export default MarketData;
+export default Collectors;
