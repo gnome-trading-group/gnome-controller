@@ -1,6 +1,9 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { Exchange, Listing, Security } from '../types';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
+import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
+import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsListParams, TransformJobsSearchParams } from '../types/transform-jobs';
+import { GapsListResponse, GapsListParams, GapsByListingParams, GapsUpdateRequest, GapsUpdateResponse } from '../types/gaps';
 
 const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
 const REGISTRY_API_URL = import.meta.env.VITE_REGISTRY_API_URL;
@@ -118,6 +121,66 @@ export const marketDataApi = {
   getCollectorLogs: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}/logs`, 'GET', {
     apiUrl: MARKET_DATA_API_URL,
   }),
+  // Coverage endpoints
+  getCoverageSummary: () => sendApiRequest<CoverageSummaryResponse>('/coverage/summary', 'GET', {
+    apiUrl: MARKET_DATA_API_URL,
+  }),
+  getSecurityCoverage: (securityId: number) =>
+    sendApiRequest<SecurityCoverageResponse>(`/coverage/security/${securityId}`, 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+    }),
+  getSecurityExchangeCoverage: (securityId: number, exchangeId: number) =>
+    sendApiRequest<SecurityExchangeCoverageResponse>(`/coverage/${securityId}/${exchangeId}`, 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+    }),
+  // Transform Jobs endpoints
+  listTransformJobs: (params?: TransformJobsListParams) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.status) queryParams.status = params.status;
+    if (params?.limit) queryParams.limit = params.limit;
+    if (params?.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
+    return sendApiRequest<TransformJobsListResponse>('/transform-jobs/list', 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  searchTransformJobs: (params: TransformJobsSearchParams) => {
+    const queryParams: Record<string, string | number | boolean> = {
+      listingId: params.listingId,
+    };
+    if (params.schemaType) queryParams.schemaType = params.schemaType;
+    if (params.limit) queryParams.limit = params.limit;
+    if (params.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
+    return sendApiRequest<TransformJobsSearchResponse>('/transform-jobs/search', 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+      queryParams,
+    });
+  },
+  // Gaps endpoints
+  listGaps: (params?: GapsListParams) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.status) queryParams.status = params.status;
+    if (params?.limit) queryParams.limit = params.limit;
+    if (params?.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
+    return sendApiRequest<GapsListResponse>('/gaps/list', 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  getGapsByListing: (params: GapsByListingParams) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params.limit) queryParams.limit = params.limit;
+    if (params.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
+    return sendApiRequest<GapsListResponse>(`/gaps/list/${params.listingId}`, 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  updateGaps: (request: GapsUpdateRequest) =>
+    sendApiRequest<GapsUpdateResponse>('/gaps/update', 'POST', {
+      apiUrl: MARKET_DATA_API_URL,
+      body: request,
+    }),
 };
 
 export const registryApi = {

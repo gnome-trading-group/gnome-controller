@@ -8,6 +8,11 @@ import './App.css';
 import './amplify-config';
 import Navbar from './components/Navbar/Navbar';
 import Collectors from './pages/MarketData/Collectors/Collectors';
+import CoverageSummary from './pages/MarketData/Coverage/CoverageSummary';
+import SecurityCoverage from './pages/MarketData/Coverage/SecurityCoverage';
+import SecurityExchangeCoverage from './pages/MarketData/Coverage/SecurityExchangeCoverage';
+import TransformJobs from './pages/MarketData/TransformJobs/TransformJobs';
+import Gaps from './pages/MarketData/Gaps/Gaps';
 import SecurityMaster from './pages/SecurityMaster/SecurityMaster';
 import LatencyProbe from './pages/LatencyProbe/LatencyProbe';
 import { GlobalStateProvider } from './context/GlobalStateContext';
@@ -97,9 +102,14 @@ function AppContent() {
           <Routes>
             <Route path="/security-master" element={<SecurityMaster />} />
             <Route path="/market-data/collectors" element={<Collectors />} />
+            <Route path="/market-data/collectors/:listingId" element={<CollectorDetail />} />
+            <Route path="/market-data/coverage" element={<CoverageSummary />} />
+            <Route path="/market-data/coverage/:securityId" element={<SecurityCoverage />} />
+            <Route path="/market-data/coverage/:securityId/:exchangeId" element={<SecurityExchangeCoverage />} />
+            <Route path="/market-data/transform-jobs" element={<TransformJobs />} />
+            <Route path="/market-data/gaps" element={<Gaps />} />
             <Route path="/tools/latency-probe" element={<LatencyProbe />} />
             <Route path="/logout" element={<Logout />} />
-            <Route path="/market-data/collectors/:listingId" element={<CollectorDetail />} />
             <Route path="/" element={<Navigate to="/security-master" replace />} />
           </Routes>
         </AppShell.Main>
