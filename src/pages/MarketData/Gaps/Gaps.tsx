@@ -18,7 +18,6 @@ import {
   Paper,
   Modal,
   Textarea,
-  Checkbox,
   Switch,
 } from '@mantine/core';
 import { IconRefresh, IconEye, IconEyeOff, IconCheck, IconAlertTriangle } from '@tabler/icons-react';
