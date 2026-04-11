@@ -17,6 +17,10 @@ import SecurityMaster from './pages/SecurityMaster/SecurityMaster';
 import LatencyProbe from './pages/LatencyProbe/LatencyProbe';
 import { GlobalStateProvider } from './context/GlobalStateContext';
 import CollectorDetail from './pages/CollectorDetail/CollectorDetail';
+import BacktestList from './pages/Backtests/BacktestList';
+import BacktestSubmit from './pages/Backtests/BacktestSubmit';
+import BacktestDetail from './pages/Backtests/BacktestDetail';
+import BacktestPresets from './pages/Backtests/BacktestPresets';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -109,6 +113,10 @@ function AppContent() {
             <Route path="/market-data/transform-jobs" element={<TransformJobs />} />
             <Route path="/market-data/gaps" element={<Gaps />} />
             <Route path="/tools/latency-probe" element={<LatencyProbe />} />
+            <Route path="/backtests" element={<BacktestList />} />
+            <Route path="/backtests/new" element={<BacktestSubmit />} />
+            <Route path="/backtests/presets" element={<BacktestPresets />} />
+            <Route path="/backtests/:jobId" element={<BacktestDetail />} />
             <Route path="/logout" element={<Logout />} />
             <Route path="/" element={<Navigate to="/security-master" replace />} />
           </Routes>

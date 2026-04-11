@@ -4,6 +4,12 @@ import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-prob
 import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
 import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsListParams, TransformJobsSearchParams } from '../types/transform-jobs';
 import { GapsListResponse, GapsListParams, GapsByListingParams, GapsUpdateRequest, GapsUpdateResponse } from '../types/gaps';
+import {
+  BacktestJob, BacktestPreset,
+  SubmitBacktestRequest, SubmitBacktestResponse,
+  ListBacktestsResponse, ListPresetsResponse,
+  CreatePresetRequest, UpdatePresetRequest,
+} from '../types/backtests';
 
 const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
 const REGISTRY_API_URL = import.meta.env.VITE_REGISTRY_API_URL;
@@ -33,7 +39,7 @@ function convertObjectToCamelCase(obj: any): any {
   if (Array.isArray(obj)) {
     return obj.map(convertObjectToCamelCase);
   }
-  
+
   if (obj !== null && typeof obj === 'object') {
     return Object.fromEntries(
       Object.entries(obj).map(([key, value]) => [
@@ -42,7 +48,7 @@ function convertObjectToCamelCase(obj: any): any {
       ])
     );
   }
-  
+
   return obj;
 }
 
@@ -184,67 +190,67 @@ export const marketDataApi = {
 };
 
 export const registryApi = {
-  listExchanges: () => sendApiRequest<any[]>('/exchanges', 'GET', { 
-    apiUrl: REGISTRY_API_URL, 
+  listExchanges: () => sendApiRequest<any[]>('/exchanges', 'GET', {
+    apiUrl: REGISTRY_API_URL,
     apiKey: REGISTRY_API_KEY,
-    convertToCamelCase: true 
+    convertToCamelCase: true
   }),
-  listSecurities: () => sendApiRequest<any[]>('/securities', 'GET', { 
-    apiUrl: REGISTRY_API_URL, 
+  listSecurities: () => sendApiRequest<any[]>('/securities', 'GET', {
+    apiUrl: REGISTRY_API_URL,
     apiKey: REGISTRY_API_KEY,
-    convertToCamelCase: true 
+    convertToCamelCase: true
   }),
-  listListings: () => sendApiRequest<any[]>('/listings', 'GET', { 
-    apiUrl: REGISTRY_API_URL, 
+  listListings: () => sendApiRequest<any[]>('/listings', 'GET', {
+    apiUrl: REGISTRY_API_URL,
     apiKey: REGISTRY_API_KEY,
-    convertToCamelCase: true 
+    convertToCamelCase: true
   }),
-  deleteExchange: (exchangeId: number) => sendApiRequest<{ message: string }>('/exchanges', 'DELETE', { 
-    apiUrl: REGISTRY_API_URL, 
+  deleteExchange: (exchangeId: number) => sendApiRequest<{ message: string }>('/exchanges', 'DELETE', {
+    apiUrl: REGISTRY_API_URL,
     apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: { exchangeId },
   }),
-  deleteSecurity: (securityId: number) => sendApiRequest<{ message: string }>('/securities', 'DELETE', { 
-    apiUrl: REGISTRY_API_URL, 
+  deleteSecurity: (securityId: number) => sendApiRequest<{ message: string }>('/securities', 'DELETE', {
+    apiUrl: REGISTRY_API_URL,
     apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: { securityId },
   }),
-  deleteListing: (listingId: number) => sendApiRequest<{ message: string }>('/listings', 'DELETE', { 
-    apiUrl: REGISTRY_API_URL, 
+  deleteListing: (listingId: number) => sendApiRequest<{ message: string }>('/listings', 'DELETE', {
+    apiUrl: REGISTRY_API_URL,
     apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: { listingId },
   }),
-  updateExchange: (exchangeId: number, exchange: Partial<Exchange>) => sendApiRequest<{ message: string }>('/exchanges', 'PATCH', { 
-    apiUrl: REGISTRY_API_URL, 
+  updateExchange: (exchangeId: number, exchange: Partial<Exchange>) => sendApiRequest<{ message: string }>('/exchanges', 'PATCH', {
+    apiUrl: REGISTRY_API_URL,
     apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: exchange,
     queryParams: { exchangeId },
   }),
-  updateSecurity: (securityId: number, security: Partial<Security>) => sendApiRequest<{ message: string }>('/securities', 'PATCH', { 
-    apiUrl: REGISTRY_API_URL, 
+  updateSecurity: (securityId: number, security: Partial<Security>) => sendApiRequest<{ message: string }>('/securities', 'PATCH', {
+    apiUrl: REGISTRY_API_URL,
     apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: security,
     queryParams: { securityId },
   }),
-  updateListing: (listingId: number, listing: Partial<Listing>) => sendApiRequest<{ message: string }>('/listings', 'PATCH', { 
-    apiUrl: REGISTRY_API_URL, 
+  updateListing: (listingId: number, listing: Partial<Listing>) => sendApiRequest<{ message: string }>('/listings', 'PATCH', {
+    apiUrl: REGISTRY_API_URL,
     apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: listing,
     queryParams: { listingId },
   }),
-  createExchange: (exchange: Omit<Exchange, 'exchangeId' | 'dateCreated' | 'dateModified'>) => 
+  createExchange: (exchange: Omit<Exchange, 'exchangeId' | 'dateCreated' | 'dateModified'>) =>
     sendApiRequest<Exchange>('/exchanges', 'POST', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       body: exchange,
     }),
-  createSecurity: (security: Omit<Security, 'securityId' | 'dateCreated' | 'dateModified'>) => 
+  createSecurity: (security: Omit<Security, 'securityId' | 'dateCreated' | 'dateModified'>) =>
     sendApiRequest<Security>('/securities', 'POST', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
@@ -264,5 +270,40 @@ export const controllerApi = {
     sendApiRequest<LatencyProbeResponse>('/latency-probe/run', 'POST', {
       apiUrl: CONTROLLER_API_URL,
       body: request,
+    }),
+
+  // Backtests
+  submitBacktest: (request: SubmitBacktestRequest) =>
+    sendApiRequest<SubmitBacktestResponse>('/backtests', 'POST', {
+      apiUrl: CONTROLLER_API_URL,
+      body: request,
+    }),
+  listBacktests: () =>
+    sendApiRequest<ListBacktestsResponse>('/backtests', 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+    }),
+  getBacktest: (jobId: string) =>
+    sendApiRequest<BacktestJob>(`/backtests/${jobId}`, 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+    }),
+
+  // Backtest presets
+  listPresets: () =>
+    sendApiRequest<ListPresetsResponse>('/backtests/presets', 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+    }),
+  createPreset: (request: CreatePresetRequest) =>
+    sendApiRequest<BacktestPreset>('/backtests/presets', 'POST', {
+      apiUrl: CONTROLLER_API_URL,
+      body: request,
+    }),
+  updatePreset: (presetId: string, request: UpdatePresetRequest) =>
+    sendApiRequest<BacktestPreset>(`/backtests/presets/${presetId}`, 'PUT', {
+      apiUrl: CONTROLLER_API_URL,
+      body: request,
+    }),
+  deletePreset: (presetId: string) =>
+    sendApiRequest<{ deleted: string }>(`/backtests/presets/${presetId}`, 'DELETE', {
+      apiUrl: CONTROLLER_API_URL,
     }),
 }
