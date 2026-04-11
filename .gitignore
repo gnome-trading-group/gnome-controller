@@ -24,4 +24,5 @@ dist-ssr
 *.sw?
 
 # Dev server backtest output
+**/__pycache__/
 dev/backtest-runs/

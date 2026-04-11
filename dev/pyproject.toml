@@ -8,6 +8,8 @@ packages = [{include = "server.py"}]
 python = ">=3.13,<3.14"
 flask = ">=3.0"
 boto3 = ">=1.34"
+anthropic = ">=0.40"
+requests = ">=2.31"
 jpype1 = "1.5.0"
 gnomepy = { path = "../../gnomepy", develop = true }
 gnomepy-research = { path = "../../gnomepy-research", develop = true }

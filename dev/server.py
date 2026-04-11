@@ -375,12 +375,61 @@ def backtest_report(job_id: str):
 # Proxy latency-probe to real API (so other pages still work)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Playground (AI Agent)
+# ---------------------------------------------------------------------------
+@app.route("/api/playground/apply", methods=["POST", "OPTIONS"])
+def playground_apply():
+    if request.method == "OPTIONS":
+        return "", 204
+
+    from playground import tool_apply_code_change
+
+    body = request.get_json(force=True)
+    try:
+        result = tool_apply_code_change(
+            file_path=body["file_path"],
+            original=body["original"],
+            replacement=body["replacement"],
+            session_id=body.get("session_id", "default"),
+        )
+        status = 200 if "error" not in result else 400
+        return jsonify(result), status
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/playground/chat", methods=["POST", "OPTIONS"])
+def playground_chat():
+    if request.method == "OPTIONS":
+        return "", 204
+
+    from playground import handle_chat
+
+    body = request.get_json(force=True)
+    conversation = body.get("conversation", [])
+    config = body.get("config")
+    model = body.get("model")
+    system_prompt = body.get("system_prompt")
+
+    try:
+        result = handle_chat(conversation, config=config, model=model, system_prompt=system_prompt)
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 def main():
     print(f"Backtest output dir: {OUTPUT_ROOT.resolve()}")
     print(f"Presets table: {PRESETS_TABLE}")
     print()
     print("Set in your .env:")
     print("  VITE_CONTROLLER_API_URL=http://localhost:5050/api")
+    print("  ANTHROPIC_API_KEY=sk-ant-...")
     print()
     app.run(host="0.0.0.0", port=5050, debug=True)
 

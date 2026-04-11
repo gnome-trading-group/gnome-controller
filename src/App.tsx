@@ -21,6 +21,7 @@ import BacktestList from './pages/Backtests/BacktestList';
 import BacktestSubmit from './pages/Backtests/BacktestSubmit';
 import BacktestDetail from './pages/Backtests/BacktestDetail';
 import BacktestPresets from './pages/Backtests/BacktestPresets';
+import PlaygroundPage from './pages/Playground/PlaygroundPage';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -117,6 +118,7 @@ function AppContent() {
             <Route path="/backtests/new" element={<BacktestSubmit />} />
             <Route path="/backtests/presets" element={<BacktestPresets />} />
             <Route path="/backtests/:jobId" element={<BacktestDetail />} />
+            <Route path="/gnomie" element={<PlaygroundPage />} />
             <Route path="/logout" element={<Logout />} />
             <Route path="/" element={<Navigate to="/security-master" replace />} />
           </Routes>

@@ -1,4 +1,4 @@
-import { IconFlask, IconGauge, IconLockSquareRounded, IconNotes, IconTool } from "@tabler/icons-react";
+import { IconFlask, IconGauge, IconLockSquareRounded, IconNotes, IconRobot, IconTool } from "@tabler/icons-react";
 import { AppShell, Paper, Group, ScrollArea, Code, Title, UnstyledButton } from '@mantine/core';
 import { useLocation } from 'react-router-dom';
 import logo from '../../assets/logo.svg';
@@ -31,6 +31,7 @@ const routes = [
       { label: 'Presets', link: '/backtests/presets' },
     ],
   },
+  { icon: IconRobot, label: 'Gnomie', link: '/gnomie' },
   { icon: IconLockSquareRounded, label: 'Security Master', link: '/security-master' },
   {
     label: 'Tools',
