@@ -14,7 +14,7 @@ import {
   Loader,
   Alert,
 } from '@mantine/core';
-import { IconArrowLeft, IconAlertCircle } from '@tabler/icons-react';
+import { IconArrowLeft, IconAlertCircle, IconRefresh, IconPlayerPlay } from '@tabler/icons-react';
 import { controllerApi } from '../../utils/api';
 import type { BacktestJob, BacktestStatus } from '../../types/backtests';
 
@@ -41,6 +41,7 @@ function BacktestDetail() {
   const [job, setJob] = useState<BacktestJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!jobId) return;
@@ -95,7 +96,7 @@ function BacktestDetail() {
       </Group>
 
       <Group justify="space-between" mb="lg">
-        <Title order={2}>{job.presetName || 'Backtest'}</Title>
+        <Title order={2}>{job.name || job.presetName || 'Backtest'}</Title>
         <Badge color={STATUS_COLORS[job.status] ?? 'gray'} variant="light" size="lg">
           {job.status}
         </Badge>
@@ -151,6 +152,46 @@ function BacktestDetail() {
             </Group>
           </Center>
         </Card>
+      )}
+
+      {job.status === 'SUCCEEDED' && (
+        <Group mb="sm">
+          <Button
+            variant="light"
+            leftSection={<IconPlayerPlay size={16} />}
+            onClick={() =>
+              navigate('/backtests/new', {
+                state: {
+                  config: job.config,
+                  researchCommit: job.researchCommit,
+                  presetId: job.presetId,
+                  presetName: job.name || job.presetName,
+                },
+              })
+            }
+          >
+            Re-run
+          </Button>
+          <Button
+            variant="light"
+            leftSection={<IconRefresh size={16} />}
+            loading={regenerating}
+            onClick={async () => {
+              try {
+                setRegenerating(true);
+                setError(null);
+                await controllerApi.regenerateReport(jobId!);
+                await loadData();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to regenerate report');
+              } finally {
+                setRegenerating(false);
+              }
+            }}
+          >
+            Regenerate Report
+          </Button>
+        </Group>
       )}
 
       {job.status === 'SUCCEEDED' && job.reportUrl && (

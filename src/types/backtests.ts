@@ -12,6 +12,7 @@ export interface BacktestJob {
   batchJobId: string;
   status: BacktestStatus;
   presetId: string;
+  name: string;
   presetName: string;
   researchCommit: string;
   submittedBy: string;
@@ -20,6 +21,7 @@ export interface BacktestJob {
   updatedAt?: string;
   error?: string;
   reportUrl?: string;
+  config?: string;
 }
 
 export interface BacktestPreset {
@@ -36,6 +38,7 @@ export interface SubmitBacktestRequest {
   presetId?: string;
   config?: string;
   researchCommit?: string;
+  name?: string;
 }
 
 export interface SubmitBacktestResponse {

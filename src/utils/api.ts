@@ -286,6 +286,10 @@ export const controllerApi = {
     sendApiRequest<BacktestJob>(`/backtests/${jobId}`, 'GET', {
       apiUrl: CONTROLLER_API_URL,
     }),
+  regenerateReport: (jobId: string) =>
+    sendApiRequest<{ status: string }>(`/backtests/${jobId}/regenerate`, 'POST', {
+      apiUrl: CONTROLLER_API_URL,
+    }),
 
   // Backtest presets
   listPresets: () =>

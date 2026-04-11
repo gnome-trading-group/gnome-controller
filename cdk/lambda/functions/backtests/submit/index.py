@@ -41,6 +41,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     preset_id = body.get("presetId")
     config_yaml = body.get("config")
+    backtest_name = body.get("name", "")
     research_commit = body.get("researchCommit", "main")
 
     # Resolve config: inline config takes priority, else load from preset.
@@ -108,6 +109,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "jobId": job_id,
         "batchJobId": response["jobId"],
         "status": "SUBMITTED",
+        "name": backtest_name or preset_name,
         "presetId": preset_id,
         "presetName": preset_name,
         "researchCommit": research_commit,

@@ -68,8 +68,9 @@ function BacktestList() {
   const columns = useMemo<MRT_ColumnDef<BacktestJob>[]>(
     () => [
       {
-        accessorKey: 'presetName',
-        header: 'Preset',
+        accessorKey: 'name',
+        header: 'Name',
+        Cell: ({ row }) => row.original.name || row.original.presetName || '-',
       },
       {
         accessorKey: 'status',
