@@ -29,10 +29,14 @@ def _presigned_report_url(job_id: str) -> str | None:
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    path = event.get("path", "")
+    method = event.get("httpMethod", "GET")
     path_params = event.get("pathParameters") or {}
 
     job_id = path_params.get("id")
+
+    if job_id and method == "DELETE":
+        table.delete_item(Key={"jobId": job_id})
+        return create_response(200, {"deleted": job_id})
 
     if job_id:
         # GET /backtests/{id}

@@ -290,6 +290,10 @@ export const controllerApi = {
     sendApiRequest<{ status: string }>(`/backtests/${jobId}/regenerate`, 'POST', {
       apiUrl: CONTROLLER_API_URL,
     }),
+  deleteBacktest: (jobId: string) =>
+    sendApiRequest<{ deleted: string }>(`/backtests/${jobId}`, 'DELETE', {
+      apiUrl: CONTROLLER_API_URL,
+    }),
 
   // Backtest presets
   listPresets: () =>

@@ -5,8 +5,8 @@ Presets stored in DynamoDB. Jobs tracked in memory.
 
 Setup:
     cd gnome-controller/dev
-    uv sync
-    uv run server.py
+    poetry install
+    poetry run python server.py
 
 Frontend: set VITE_CONTROLLER_API_URL=http://localhost:5050/api
 """
@@ -306,10 +306,21 @@ def _run_backtest(job_id: str, config_path: str, output_dir: str) -> None:
         jobs[job_id]["completedAt"] = datetime.now(timezone.utc).isoformat()
 
 
-@app.route("/api/backtests/<job_id>", methods=["GET", "OPTIONS"])
+@app.route("/api/backtests/<job_id>", methods=["GET", "DELETE", "OPTIONS"])
 def backtest_detail(job_id: str):
     if request.method == "OPTIONS":
         return "", 204
+
+    if request.method == "DELETE":
+        if job_id not in jobs:
+            return jsonify({"error": "not found"}), 404
+        del jobs[job_id]
+        # Remove output directory.
+        import shutil
+        out_dir = OUTPUT_ROOT / job_id
+        if out_dir.exists():
+            shutil.rmtree(out_dir)
+        return jsonify({"deleted": job_id})
 
     job = jobs.get(job_id)
     if not job:

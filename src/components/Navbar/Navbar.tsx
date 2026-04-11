@@ -1,4 +1,4 @@
-import { IconGauge, IconLockSquareRounded, IconNotes, IconPlayerPlay, IconTool } from "@tabler/icons-react";
+import { IconFlask, IconGauge, IconLockSquareRounded, IconNotes, IconTool } from "@tabler/icons-react";
 import { AppShell, Paper, Group, ScrollArea, Code, Title, UnstyledButton } from '@mantine/core';
 import { useLocation } from 'react-router-dom';
 import logo from '../../assets/logo.svg';
@@ -25,7 +25,7 @@ const routes = [
   },
   {
     label: 'Backtests',
-    icon: IconPlayerPlay,
+    icon: IconFlask,
     links: [
       { label: 'Runs', link: '/backtests' },
       { label: 'Presets', link: '/backtests/presets' },

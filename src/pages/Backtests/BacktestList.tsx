@@ -12,7 +12,8 @@ import {
   ActionIcon,
   Tooltip,
 } from '@mantine/core';
-import { IconPlus, IconRefresh } from '@tabler/icons-react';
+import type { MouseEvent } from 'react';
+import { IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { controllerApi } from '../../utils/api';
 import type { BacktestJob, BacktestStatus } from '../../types/backtests';
@@ -54,6 +55,17 @@ function BacktestList() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const handleDelete = async (e: MouseEvent, jobId: string) => {
+    e.stopPropagation();
+    if (!confirm('Delete this backtest run?')) return;
+    try {
+      await controllerApi.deleteBacktest(jobId);
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete backtest');
+    }
+  };
 
   // Auto-refresh every 10s if any jobs are in progress.
   useEffect(() => {
@@ -105,6 +117,22 @@ function BacktestList() {
         accessorKey: 'completedAt',
         header: 'Completed',
         Cell: ({ cell }) => formatDate(cell.getValue<string>()),
+      },
+      {
+        id: 'actions',
+        header: '',
+        size: 60,
+        Cell: ({ row }) => (
+          <Tooltip label="Delete">
+            <ActionIcon
+              variant="subtle"
+              color="red"
+              onClick={(e) => handleDelete(e, row.original.jobId)}
+            >
+              <IconTrash size={16} />
+            </ActionIcon>
+          </Tooltip>
+        ),
       },
     ],
     [],

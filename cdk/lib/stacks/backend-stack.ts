@@ -120,7 +120,7 @@ export class BackendStack extends cdk.Stack {
       },
     });
 
-    bt.backtestsTable.grantReadData(backtestStatus.function);
+    bt.backtestsTable.grantReadWriteData(backtestStatus.function);
     resultsBucket.grantRead(backtestStatus.function);
 
     // Presets Lambda
@@ -158,6 +158,11 @@ export class BackendStack extends cdk.Stack {
     const backtestIdResource = backtestsResource.addResource("{id}");
     backtestIdResource.addMethod(
       "GET",
+      new apigateway.LambdaIntegration(backtestStatus.function),
+      { authorizationType: apigateway.AuthorizationType.COGNITO, authorizer },
+    );
+    backtestIdResource.addMethod(
+      "DELETE",
       new apigateway.LambdaIntegration(backtestStatus.function),
       { authorizationType: apigateway.AuthorizationType.COGNITO, authorizer },
     );
