@@ -226,7 +226,7 @@ def backtests_collection():
 
     thread = threading.Thread(
         target=_run_backtest,
-        args=(job_id, str(config_path), str(out_dir)),
+        args=(job_id, str(config_path), str(out_dir), research_commit),
         daemon=True,
     )
     thread.start()
@@ -268,8 +268,30 @@ def _generate_report(output_dir: str, config_path: str) -> None:
         traceback.print_exc()
 
 
-def _run_backtest(job_id: str, config_path: str, output_dir: str) -> None:
-    """Run gnomepy backtest as a subprocess."""
+def _run_backtest(job_id: str, config_path: str, output_dir: str, research_commit: str | None = None) -> None:
+    """Run gnomepy backtest as a subprocess, optionally at a specific commit.
+
+    If research_commit is provided, checks if a worktree exists for it
+    (from Gnomie sessions) and adds that to PYTHONPATH so the backtest
+    uses the modified code.
+    """
+    research_root = Path(__file__).resolve().parent.parent.parent / "gnomepy-research"
+    worktree_root = research_root.parent / "gnomepy-research-worktrees"
+    extra_env = {}
+
+    if research_commit and research_commit != "main":
+        # Check if a worktree exists for this branch/session.
+        # Branch format: gnomie/{session_id} → worktree at worktree_root/{session_id}
+        session_id = research_commit.replace("gnomie/", "")
+        wt_path = worktree_root / session_id
+        if wt_path.exists():
+            # Prepend worktree to PYTHONPATH so its code takes priority.
+            current_pp = os.environ.get("PYTHONPATH", "")
+            extra_env["PYTHONPATH"] = f"{wt_path}:{current_pp}" if current_pp else str(wt_path)
+            print(f"[{job_id[:8]}] using worktree at {wt_path}")
+        else:
+            print(f"[{job_id[:8]}] warning: no worktree found for {research_commit}")
+
     cmd = [
         "gnomepy", "backtest",
         "--config", config_path,
@@ -278,12 +300,15 @@ def _run_backtest(job_id: str, config_path: str, output_dir: str) -> None:
     ]
     print(f"[{job_id[:8]}] running: {' '.join(cmd)}")
 
+    run_env = {**os.environ, **extra_env} if extra_env else None
+
     try:
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=1800,  # 30 min
+            env=run_env,
         )
         if result.returncode == 0:
             # Generate HTML report from the results.

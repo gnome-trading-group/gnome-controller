@@ -13,22 +13,123 @@ const MODELS = [
 
 const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
 
-/** Minimal markdown: headers, **bold**, `code`, rendered per-line. */
+/** Markdown renderer: headers, bold, code, lists, code blocks. */
 function renderMarkdown(text: string) {
   const lines = text.split('\n');
-  return lines.map((line, li) => {
+  const elements: JSX.Element[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Code blocks (``` ... ```).
+    if (line.trim().startsWith('```')) {
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++; // skip closing ```
+      elements.push(
+        <pre key={elements.length} style={{
+          background: 'rgba(0,0,0,0.05)', padding: '8px 12px', borderRadius: 6,
+          fontSize: '0.8em', overflow: 'auto', margin: '8px 0',
+          fontFamily: '"SF Mono", "Fira Code", monospace',
+        }}>
+          {codeLines.join('\n')}
+        </pre>
+      );
+      continue;
+    }
+
     // Headers.
     const h3 = line.match(/^###\s+(.+)/);
-    if (h3) return <div key={li} style={{ fontWeight: 700, fontSize: '0.9em', margin: '12px 0 4px' }}>{renderInline(h3[1])}</div>;
+    if (h3) { elements.push(<div key={elements.length} style={{ fontWeight: 700, fontSize: '0.9em', margin: '12px 0 4px' }}>{renderInline(h3[1])}</div>); i++; continue; }
     const h2 = line.match(/^##\s+(.+)/);
-    if (h2) return <div key={li} style={{ fontWeight: 700, fontSize: '1em', margin: '16px 0 6px' }}>{renderInline(h2[1])}</div>;
+    if (h2) { elements.push(<div key={elements.length} style={{ fontWeight: 700, fontSize: '1em', margin: '16px 0 6px' }}>{renderInline(h2[1])}</div>); i++; continue; }
     const h1 = line.match(/^#\s+(.+)/);
-    if (h1) return <div key={li} style={{ fontWeight: 700, fontSize: '1.1em', margin: '18px 0 8px' }}>{renderInline(h1[1])}</div>;
+    if (h1) { elements.push(<div key={elements.length} style={{ fontWeight: 700, fontSize: '1.1em', margin: '18px 0 8px' }}>{renderInline(h1[1])}</div>); i++; continue; }
+
+    // Bullet list (- or *).
+    const bullet = line.match(/^(\s*)[-*]\s+(.+)/);
+    if (bullet) {
+      const indent = Math.floor((bullet[1] || '').length / 2);
+      elements.push(
+        <div key={elements.length} style={{ paddingLeft: 16 + indent * 16, position: 'relative' }}>
+          <span style={{ position: 'absolute', left: indent * 16 }}>•</span>
+          {renderInline(bullet[2])}
+        </div>
+      );
+      i++; continue;
+    }
+
+    // Numbered list (1. 2. etc).
+    const numbered = line.match(/^(\d+)\.\s+(.+)/);
+    if (numbered) {
+      elements.push(
+        <div key={elements.length} style={{ paddingLeft: 24 }}>
+          <span style={{ position: 'absolute', marginLeft: -20 }}>{numbered[1]}.</span>
+          {renderInline(numbered[2])}
+        </div>
+      );
+      i++; continue;
+    }
+
+    // Table (| col | col |).
+    if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+      const tableRows: string[][] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().endsWith('|')) {
+        const row = lines[i].trim();
+        // Skip separator rows (|---|---|).
+        if (/^\|[\s\-:|]+\|$/.test(row)) { i++; continue; }
+        const cells = row.split('|').slice(1, -1).map(c => c.trim());
+        tableRows.push(cells);
+        i++;
+      }
+      if (tableRows.length > 0) {
+        const header = tableRows[0];
+        const body = tableRows.slice(1);
+        elements.push(
+          <div key={elements.length} style={{ overflowX: 'auto', margin: '8px 0' }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: '0.85em', width: '100%' }}>
+              <thead>
+                <tr>
+                  {header.map((cell, ci) => (
+                    <th key={ci} style={{
+                      border: '1px solid #d0d0d0', padding: '6px 10px',
+                      background: 'rgba(0,0,0,0.04)', textAlign: 'left', fontWeight: 600,
+                    }}>{renderInline(cell)}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {body.map((row, ri) => (
+                  <tr key={ri}>
+                    {row.map((cell, ci) => (
+                      <td key={ci} style={{
+                        border: '1px solid #d0d0d0', padding: '6px 10px',
+                      }}>{renderInline(cell)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      continue;
+    }
+
     // Empty line.
-    if (!line.trim()) return <div key={li} style={{ height: 8 }} />;
-    // Normal line with inline formatting.
-    return <div key={li}>{renderInline(line)}</div>;
-  });
+    if (!line.trim()) { elements.push(<div key={elements.length} style={{ height: 8 }} />); i++; continue; }
+
+    // Normal line.
+    elements.push(<div key={elements.length}>{renderInline(line)}</div>);
+    i++;
+  }
+
+  return elements;
 }
 
 function renderInline(text: string) {
@@ -38,7 +139,11 @@ function renderInline(text: string) {
       return <strong key={i}>{part.slice(2, -2)}</strong>;
     }
     if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={i} style={{ background: 'rgba(0,0,0,0.06)', padding: '1px 4px', borderRadius: 3, fontSize: '0.85em' }}>{part.slice(1, -1)}</code>;
+      return <code key={i} style={{
+        background: 'rgba(0,0,0,0.07)', padding: '1px 5px', borderRadius: 3,
+        fontSize: '0.85em', fontFamily: '"SF Mono", "Fira Code", monospace',
+        color: '#1a1a1a',
+      }}>{part.slice(1, -1)}</code>;
     }
     return <span key={i}>{part}</span>;
   });
@@ -73,7 +178,7 @@ function saveSession(data: any) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
-function PlaygroundPage() {
+function AgentPage() {
   const saved = useRef(loadSession());
   const [sessionId] = useState(() => saved.current?.sessionId || `s-${Date.now()}`);
   const [messages, setMessages] = useState<Message[]>(saved.current?.messages || []);
@@ -122,7 +227,6 @@ function PlaygroundPage() {
     setLoading(true);
 
     try {
-      // Build conversation for API — flatten any tool_result messages.
       const apiConversation = conversation.map(m => ({
         role: m.role,
         content: m.content,
@@ -136,32 +240,22 @@ function PlaygroundPage() {
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: 'Request failed' }));
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `Error: ${err.error || resp.statusText}`,
-        }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.error || resp.statusText}` }]);
         return;
       }
 
       const data = await resp.json();
 
-      // Append new messages from the agent.
       if (data.messages) {
         setMessages(prev => [...prev, ...data.messages]);
       }
-
-      // Handle config updates.
       if (data.config_updates) {
-        // For now, show in chat. Full YAML editing would parse and apply.
         console.log('Config updates:', data.config_updates);
       }
-
-      // Handle code suggestions.
       if (data.code_suggestions?.length) {
         setCodeSuggestions(prev => [...prev, ...data.code_suggestions]);
       }
-
-      // Check if any tool call returned a report summary.
+      // Check for report summary in tool results.
       if (data.messages) {
         for (const msg of data.messages) {
           if (msg.role === 'user' && Array.isArray(msg.content)) {
@@ -169,9 +263,7 @@ function PlaygroundPage() {
               if (block.type === 'tool_result') {
                 try {
                   const result = JSON.parse(block.content);
-                  if (result.summary) {
-                    setLastReportSummary(result.summary);
-                  }
+                  if (result.summary) setLastReportSummary(result.summary);
                 } catch { /* ignore */ }
               }
             }
@@ -179,10 +271,7 @@ function PlaygroundPage() {
         }
       }
     } catch (err: any) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Error: ${err.message}`,
-      }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }]);
     } finally {
       setLoading(false);
     }
@@ -207,8 +296,8 @@ function PlaygroundPage() {
       return (
         <Stack key={idx} gap={4} mb="xs">
           {textBlocks.map((block: any, i: number) => (
-            <Paper key={`t${i}`} p="sm" radius="sm" bg="blue.0">
-              <Text size="sm" c="dark.9" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{renderMarkdown(block.text)}</Text>
+            <Paper key={`t${i}`} p="sm" radius="sm" bg="#e8f5e9">
+              <Text size="sm" c="#1a1a1a" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{renderMarkdown(block.text)}</Text>
             </Paper>
           ))}
           {toolBlocks.length > 0 && (
@@ -230,13 +319,13 @@ function PlaygroundPage() {
         key={idx}
         p="sm"
         radius="sm"
-        bg={isUser ? 'gray.1' : 'blue.0'}
+        bg={isUser ? 'gray.1' : '#e8f5e9'}
         mb="xs"
         ml={isUser ? 'xl' : 0}
         mr={isUser ? 0 : 'xl'}
       >
         {isUser && <Text size="xs" c="dimmed" mb={2}>You</Text>}
-        <Text size="sm" c="dark.9" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+        <Text size="sm" c="#1a1a1a" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
           {typeof msg.content === 'string' ? renderMarkdown(msg.content) : JSON.stringify(msg.content)}
         </Text>
       </Paper>
@@ -349,7 +438,7 @@ function PlaygroundPage() {
                     if (appliedBranches.length > 0) {
                       return (
                         <Paper p="sm" radius="sm" bg="green.0" mb="md">
-                          <Text size="xs" fw={600} c="dark.9" mb={4}>Active branches</Text>
+                          <Text size="xs" fw={600} c="#1a1a1a" mb={4}>Active branches</Text>
                           <Group gap="xs">
                             {appliedBranches.map(branch => (
                               <Badge
@@ -392,16 +481,23 @@ function PlaygroundPage() {
                                 )}
                                 {!(s as any).branch && <Button size="xs" color="green" variant="light" onClick={async () => {
                                   try {
+                                    const payload = {
+                                      file_path: s.file_path,
+                                      original: s.original,
+                                      replacement: s.replacement,
+                                      session_id: sessionId,
+                                    };
+                                    console.log('[gnomie] applying:', s.file_path, 'original length:', s.original.length);
                                     const resp = await fetch(`${CONTROLLER_API_URL}/playground/apply`, {
                                       method: 'POST',
                                       headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        file_path: s.file_path,
-                                        original: s.original,
-                                        replacement: s.replacement,
-                                        session_id: sessionId,
-                                      }),
+                                      body: JSON.stringify(payload),
                                     });
+                                    if (!resp.ok) {
+                                      const text = await resp.text();
+                                      alert(`Failed (${resp.status}): ${text}`);
+                                      return;
+                                    }
                                     const data = await resp.json();
                                     if (data.error) {
                                       alert(`Failed: ${data.error}`);
@@ -411,7 +507,8 @@ function PlaygroundPage() {
                                       ));
                                     }
                                   } catch (err: any) {
-                                    alert(`Error: ${err.message}`);
+                                    console.error('[gnomie] apply error:', err);
+                                    alert(`Error: ${err.name}: ${err.message}`);
                                   }
                                 }}>Apply</Button>}
                                 <Button size="xs" color="red" variant="light"
@@ -490,4 +587,4 @@ function PlaygroundPage() {
   );
 }
 
-export default PlaygroundPage;
+export default AgentPage;

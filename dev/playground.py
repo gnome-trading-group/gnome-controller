@@ -68,13 +68,15 @@ TOOLS = [
     },
     {
         "name": "submit_backtest",
-        "description": "Submit a backtest job. The config MUST include start_date and end_date (ISO format, e.g. '2026-01-23T10:30:00Z'). Returns the job ID.",
+        "description": "Submit a backtest job. The config MUST include start_date and end_date (ISO format, e.g. '2026-01-23T10:30:00Z'). Always provide a descriptive name for the backtest.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "config": {"type": "string", "description": "Complete YAML config including start_date and end_date"},
+                "name": {"type": "string", "description": "Short descriptive name for this backtest run (e.g. 'MM BTC tight spread', 'Momentum with stop-loss')"},
+                "research_commit": {"type": "string", "description": "Git branch or commit SHA to run against. Use the branch/commit from apply_code_change results. Omit to use current working directory code."},
             },
-            "required": ["config"],
+            "required": ["config", "name"],
         },
     },
     {
@@ -183,12 +185,12 @@ def tool_edit_config(updates: dict, **kwargs) -> dict:
     return {"applied_updates": updates, "status": "ok"}
 
 
-def tool_submit_backtest(config: str, **kwargs) -> dict:
-    """Submit a backtest via the dev server's internal endpoint."""
+def tool_submit_backtest(config: str, name: str = "Gnomie backtest", research_commit: str | None = None, **kwargs) -> dict:
+    """Submit a backtest and wait for it to complete. Returns the job summary."""
+    import time
     import yaml as _yaml
     import requests
 
-    # Validate that start_date and end_date are present.
     try:
         parsed = _yaml.safe_load(config)
     except Exception as e:
@@ -199,15 +201,46 @@ def tool_submit_backtest(config: str, **kwargs) -> dict:
     if "end_date" not in parsed:
         return {"error": "Config must include end_date (e.g. end_date: 2026-01-23T11:00:00Z)"}
 
+    payload: dict = {"config": config, "name": name}
+    if research_commit:
+        payload["researchCommit"] = research_commit
+
+    # Submit.
     try:
-        resp = requests.post(
-            "http://localhost:5050/api/backtests",
-            json={"config": config},
-            timeout=300,
-        )
-        return resp.json()
+        resp = requests.post("http://localhost:5050/api/backtests", json=payload, timeout=10)
+        submit_result = resp.json()
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"Failed to submit: {e}"}
+
+    job_id = submit_result.get("jobId")
+    if not job_id:
+        return submit_result  # error from server
+
+    # Poll until done (backtests typically finish in seconds).
+    for _ in range(120):  # 2 min max
+        time.sleep(1)
+        try:
+            status_resp = requests.get(f"http://localhost:5050/api/backtests/{job_id}", timeout=5)
+            job = status_resp.json()
+            status = job.get("status", "")
+            if status == "SUCCEEDED":
+                # Fetch the report summary.
+                summary = tool_get_report_summary(job_id)
+                return {
+                    "jobId": job_id,
+                    "status": "SUCCEEDED",
+                    "summary": summary.get("summary", {}),
+                }
+            if status == "FAILED":
+                return {
+                    "jobId": job_id,
+                    "status": "FAILED",
+                    "error": job.get("error", "Unknown error"),
+                }
+        except Exception:
+            continue
+
+    return {"jobId": job_id, "status": "TIMEOUT", "error": "Backtest did not complete within 2 minutes"}
 
 
 def tool_get_report_summary(job_id: str, **kwargs) -> dict:
@@ -285,10 +318,15 @@ def tool_list_strategies(**kwargs) -> dict:
     return {"strategies": strategies}
 
 
-def tool_read_strategy_code(file_path: str, **kwargs) -> dict:
+def tool_read_strategy_code(file_path: str, session_id: str = "default", **kwargs) -> dict:
     error = _validate_read_path(file_path)
     if error:
         return {"error": error}
+    # Read from worktree first (has latest applied changes), else main repo.
+    from playground_worktree import read_file_from_worktree
+    content = read_file_from_worktree(file_path, session_id)
+    if content is not None:
+        return {"file_path": file_path, "content": content, "source": "worktree"}
     full_path = RESEARCH_ROOT / file_path
     if not full_path.exists():
         return {"error": f"File not found: {file_path}"}
@@ -316,126 +354,67 @@ def tool_suggest_code_change(
     }
 
 
-# Track one branch per session.
-_session_branches: dict[str, str] = {}
+def _fuzzy_replace(content: str, original: str, replacement: str) -> str | None:
+    """Try exact match, then progressively fuzzier matches. Returns new content or None."""
+    # 1. Exact match.
+    if original in content:
+        return content.replace(original, replacement, 1)
+
+    # 2. Strip trailing whitespace per line on both sides.
+    def _rstrip_lines(s: str) -> str:
+        return '\n'.join(line.rstrip() for line in s.splitlines())
+
+    content_stripped = _rstrip_lines(content)
+    original_stripped = _rstrip_lines(original)
+    if original_stripped in content_stripped:
+        # Find the position in the original content and replace there.
+        idx = content_stripped.find(original_stripped)
+        # Map back to original content by counting lines.
+        lines_before = content_stripped[:idx].count('\n')
+        orig_lines = content.splitlines(keepends=True)
+        orig_line_count = original.strip().count('\n') + 1
+        start = lines_before
+        end = start + orig_line_count
+        return ''.join(orig_lines[:start]) + replacement + '\n' + ''.join(orig_lines[end:])
+
+    # 3. Full whitespace normalization (strip each line).
+    def _normalize(s: str) -> str:
+        return '\n'.join(line.strip() for line in s.strip().splitlines())
+
+    norm_original = _normalize(original)
+    lines = content.splitlines(keepends=True)
+    for i in range(len(lines)):
+        for j in range(i + 1, min(i + len(original.splitlines()) + 10, len(lines) + 1)):
+            candidate = ''.join(lines[i:j])
+            if _normalize(candidate) == norm_original:
+                return ''.join(lines[:i]) + replacement + '\n' + ''.join(lines[j:])
+    return None
 
 
 def tool_apply_code_change(
     file_path: str, original: str, replacement: str,
     session_id: str = "default", **kwargs,
 ) -> dict:
-    """Apply a code change — uses one branch per session, commits incrementally."""
-    import subprocess
-    import threading
+    """Apply a code change in an isolated worktree."""
+    from playground_worktree import apply_via_worktree, read_file_from_worktree
 
     error = _validate_write_path(file_path)
     if error:
         return {"error": error}
 
-    full_path = RESEARCH_ROOT / file_path
-    if not full_path.exists():
-        return {"error": f"File not found: {file_path}"}
+    # Read from worktree if it exists (may have prior changes), else from main repo.
+    content = read_file_from_worktree(file_path, session_id)
+    if content is None:
+        full_path = RESEARCH_ROOT / file_path
+        if not full_path.exists():
+            return {"error": f"File not found: {file_path}"}
+        content = full_path.read_text()
 
-    content = full_path.read_text()
+    new_content = _fuzzy_replace(content, original, replacement)
+    if new_content is None:
+        return {"error": "Original snippet not found in file — may have already been applied or the code has changed"}
 
-    # Try exact match first, then fuzzy.
-    if original in content:
-        new_content = content.replace(original, replacement, 1)
-    else:
-        def _normalize(s: str) -> str:
-            return '\n'.join(line.strip() for line in s.strip().splitlines())
-
-        norm_original = _normalize(original)
-        lines = content.splitlines(keepends=True)
-        match_start = None
-        match_end = None
-        for i in range(len(lines)):
-            for j in range(i + 1, min(i + len(original.splitlines()) + 5, len(lines) + 1)):
-                candidate = ''.join(lines[i:j])
-                if _normalize(candidate) == norm_original:
-                    match_start = i
-                    match_end = j
-                    break
-            if match_start is not None:
-                break
-
-        if match_start is None:
-            return {"error": "Original snippet not found in file — may have already been applied or the code has changed"}
-
-        new_content = ''.join(lines[:match_start]) + replacement + '\n' + ''.join(lines[match_end:])
-
-    git_env = {**os.environ}
-
-    # Get or create the session branch.
-    branch_name = _session_branches.get(session_id)
-    created_new = False
-
-    if branch_name is None:
-        branch_name = f"gnomie/session-{int(__import__('time').time())}"
-        _session_branches[session_id] = branch_name
-        created_new = True
-
-    # Switch to the session branch.
-    try:
-        if created_new:
-            subprocess.run(
-                ["git", "checkout", "-b", branch_name],
-                cwd=str(RESEARCH_ROOT), capture_output=True, text=True, check=True,
-                env=git_env,
-            )
-        else:
-            subprocess.run(
-                ["git", "checkout", branch_name],
-                cwd=str(RESEARCH_ROOT), capture_output=True, text=True, check=True,
-                env=git_env,
-            )
-    except subprocess.CalledProcessError as e:
-        return {"error": f"Failed to switch to branch: {e.stderr}"}
-
-    # Apply the change.
-    full_path.write_text(new_content)
-
-    # Commit.
-    try:
-        subprocess.run(
-            ["git", "add", file_path],
-            cwd=str(RESEARCH_ROOT), capture_output=True, text=True, check=True,
-            env=git_env,
-        )
-        subprocess.run(
-            ["git", "commit", "-m", f"gnomie: update {file_path}"],
-            cwd=str(RESEARCH_ROOT), capture_output=True, text=True, check=True,
-            env=git_env,
-        )
-    except subprocess.CalledProcessError as e:
-        subprocess.run(["git", "checkout", "-"], cwd=str(RESEARCH_ROOT), capture_output=True, env=git_env)
-        return {"error": f"Failed to commit: {e.stderr}"}
-
-    # Switch back to the previous branch.
-    subprocess.run(["git", "checkout", "-"], cwd=str(RESEARCH_ROOT), capture_output=True, env=git_env)
-
-    # Push in background.
-    def _push():
-        try:
-            result = subprocess.run(
-                ["git", "push", "-u", "origin", branch_name],
-                cwd=str(RESEARCH_ROOT), capture_output=True, text=True,
-                env=git_env, timeout=30,
-            )
-            if result.returncode == 0:
-                print(f"[gnomie] pushed {branch_name}")
-            else:
-                print(f"[gnomie] push failed: {result.stderr}")
-        except Exception as e:
-            print(f"[gnomie] push error: {e}")
-
-    threading.Thread(target=_push, daemon=True).start()
-
-    return {
-        "status": "applied",
-        "branch": branch_name,
-        "file_path": file_path,
-    }
+    return apply_via_worktree(file_path, new_content, session_id=session_id)
 
 
 TOOL_DISPATCH: dict[str, Any] = {
@@ -478,6 +457,16 @@ Key domain knowledge:
 - Network latency and order processing latency affect execution quality
 - Preset YAML configs do NOT include start_date/end_date — you MUST add them before submitting a backtest
 - Always ask the user for a date range or use a sensible default (e.g. 30 minutes of recent data)
+
+Code change workflow:
+- ALWAYS call read_strategy_code BEFORE suggesting changes — never guess what the code looks like
+- The original snippet in suggest_code_change MUST be copied exactly from the read_strategy_code result — character for character, including indentation
+- When the user clicks Apply, the change is committed to an isolated git worktree branch. The result includes the branch name and commit SHA.
+- To run a backtest with modified code, pass the branch name from apply_code_change as research_commit to submit_backtest
+- ONLY set research_commit if you received a branch name from a previous apply_code_change in this conversation
+- Do NOT set research_commit if no code changes have been applied — omit the field entirely
+- Track the branch name from apply results and reuse it for all subsequent backtest submissions
+- Do NOT tell the user they need to merge or switch branches — the system handles everything
 """
 
 # ---------------------------------------------------------------------------
@@ -604,3 +593,97 @@ def handle_chat(
         "config_updates": config_updates,
         "code_suggestions": code_suggestions,
     }
+
+
+def handle_chat_streaming(
+    conversation: list[dict],
+    config: str | None = None,
+    model: str | None = None,
+    system_prompt: str | None = None,
+):
+    """Like handle_chat but yields events as they happen for SSE streaming."""
+    if model and model not in ALLOWED_MODELS:
+        model = DEFAULT_MODEL
+    model = model or DEFAULT_MODEL
+
+    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+
+    system = (system_prompt or "") + "\n\n" + SYSTEM_PROMPT
+    if config:
+        system += f"\n\nCurrent backtest config:\n```yaml\n{config}\n```"
+
+    new_messages: list[dict] = []
+
+    response = client.messages.create(
+        model=model, max_tokens=4096, system=system,
+        tools=TOOLS, messages=conversation,
+    )
+
+    while response.stop_reason == "tool_use":
+        assistant_content = []
+        for block in response.content:
+            if block.type == "text":
+                assistant_content.append({"type": "text", "text": block.text})
+            elif block.type == "tool_use":
+                assistant_content.append({
+                    "type": "tool_use", "id": block.id,
+                    "name": block.name, "input": block.input,
+                })
+
+        msg = {"role": "assistant", "content": assistant_content}
+        new_messages.append(msg)
+        # Stream the assistant message immediately.
+        yield {"type": "message", "message": msg}
+
+        # Execute tool calls.
+        tool_results = []
+        code_suggestions = []
+        config_updates = None
+
+        for block in response.content:
+            if block.type != "tool_use":
+                continue
+
+            # Stream that we're executing a tool.
+            yield {"type": "tool_start", "name": block.name}
+
+            tool_fn = TOOL_DISPATCH.get(block.name)
+            if tool_fn is None:
+                result = {"error": f"Unknown tool: {block.name}"}
+            else:
+                try:
+                    result = tool_fn(**block.input)
+                except Exception as e:
+                    result = {"error": str(e)}
+
+            if block.name == "edit_config" and "error" not in result:
+                config_updates = result.get("applied_updates")
+                yield {"type": "config_update", "updates": config_updates}
+            if block.name == "suggest_code_change" and result.get("status") == "pending_approval":
+                code_suggestions.append(result)
+                yield {"type": "code_suggestion", "suggestion": result}
+
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": json.dumps(result),
+            })
+
+        tool_msg = {"role": "user", "content": tool_results}
+        new_messages.append(tool_msg)
+
+        full_conversation = conversation + new_messages
+        response = client.messages.create(
+            model=model, max_tokens=4096, system=system,
+            tools=TOOLS, messages=full_conversation,
+        )
+
+    # Final text response.
+    final_text = ""
+    for block in response.content:
+        if block.type == "text":
+            final_text += block.text
+
+    final_msg = {"role": "assistant", "content": final_text}
+    new_messages.append(final_msg)
+    yield {"type": "message", "message": final_msg}

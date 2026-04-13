@@ -1,5 +1,5 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
-import { Exchange, Listing, Security } from '../types';
+import { Exchange, Listing, ListingSpec, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
 import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsListParams, TransformJobsSearchParams } from '../types/transform-jobs';
@@ -261,6 +261,104 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       body: listing,
+    }),
+  listStrategies: (params?: { strategyId?: number; name?: string; status?: number }) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.strategyId !== undefined) queryParams.strategyId = params.strategyId;
+    if (params?.name) queryParams.name = params.name;
+    if (params?.status !== undefined) queryParams.status = params.status;
+    return sendApiRequest<Strategy[]>('/strategies', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  createStrategy: (strategy: Omit<Strategy, 'dateCreated' | 'dateModified'>) =>
+    sendApiRequest<Strategy>('/strategies', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: strategy,
+    }),
+  updateStrategy: (strategyId: number, strategy: Partial<Strategy>) =>
+    sendApiRequest<{ message: string }>('/strategies', 'PATCH', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: strategy,
+      queryParams: { strategyId },
+    }),
+  deleteStrategy: (strategyId: number) =>
+    sendApiRequest<{ message: string }>('/strategies', 'DELETE', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: { strategyId },
+    }),
+  listListingSpecs: (listingId?: number) =>
+    sendApiRequest<ListingSpec[]>('/listing-specs', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: listingId !== undefined ? { listingId } : undefined,
+    }),
+  createListingSpec: (spec: Omit<ListingSpec, 'dateCreated' | 'dateModified'>) =>
+    sendApiRequest<ListingSpec>('/listing-specs', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: spec,
+    }),
+  updateListingSpec: (listingId: number, spec: Partial<ListingSpec>) =>
+    sendApiRequest<{ message: string }>('/listing-specs', 'PATCH', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: spec,
+      queryParams: { listingId },
+    }),
+  deleteListingSpec: (listingId: number) =>
+    sendApiRequest<{ message: string }>('/listing-specs', 'DELETE', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: { listingId },
+    }),
+  listPnlLatest: (strategyId?: number) =>
+    sendApiRequest<PnlSnapshot[]>('/pnl/latest', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: strategyId !== undefined ? { strategyId } : undefined,
+    }),
+  listRiskPolicies: () =>
+    sendApiRequest<RiskPolicy[]>('/risk/policies', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+    }),
+  createRiskPolicy: (policy: Omit<RiskPolicy, 'policyId' | 'dateCreated' | 'dateModified'>) =>
+    sendApiRequest<RiskPolicy>('/risk/policies', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: policy,
+    }),
+  updateRiskPolicy: (policyId: number, policy: Partial<RiskPolicy>) =>
+    sendApiRequest<{ message: string }>('/risk/policies', 'PATCH', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: policy,
+      queryParams: { policyId },
+    }),
+  deleteRiskPolicy: (policyId: number) =>
+    sendApiRequest<{ message: string }>('/risk/policies', 'DELETE', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: { policyId },
     }),
 }
 

@@ -1,4 +1,4 @@
-import { IconFlask, IconGauge, IconLockSquareRounded, IconNotes, IconRobot, IconTool } from "@tabler/icons-react";
+import { IconFlask, IconGauge, IconLockSquareRounded, IconNotes, IconRobot, IconTool, IconChartLine } from "@tabler/icons-react";
 import { AppShell, Paper, Group, ScrollArea, Code, Title, UnstyledButton } from '@mantine/core';
 import { useLocation } from 'react-router-dom';
 import logo from '../../assets/logo.svg';
@@ -13,6 +13,14 @@ interface NavbarProps {
 const routes = [
   { icon: IconGauge, label: 'Dashboard', link: '/dashboard' },
   {
+    label: 'Trading',
+    icon: IconChartLine,
+    links: [
+      { label: 'Strategies', link: '/strategies' },
+      { label: 'Risk Policies', link: '/risk/policies' },
+    ],
+  },
+  {
     label: 'Market Data',
     icon: IconNotes,
     initiallyOpened: true,
@@ -23,6 +31,7 @@ const routes = [
       { label: 'Gaps', link: '/market-data/gaps' },
     ],
   },
+  { icon: IconLockSquareRounded, label: 'Security Master', link: '/security-master' },
   {
     label: 'Backtests',
     icon: IconFlask,
@@ -32,7 +41,6 @@ const routes = [
     ],
   },
   { icon: IconRobot, label: 'Gnomie', link: '/gnomie' },
-  { icon: IconLockSquareRounded, label: 'Security Master', link: '/security-master' },
   {
     label: 'Tools',
     icon: IconTool,

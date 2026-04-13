@@ -15,13 +15,16 @@ import TransformJobs from './pages/MarketData/TransformJobs/TransformJobs';
 import Gaps from './pages/MarketData/Gaps/Gaps';
 import SecurityMaster from './pages/SecurityMaster/SecurityMaster';
 import LatencyProbe from './pages/LatencyProbe/LatencyProbe';
+import Strategies from './pages/Strategies/Strategies';
+import StrategyDetail from './pages/Strategies/StrategyDetail';
+import RiskPolicies from './pages/Risk/RiskPolicies';
 import { GlobalStateProvider } from './context/GlobalStateContext';
 import CollectorDetail from './pages/CollectorDetail/CollectorDetail';
 import BacktestList from './pages/Backtests/BacktestList';
 import BacktestSubmit from './pages/Backtests/BacktestSubmit';
 import BacktestDetail from './pages/Backtests/BacktestDetail';
 import BacktestPresets from './pages/Backtests/BacktestPresets';
-import PlaygroundPage from './pages/Playground/PlaygroundPage';
+import AgentPage from './pages/Agent/AgentPage';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -42,7 +45,7 @@ function LoginScreen() {
 
 function Logout() {
   const navigate = useNavigate();
-  
+
   const handleLogout = async () => {
     await signOut();
     navigate('/');
@@ -118,7 +121,10 @@ function AppContent() {
             <Route path="/backtests/new" element={<BacktestSubmit />} />
             <Route path="/backtests/presets" element={<BacktestPresets />} />
             <Route path="/backtests/:jobId" element={<BacktestDetail />} />
-            <Route path="/gnomie" element={<PlaygroundPage />} />
+            <Route path="/gnomie" element={<AgentPage />} />
+            <Route path="/strategies" element={<Strategies />} />
+            <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
+            <Route path="/risk/policies" element={<RiskPolicies />} />
             <Route path="/logout" element={<Logout />} />
             <Route path="/" element={<Navigate to="/security-master" replace />} />
           </Routes>
