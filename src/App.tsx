@@ -15,6 +15,9 @@ import TransformJobs from './pages/MarketData/TransformJobs/TransformJobs';
 import Gaps from './pages/MarketData/Gaps/Gaps';
 import SecurityMaster from './pages/SecurityMaster/SecurityMaster';
 import LatencyProbe from './pages/LatencyProbe/LatencyProbe';
+import Strategies from './pages/Strategies/Strategies';
+import StrategyDetail from './pages/Strategies/StrategyDetail';
+import RiskPolicies from './pages/Risk/RiskPolicies';
 import { GlobalStateProvider } from './context/GlobalStateContext';
 import CollectorDetail from './pages/CollectorDetail/CollectorDetail';
 
@@ -109,6 +112,9 @@ function AppContent() {
             <Route path="/market-data/transform-jobs" element={<TransformJobs />} />
             <Route path="/market-data/gaps" element={<Gaps />} />
             <Route path="/tools/latency-probe" element={<LatencyProbe />} />
+            <Route path="/strategies" element={<Strategies />} />
+            <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
+            <Route path="/risk/policies" element={<RiskPolicies />} />
             <Route path="/logout" element={<Logout />} />
             <Route path="/" element={<Navigate to="/security-master" replace />} />
           </Routes>

@@ -1,4 +1,4 @@
-import { IconGauge, IconLockSquareRounded, IconNotes, IconTool } from "@tabler/icons-react";
+import { IconGauge, IconLockSquareRounded, IconNotes, IconTool, IconChartLine } from "@tabler/icons-react";
 import { AppShell, Paper, Group, ScrollArea, Code, Title, UnstyledButton } from '@mantine/core';
 import { useLocation } from 'react-router-dom';
 import logo from '../../assets/logo.svg';
@@ -24,6 +24,14 @@ const routes = [
     ],
   },
   { icon: IconLockSquareRounded, label: 'Security Master', link: '/security-master' },
+  {
+    label: 'Trading',
+    icon: IconChartLine,
+    links: [
+      { label: 'Strategies', link: '/strategies' },
+      { label: 'Risk Policies', link: '/risk/policies' },
+    ],
+  },
   {
     label: 'Tools',
     icon: IconTool,
