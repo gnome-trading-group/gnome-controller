@@ -1,4 +1,4 @@
-import { IconGauge, IconLockSquareRounded, IconNotes, IconTool, IconChartLine } from "@tabler/icons-react";
+import { IconFlask, IconGauge, IconLockSquareRounded, IconNotes, IconRobot, IconTool, IconChartLine } from "@tabler/icons-react";
 import { AppShell, Paper, Group, ScrollArea, Code, Title, UnstyledButton } from '@mantine/core';
 import { useLocation } from 'react-router-dom';
 import logo from '../../assets/logo.svg';
@@ -13,6 +13,14 @@ interface NavbarProps {
 const routes = [
   { icon: IconGauge, label: 'Dashboard', link: '/dashboard' },
   {
+    label: 'Trading',
+    icon: IconChartLine,
+    links: [
+      { label: 'Strategies', link: '/strategies' },
+      { label: 'Risk Policies', link: '/risk/policies' },
+    ],
+  },
+  {
     label: 'Market Data',
     icon: IconNotes,
     initiallyOpened: true,
@@ -25,13 +33,14 @@ const routes = [
   },
   { icon: IconLockSquareRounded, label: 'Security Master', link: '/security-master' },
   {
-    label: 'Trading',
-    icon: IconChartLine,
+    label: 'Backtests',
+    icon: IconFlask,
     links: [
-      { label: 'Strategies', link: '/strategies' },
-      { label: 'Risk Policies', link: '/risk/policies' },
+      { label: 'Runs', link: '/backtests' },
+      { label: 'Presets', link: '/backtests/presets' },
     ],
   },
+  { icon: IconRobot, label: 'Gnomie', link: '/gnomie' },
   {
     label: 'Tools',
     icon: IconTool,
