@@ -233,9 +233,11 @@ def _generate_report(output_dir: str, config_path: str) -> None:
         with open(config_path) as f:
             config = yaml.safe_load(f)
 
-        market_df = pd.read_parquet(out / "market_records.parquet") if (out / "market_records.parquet").exists() else pd.DataFrame()
-        exec_df = pd.read_parquet(out / "execution_records.parquet") if (out / "execution_records.parquet").exists() else pd.DataFrame()
-        intent_df = pd.read_parquet(out / "intent_records.parquet") if (out / "intent_records.parquet").exists() else pd.DataFrame()
+        # File names must match what gnomepy's BacktestResults.save() writes:
+        # market.parquet / orders.parquet / fills.parquet / intents.parquet.
+        market_df = pd.read_parquet(out / "market.parquet") if (out / "market.parquet").exists() else pd.DataFrame()
+        exec_df = pd.read_parquet(out / "fills.parquet") if (out / "fills.parquet").exists() else pd.DataFrame()
+        intent_df = pd.read_parquet(out / "intents.parquet") if (out / "intents.parquet").exists() else pd.DataFrame()
 
         report = BacktestReport.from_dataframes(market_df=market_df, exec_df=exec_df, intent_df=intent_df, config=config)
         report.save_html(out / "report.html", max_points=5000)
@@ -265,6 +267,12 @@ def _run_backtest(job_id: str, config_path: str, output_dir: str, research_commi
     run_env = {**os.environ, **extra_env} if extra_env else None
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, env=run_env)
+        # Always dump full stdout+stderr so we can debug without guessing.
+        log_path = Path(output_dir) / "subprocess.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text(
+            f"$ {' '.join(cmd)}\n\n=== STDOUT ===\n{result.stdout}\n\n=== STDERR ===\n{result.stderr}\n"
+        )
         if result.returncode == 0:
             _generate_report(output_dir, config_path)
             jobs[job_id]["status"] = "SUCCEEDED"
@@ -275,6 +283,7 @@ def _run_backtest(job_id: str, config_path: str, output_dir: str, research_commi
             jobs[job_id]["error"] = result.stderr[-500:] if result.stderr else "Unknown error"
             jobs[job_id]["completedAt"] = datetime.now(timezone.utc).isoformat()
             print(f"[{job_id[:8]}] failed: {result.stderr[-200:]}")
+            print(f"[{job_id[:8]}] full log: {log_path}")
     except subprocess.TimeoutExpired:
         jobs[job_id]["status"] = "FAILED"
         jobs[job_id]["error"] = "Backtest timed out (30 min)"

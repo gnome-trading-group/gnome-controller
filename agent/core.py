@@ -272,6 +272,25 @@ Key domain knowledge:
 - Preset YAML configs do NOT include start_date/end_date — you MUST add them before submitting
 - Always ask the user for a date range or use a sensible default
 
+Config YAML format (required by the Java backend):
+    strategy:
+      class_name: "<module:Class or fully.qualified.JavaClass>"
+      args: {...}                      # passed to the strategy constructor
+    start_date: "YYYY-MM-DDTHH:MM:SS"  # ISO LocalDateTime (no timezone)
+    end_date:   "YYYY-MM-DDTHH:MM:SS"
+    listings:
+      - listing_id: <int>
+        profile: <profile_name>
+    profiles:
+      <profile_name>:
+        fee_model: { type: static, taker_fee: ..., maker_fee: ... }
+        network_latency: { type: static, latency_nanos: ... }
+        order_processing_latency: { type: static, latency_nanos: ... }
+        queue_model: { type: risk_averse }   # or optimistic / probabilistic
+    s3: { bucket: gnome-market-data-prod }
+
+- Do NOT emit the legacy flat format (`strategy: <string>`, `strategy_args:`, `exchanges:`, `schema_type:`) — the Java backend will reject it.
+
 Code change workflow:
 - ALWAYS call read_strategy_code BEFORE suggesting changes — never guess what the code looks like
 - The original snippet MUST be copied exactly from the read_strategy_code result
@@ -287,30 +306,75 @@ Code change workflow:
 # ---------------------------------------------------------------------------
 
 def _sanitize_conversation(messages: list[dict]) -> list[dict]:
-    """Ensure every tool_use has a matching tool_result.
+    """Ensure every tool_use has a matching tool_result immediately after.
 
-    Drops trailing assistant messages with tool_use blocks that have no
-    corresponding tool_result — happens when the user stops mid-request.
+    Repairs orphans anywhere in the conversation, not just trailing ones.
+    An orphan can appear if streaming was interrupted, the browser reloaded
+    between tool_use and tool_result, or state got out of sync.
+
+    Strategy:
+      - For each assistant message with tool_use blocks, check that the next
+        message is a user message containing a tool_result for every
+        tool_use_id. Missing ids get a synthetic "interrupted" tool_result
+        prepended to the next user message (or a new user message inserted).
+      - Trailing assistant messages with any tool_use still get dropped, since
+        we need to regenerate them from scratch.
     """
     if not messages:
         return messages
 
-    # Walk backwards — if the last message is an assistant with tool_use
-    # blocks and there's no following user message with tool_results, drop it.
-    sanitized = list(messages)
-    while sanitized:
-        last = sanitized[-1]
-        if last.get("role") != "assistant":
-            break
-        if not isinstance(last.get("content"), list):
-            break
-        has_tool_use = any(
-            b.get("type") == "tool_use" for b in last["content"] if isinstance(b, dict)
-        )
-        if not has_tool_use:
-            break
-        # This assistant message has tool_use blocks with no tool_result after it.
-        sanitized.pop()
+    sanitized: list[dict] = []
+    i = 0
+    while i < len(messages):
+        msg = messages[i]
+        content = msg.get("content")
+        if msg.get("role") == "assistant" and isinstance(content, list):
+            tool_use_ids = [
+                b["id"] for b in content
+                if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("id")
+            ]
+            if tool_use_ids:
+                is_last = i == len(messages) - 1
+                if is_last:
+                    # Trailing orphan — drop the whole assistant turn.
+                    break
+
+                next_msg = messages[i + 1]
+                next_content = next_msg.get("content")
+                existing_ids: set[str] = set()
+                if next_msg.get("role") == "user" and isinstance(next_content, list):
+                    existing_ids = {
+                        b.get("tool_use_id")
+                        for b in next_content
+                        if isinstance(b, dict) and b.get("type") == "tool_result"
+                    }
+
+                missing = [tid for tid in tool_use_ids if tid not in existing_ids]
+                sanitized.append(msg)
+
+                if missing:
+                    synthetic = [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tid,
+                            "content": json.dumps({"error": "interrupted — no result recorded"}),
+                        }
+                        for tid in missing
+                    ]
+                    if next_msg.get("role") == "user" and isinstance(next_content, list):
+                        # Prepend synthetic results to the existing user message.
+                        sanitized.append({**next_msg, "content": synthetic + list(next_content)})
+                        i += 2
+                        continue
+                    # Insert a new user message holding only the synthetic results.
+                    sanitized.append({"role": "user", "content": synthetic})
+                    i += 1
+                    continue
+                # All ids matched — advance normally.
+                i += 1
+                continue
+        sanitized.append(msg)
+        i += 1
     return sanitized
 
 

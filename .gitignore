@@ -26,3 +26,4 @@ dist-ssr
 # Dev server backtest output
 **/__pycache__/
 dev/backtest-runs/
+dev/.env
