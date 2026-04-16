@@ -13,6 +13,8 @@ Frontend: set VITE_CONTROLLER_API_URL=http://localhost:5050/api
 from __future__ import annotations
 
 import json
+import logging
+import logging.config
 import sys
 import os
 import secrets
@@ -46,6 +48,104 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+# Unified config for the dev server + uvicorn so everything shares one format.
+# Colored when stderr/stdout is a TTY; plain otherwise (pipes, redirected files,
+# CI). Disable explicitly with NO_COLOR=1 or force with FORCE_COLOR=1.
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+
+
+def _use_color(stream) -> bool:
+    if os.environ.get("NO_COLOR"):
+        return False
+    if os.environ.get("FORCE_COLOR"):
+        return True
+    return hasattr(stream, "isatty") and stream.isatty()
+
+
+class _ColorFormatter(logging.Formatter):
+    """Formatter that paints level + logger name with ANSI colors."""
+
+    # SGR codes. Reset is 0; we scope color per field so nothing bleeds.
+    _RESET = "\033[0m"
+    _DIM = "\033[2m"
+    _BOLD = "\033[1m"
+    _GRAY = "\033[90m"
+    _CYAN = "\033[36m"
+    _GREEN = "\033[32m"
+    _YELLOW = "\033[33m"
+    _RED = "\033[31m"
+    _MAGENTA = "\033[35m"
+
+    _LEVEL_COLORS = {
+        "DEBUG":    _GRAY,
+        "INFO":     _GREEN,
+        "WARNING":  _YELLOW,
+        "ERROR":    _RED,
+        "CRITICAL": _BOLD + _RED,
+    }
+
+    def __init__(self, *, use_color: bool, **kwargs):
+        super().__init__(**kwargs)
+        self._color = use_color
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Save originals so we don't mutate the record for other handlers.
+        orig_level = record.levelname
+        orig_name = record.name
+        if self._color:
+            level_color = self._LEVEL_COLORS.get(record.levelname, "")
+            record.levelname = f"{level_color}{record.levelname:<5}{self._RESET}"
+            # Dim uvicorn.access, accent dev-server.
+            name_color = self._MAGENTA if record.name == "dev-server" else (
+                self._GRAY if record.name.startswith("uvicorn.access") else self._CYAN
+            )
+            record.name = f"{name_color}{orig_name}{self._RESET}"
+            record.asctime = f"{self._GRAY}{self.formatTime(record, self.datefmt)}{self._RESET}"
+        try:
+            return super().format(record)
+        finally:
+            record.levelname = orig_level
+            record.name = orig_name
+
+
+LOG_CONFIG: dict = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "color_err": {
+            "()": _ColorFormatter,
+            "use_color": _use_color(sys.stderr),
+            "format": "%(asctime)s  %(levelname)s  %(name)s  %(message)s",
+            "datefmt": "%H:%M:%S",
+        },
+        "color_out": {
+            "()": _ColorFormatter,
+            "use_color": _use_color(sys.stdout),
+            "format": "%(asctime)s  %(levelname)s  %(name)s  %(message)s",
+            "datefmt": "%H:%M:%S",
+        },
+    },
+    "handlers": {
+        "default": {"class": "logging.StreamHandler", "stream": "ext://sys.stderr", "formatter": "color_err"},
+        "access":  {"class": "logging.StreamHandler", "stream": "ext://sys.stdout", "formatter": "color_out"},
+    },
+    "loggers": {
+        "":                 {"level": LOG_LEVEL, "handlers": ["default"]},
+        "dev-server":       {"level": LOG_LEVEL, "handlers": ["default"], "propagate": False},
+        "uvicorn":          {"level": LOG_LEVEL, "handlers": ["default"], "propagate": False},
+        "uvicorn.error":    {"level": LOG_LEVEL, "handlers": ["default"], "propagate": False},
+        "uvicorn.access":   {"level": LOG_LEVEL, "handlers": ["access"],  "propagate": False},
+        # Chatty libraries — keep them out of the main stream unless debugging.
+        "botocore":         {"level": "WARNING"},
+        "urllib3":          {"level": "WARNING"},
+    },
+}
+logging.config.dictConfig(LOG_CONFIG)
+log = logging.getLogger("dev-server")
 
 app = FastAPI()
 
@@ -101,7 +201,7 @@ def _load_existing_runs() -> None:
             job["completedAt"] = job["submittedAt"]
         jobs[job_id] = job
     if jobs:
-        print(f"Loaded {len(jobs)} existing run(s) from {OUTPUT_ROOT}")
+        log.info("loaded %d existing run(s) from %s", len(jobs), OUTPUT_ROOT)
 
 
 _load_existing_runs()
@@ -241,14 +341,14 @@ def _generate_report(output_dir: str, config_path: str) -> None:
 
         report = BacktestReport.from_dataframes(market_df=market_df, exec_df=exec_df, intent_df=intent_df, config=config)
         report.save_html(out / "report.html", max_points=5000)
-        print(f"  report.html written to {output_dir}")
+        log.info("report.html written: market=%d fills=%d intents=%d",
+                 len(market_df), len(exec_df), len(intent_df))
     except Exception as e:
-        import traceback
-        print(f"  warning: failed to generate report: {e}")
-        traceback.print_exc()
+        log.warning("report generation failed: %s", e, exc_info=log.isEnabledFor(logging.DEBUG))
 
 
 def _run_backtest(job_id: str, config_path: str, output_dir: str, research_commit: str | None = None) -> None:
+    tag = job_id[:8]
     research_root = Path(__file__).resolve().parent.parent.parent / "gnomepy-research"
     worktree_root = research_root.parent / "gnomepy-research-worktrees"
     extra_env = {}
@@ -259,12 +359,14 @@ def _run_backtest(job_id: str, config_path: str, output_dir: str, research_commi
         if wt_path.exists():
             current_pp = os.environ.get("PYTHONPATH", "")
             extra_env["PYTHONPATH"] = f"{wt_path}:{current_pp}" if current_pp else str(wt_path)
-            print(f"[{job_id[:8]}] using worktree at {wt_path}")
+            log.info("[%s] using worktree: %s", tag, wt_path)
 
     cmd = ["gnomepy", "backtest", "--config", config_path, "--output", output_dir, "--job-id", job_id]
-    print(f"[{job_id[:8]}] running: {' '.join(cmd)}")
+    log.info("[%s] starting backtest", tag)
+    log.debug("[%s] cmd: %s", tag, " ".join(cmd))
 
     run_env = {**os.environ, **extra_env} if extra_env else None
+    t_start = time.time()
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, env=run_env)
         # Always dump full stdout+stderr so we can debug without guessing.
@@ -273,25 +375,29 @@ def _run_backtest(job_id: str, config_path: str, output_dir: str, research_commi
         log_path.write_text(
             f"$ {' '.join(cmd)}\n\n=== STDOUT ===\n{result.stdout}\n\n=== STDERR ===\n{result.stderr}\n"
         )
+        elapsed = time.time() - t_start
         if result.returncode == 0:
             _generate_report(output_dir, config_path)
             jobs[job_id]["status"] = "SUCCEEDED"
             jobs[job_id]["completedAt"] = datetime.now(timezone.utc).isoformat()
-            print(f"[{job_id[:8]}] succeeded")
+            log.info("[%s] succeeded in %.1fs", tag, elapsed)
         else:
+            tail = (result.stderr or "").strip().splitlines()[-1:] or ["(no stderr)"]
             jobs[job_id]["status"] = "FAILED"
             jobs[job_id]["error"] = result.stderr[-500:] if result.stderr else "Unknown error"
             jobs[job_id]["completedAt"] = datetime.now(timezone.utc).isoformat()
-            print(f"[{job_id[:8]}] failed: {result.stderr[-200:]}")
-            print(f"[{job_id[:8]}] full log: {log_path}")
+            log.error("[%s] failed (%.1fs): %s", tag, elapsed, tail[0])
+            log.error("[%s] full log: %s", tag, log_path)
     except subprocess.TimeoutExpired:
         jobs[job_id]["status"] = "FAILED"
         jobs[job_id]["error"] = "Backtest timed out (30 min)"
         jobs[job_id]["completedAt"] = datetime.now(timezone.utc).isoformat()
+        log.error("[%s] timed out after 30 min", tag)
     except Exception as e:
         jobs[job_id]["status"] = "FAILED"
         jobs[job_id]["error"] = str(e)
         jobs[job_id]["completedAt"] = datetime.now(timezone.utc).isoformat()
+        log.exception("[%s] crashed: %s", tag, e)
 
 
 @app.get("/api/backtests/{job_id}")
@@ -392,8 +498,7 @@ async def agent_chat(req: AgentChatRequest):
             ):
                 q.put(event)
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            log.exception("agent chat failed: %s", e)
             q.put({"error": str(e)})
         finally:
             q.put(_DONE)
@@ -427,8 +532,7 @@ def agent_apply(req: AgentApplyRequest):
         )
         return result
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        log.exception("agent apply failed: %s", e)
         raise HTTPException(500, str(e))
 
 
@@ -436,19 +540,37 @@ def agent_apply(req: AgentApplyRequest):
 # Main
 # ---------------------------------------------------------------------------
 
+def _env_summary() -> dict[str, str]:
+    """Return a redacted snapshot of the resolved backend env so the startup
+    banner shows what's actually configured rather than what the user set."""
+    def _mask(val: str, keep: int = 4) -> str:
+        return f"set ({val[:keep]}…, len={len(val)})" if val else "MISSING"
+
+    return {
+        "AWS_PROFILE":            os.environ.get("AWS_PROFILE", "(default)"),
+        "STAGE":                  os.environ.get("STAGE", "(unset → prod)"),
+        "GNOME_REGISTRY_API_KEY": _mask(os.environ.get("GNOME_REGISTRY_API_KEY", "")),
+        "GNOME_REGISTRY_API_URL": os.environ.get("GNOME_REGISTRY_API_URL", "(unset)"),
+        "GH_TOKEN":               _mask(os.environ.get("GH_TOKEN", "")),
+        "ANTHROPIC_API_KEY":      _mask(os.environ.get("ANTHROPIC_API_KEY", "")),
+        "OPENAI_API_KEY":         _mask(os.environ.get("OPENAI_API_KEY", "")),
+        "PRESETS_TABLE":          PRESETS_TABLE,
+        "OUTPUT_ROOT":            str(OUTPUT_ROOT.resolve()),
+    }
+
+
 def main():
-    print(f"Backtest output dir: {OUTPUT_ROOT.resolve()}")
-    print(f"Presets table: {PRESETS_TABLE}")
-    print()
-    print("Set in your .env:")
-    print("  VITE_CONTROLLER_API_URL=http://localhost:5050/api")
-    print("  ANTHROPIC_API_KEY=sk-ant-...")
-    print()
-    print(f"GH_TOKEN: {'set (' + os.environ['GH_TOKEN'][:10] + '...)' if os.environ.get('GH_TOKEN') else 'NOT SET'}")
-    print(f"ANTHROPIC_API_KEY: {'set' if os.environ.get('ANTHROPIC_API_KEY') else 'NOT SET'}")
-    print(f"CONTROLLER_API_URL: {os.environ.get('CONTROLLER_API_URL', 'NOT SET')}")
-    print()
-    uvicorn.run(app, host="0.0.0.0", port=5050)
+    log.info("dev server starting")
+    for k, v in _env_summary().items():
+        log.info("  %-24s %s", k, v)
+
+    # Warn loudly if required-for-backtest vars are missing.
+    if not os.environ.get("GNOME_REGISTRY_API_KEY"):
+        log.warning("GNOME_REGISTRY_API_KEY is unset — backtests will 403 at SecurityMaster")
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")):
+        log.warning("no LLM key set — /api/agent/chat will fail")
+
+    uvicorn.run(app, host="0.0.0.0", port=5050, log_config=LOG_CONFIG)
 
 
 if __name__ == "__main__":
