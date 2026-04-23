@@ -4,6 +4,7 @@ import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-prob
 import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
 import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsListParams, TransformJobsSearchParams } from '../types/transform-jobs';
 import { GapsListResponse, GapsListParams, GapsByListingParams, GapsUpdateRequest, GapsUpdateResponse } from '../types/gaps';
+import { QualityIssuesListResponse, QualityIssuesListParams, QualityIssuesByListingParams, QualityIssuesUpdateRequest, QualityIssuesUpdateResponse, QualityBackfillRequest, QualityBackfillResponse, ListingStatisticsResponse, ListingStatisticsHistoryResponse, MinuteInvestigationResponse } from '../types/quality-issues';
 
 const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
 const REGISTRY_API_URL = import.meta.env.VITE_REGISTRY_API_URL;
@@ -180,6 +181,56 @@ export const marketDataApi = {
     sendApiRequest<GapsUpdateResponse>('/gaps/update', 'POST', {
       apiUrl: MARKET_DATA_API_URL,
       body: request,
+    }),
+  // Quality Issues endpoints
+  listQualityIssues: (params?: QualityIssuesListParams) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.status) queryParams.status = params.status;
+    if (params?.ruleType) queryParams.ruleType = params.ruleType;
+    if (params?.limit) queryParams.limit = params.limit;
+    if (params?.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
+    return sendApiRequest<QualityIssuesListResponse>('/quality-issues/list', 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  getQualityIssuesByListing: (params: QualityIssuesByListingParams) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params.limit) queryParams.limit = params.limit;
+    if (params.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
+    return sendApiRequest<QualityIssuesListResponse>(`/quality-issues/list/${params.listingId}`, 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  updateQualityIssues: (request: QualityIssuesUpdateRequest) =>
+    sendApiRequest<QualityIssuesUpdateResponse>('/quality-issues/update', 'POST', {
+      apiUrl: MARKET_DATA_API_URL,
+      body: request,
+    }),
+  triggerQualityBackfill: (request: QualityBackfillRequest) =>
+    sendApiRequest<QualityBackfillResponse>('/quality-issues/backfill', 'POST', {
+      apiUrl: MARKET_DATA_API_URL,
+      body: request,
+    }),
+  // Listing Statistics endpoint
+  getListingStatistics: (listingId: number) =>
+    sendApiRequest<ListingStatisticsResponse>(`/listing-statistics/${listingId}`, 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+    }),
+  getListingStatisticsHistory: (listingId: number, lookbackDays?: number) =>
+    sendApiRequest<ListingStatisticsHistoryResponse>(`/listing-statistics/${listingId}/history`, 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+      queryParams: lookbackDays !== undefined ? { lookbackDays } : undefined,
+    }),
+  investigateQualityIssue: (listingId: number, timestamp: number, schemaType: string, windowMinutes?: number) =>
+    sendApiRequest<MinuteInvestigationResponse>(`/quality-issues/investigate/${listingId}`, 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+      queryParams: {
+        timestamp,
+        schemaType,
+        ...(windowMinutes !== undefined ? { windowMinutes } : {}),
+      },
     }),
 };
 

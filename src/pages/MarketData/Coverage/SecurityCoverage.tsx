@@ -16,14 +16,24 @@ import {
   Anchor,
   Paper,
   SimpleGrid,
+  Select,
 } from '@mantine/core';
 import { IconRefresh, IconDatabase, IconClock, IconCalendar, IconArrowLeft } from '@tabler/icons-react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { marketDataApi } from '../../../utils/api';
 import { useGlobalState } from '../../../context/GlobalStateContext';
 import { SecurityCoverageResponse, ExchangeCoverage } from '../../../types/coverage';
+import { ListingStatisticsHistoryPoint } from '../../../types/quality-issues';
 
-// Helper function to format bytes to human-readable string
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -32,12 +42,29 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
-// Helper function to format minutes to hours/days
 function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
   if (minutes < 1440) return `${(minutes / 60).toFixed(1)} hrs`;
   return `${(minutes / 1440).toFixed(1)} days`;
 }
+
+const METRIC_LABELS: Record<string, string> = {
+  tickCount: 'Tick Count',
+  spread: 'Spread',
+  midPrice: 'Mid Price',
+  tradeVolume: 'Trade Volume',
+  tradeFrequency: 'Trade Frequency',
+  volatility: 'Volatility',
+};
+
+const METRIC_COLORS: Record<string, string> = {
+  tickCount: '#4c6ef5',
+  spread: '#f76707',
+  midPrice: '#2f9e44',
+  tradeVolume: '#ae3ec9',
+  tradeFrequency: '#e03131',
+  volatility: '#1098ad',
+};
 
 interface TableRow extends ExchangeCoverage {
   exchangeName: string;
@@ -46,10 +73,14 @@ interface TableRow extends ExchangeCoverage {
 function SecurityCoverage() {
   const { securityId } = useParams<{ securityId: string }>();
   const navigate = useNavigate();
-  const { securities, exchanges } = useGlobalState();
+  const { securities, exchanges, listings } = useGlobalState();
   const [data, setData] = useState<SecurityCoverageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
+  const [metricsHistory, setMetricsHistory] = useState<ListingStatisticsHistoryPoint[] | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
 
   const security = securities.find(s => s.securityId === Number(securityId));
 
@@ -71,6 +102,32 @@ function SecurityCoverage() {
     loadData();
   }, [securityId]);
 
+  const securityListings = useMemo(() => {
+    return listings
+      .filter(l => l.securityId === Number(securityId))
+      .map(l => ({
+        value: String(l.listingId),
+        label: exchanges.find(e => e.exchangeId === l.exchangeId)?.exchangeName || `Exchange ${l.exchangeId}`,
+      }));
+  }, [listings, exchanges, securityId]);
+
+  useEffect(() => {
+    if (securityListings.length > 0 && !selectedListingId) {
+      setSelectedListingId(securityListings[0].value);
+    }
+  }, [securityListings]);
+
+  useEffect(() => {
+    if (!selectedListingId) return;
+    setMetricsLoading(true);
+    setMetricsHistory(null);
+    marketDataApi
+      .getListingStatisticsHistory(Number(selectedListingId), 30)
+      .then(d => setMetricsHistory(d.history))
+      .catch(() => setMetricsHistory(null))
+      .finally(() => setMetricsLoading(false));
+  }, [selectedListingId]);
+
   const tableData = useMemo((): TableRow[] => {
     if (!data?.exchanges) return [];
     return Object.entries(data.exchanges).map(([, coverage]) => {
@@ -84,21 +141,21 @@ function SecurityCoverage() {
 
   const columns = useMemo<MRT_ColumnDef<TableRow>[]>(() => [
     { accessorKey: 'exchangeName', header: 'Exchange', size: 180 },
-    { 
-      accessorKey: 'totalDays', 
-      header: 'Days', 
+    {
+      accessorKey: 'totalDays',
+      header: 'Days',
       size: 80,
       Cell: ({ cell }) => cell.getValue<number>().toLocaleString(),
     },
-    { 
-      accessorKey: 'totalMinutes', 
-      header: 'Coverage', 
+    {
+      accessorKey: 'totalMinutes',
+      header: 'Coverage',
       size: 100,
       Cell: ({ cell }) => formatMinutes(cell.getValue<number>()),
     },
-    { 
-      accessorKey: 'totalSizeBytes', 
-      header: 'Size', 
+    {
+      accessorKey: 'totalSizeBytes',
+      header: 'Size',
       size: 100,
       Cell: ({ cell }) => formatBytes(cell.getValue<number>()),
     },
@@ -119,6 +176,13 @@ function SecurityCoverage() {
       style: { cursor: 'pointer' },
     }),
   });
+
+  const metricNames = useMemo(() => {
+    if (!metricsHistory || metricsHistory.length === 0) return [];
+    const seen = new Set<string>();
+    metricsHistory.forEach(point => Object.keys(point.metrics).forEach(m => seen.add(m)));
+    return Array.from(seen).sort();
+  }, [metricsHistory]);
 
   if (loading && !data) {
     return (
@@ -225,14 +289,93 @@ function SecurityCoverage() {
         </SimpleGrid>
       )}
 
-      <Card withBorder>
+      <Card withBorder mb="lg">
         <Title order={4} mb="md">Coverage by Exchange</Title>
         <Text size="sm" c="dimmed" mb="md">Click on an exchange to view detailed day-by-day coverage</Text>
         <MantineReactTable table={table} />
+      </Card>
+
+      <Card withBorder>
+        <Group justify="space-between" mb="md">
+          <Title order={4}>Quality Metrics (30-day history)</Title>
+          {securityListings.length > 1 && (
+            <Select
+              size="xs"
+              data={securityListings}
+              value={selectedListingId}
+              onChange={setSelectedListingId}
+              style={{ minWidth: 180 }}
+            />
+          )}
+        </Group>
+
+        {metricsLoading && (
+          <Center py="xl">
+            <Loader size="sm" />
+          </Center>
+        )}
+
+        {!metricsLoading && (!metricsHistory || metricsHistory.length === 0) && (
+          <Text c="dimmed" size="sm">No metrics data available for this listing.</Text>
+        )}
+
+        {!metricsLoading && metricsHistory && metricsHistory.length > 0 && (
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+            {metricNames.map(metric => {
+              const chartData = metricsHistory.map(point => ({
+                date: point.date.slice(5),
+                value: point.metrics[metric]?.mean ?? null,
+              }));
+              return (
+                <Paper key={metric} withBorder p="sm" radius="md">
+                  <Text size="xs" fw={600} mb="xs" c="dimmed" tt="uppercase">
+                    {METRIC_LABELS[metric] ?? metric}
+                  </Text>
+                  <ResponsiveContainer width="100%" height={140}>
+                    <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--mantine-color-gray-2)" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 10 }}
+                        interval="preserveStartEnd"
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10 }}
+                        tickLine={false}
+                        axisLine={false}
+                        width={50}
+                        tickFormatter={(v: number) =>
+                          v >= 1_000_000
+                            ? `${(v / 1_000_000).toFixed(1)}M`
+                            : v >= 1_000
+                            ? `${(v / 1_000).toFixed(1)}K`
+                            : v.toFixed(2)
+                        }
+                      />
+                      <RechartsTooltip
+                        formatter={(value: number) => [value.toFixed(4), METRIC_LABELS[metric] ?? metric]}
+                        labelStyle={{ fontSize: 11 }}
+                        contentStyle={{ fontSize: 11 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke={METRIC_COLORS[metric] ?? '#868e96'}
+                        dot={false}
+                        strokeWidth={1.5}
+                        connectNulls
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Paper>
+              );
+            })}
+          </SimpleGrid>
+        )}
       </Card>
     </Container>
   );
 }
 
 export default SecurityCoverage;
-

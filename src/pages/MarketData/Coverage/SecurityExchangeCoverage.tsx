@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Container,
   Title,
@@ -20,12 +20,16 @@ import {
   ScrollArea,
   Box,
   Tabs,
+  Skeleton,
 } from '@mantine/core';
-import { IconRefresh, IconDatabase, IconClock, IconCalendar, IconArrowLeft, IconTable, IconLayoutGrid } from '@tabler/icons-react';
+import { IconRefresh, IconDatabase, IconClock, IconCalendar, IconArrowLeft, IconTable, IconLayoutGrid, IconChartBar } from '@tabler/icons-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { marketDataApi } from '../../../utils/api';
 import { useGlobalState } from '../../../context/GlobalStateContext';
 import { SecurityExchangeCoverageResponse, DayCoverage } from '../../../types/coverage';
+import { ListingStatisticsResponse, QualityIssue, formatRuleType, getRuleTypeColor, QualityRuleType } from '../../../types/quality-issues';
+import { Listing } from '../../../types/security-master';
 
 // Helper function to format bytes to human-readable string
 function formatBytes(bytes: number): string {
@@ -76,14 +80,20 @@ function groupByMonth(dates: string[]): Map<string, string[]> {
 function SecurityExchangeCoverage() {
   const { securityId, exchangeId } = useParams<{ securityId: string; exchangeId: string }>();
   const navigate = useNavigate();
-  const { securities, exchanges } = useGlobalState();
+  const { securities, exchanges, listings } = useGlobalState();
   const [data, setData] = useState<SecurityExchangeCoverageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<string | null>('calendar');
+  const [listingStats, setListingStats] = useState<ListingStatisticsResponse | null>(null);
+  const [qualityIssueSummary, setQualityIssueSummary] = useState<QualityIssue[]>([]);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const security = securities.find(s => s.securityId === Number(securityId));
   const exchange = exchanges.find(e => e.exchangeId === Number(exchangeId));
+  const listing = listings.find(
+    (l: Listing) => l.securityId === Number(securityId) && l.exchangeId === Number(exchangeId)
+  );
 
   const loadData = async () => {
     if (!securityId || !exchangeId) return;
@@ -105,6 +115,22 @@ function SecurityExchangeCoverage() {
   useEffect(() => {
     loadData();
   }, [securityId, exchangeId]);
+
+  useEffect(() => {
+    if (!listing) return;
+    setStatsLoading(true);
+    Promise.all([
+      marketDataApi.getListingStatistics(listing.listingId),
+      marketDataApi.getQualityIssuesByListing({ listingId: listing.listingId, limit: 100 }),
+    ]).then(([stats, issues]) => {
+      setListingStats(stats);
+      setQualityIssueSummary(issues?.issues ?? []);
+    }).catch(() => {
+      // Non-critical — statistics may not exist yet
+    }).finally(() => {
+      setStatsLoading(false);
+    });
+  }, [listing?.listingId]);
 
   const tableData = useMemo((): TableRow[] => {
     if (!data?.coverage) return [];
@@ -135,6 +161,22 @@ function SecurityExchangeCoverage() {
     const months = groupByMonth(tableData.map(d => d.date));
     return { dateToData, months };
   }, [tableData]);
+
+  // Chart data sorted ascending for trend chart
+  const chartData = useMemo(() => {
+    return [...tableData]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map(row => ({ date: row.date, minutes: row.totalMinutes }));
+  }, [tableData]);
+
+  // Quality issues grouped by rule type
+  const qualityByRuleType = useMemo(() => {
+    const counts: Partial<Record<QualityRuleType, number>> = {};
+    (qualityIssueSummary ?? []).forEach(issue => {
+      counts[issue.ruleType] = (counts[issue.ruleType] ?? 0) + 1;
+    });
+    return counts;
+  }, [qualityIssueSummary]);
 
   const columns = useMemo<MRT_ColumnDef<TableRow>[]>(() => [
     { accessorKey: 'date', header: 'Date', size: 110 },
@@ -367,6 +409,9 @@ function SecurityExchangeCoverage() {
             <Tabs.Tab value="table" leftSection={<IconTable size={16} />}>
               Table View
             </Tabs.Tab>
+            <Tabs.Tab value="statistics" leftSection={<IconChartBar size={16} />}>
+              Statistics
+            </Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="calendar">
@@ -392,6 +437,121 @@ function SecurityExchangeCoverage() {
 
           <Tabs.Panel value="table">
             <MantineReactTable table={table} />
+          </Tabs.Panel>
+
+          <Tabs.Panel value="statistics">
+            <Stack gap="lg">
+              {/* Listing Statistics Cards */}
+              <div>
+                <Text size="sm" fw={600} mb="sm">Listing Statistics</Text>
+                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+                  {statsLoading && !listingStats
+                    ? [0, 1, 2].map(i => (
+                        <Paper key={i} withBorder p="md" radius="md">
+                          <Skeleton height={60} />
+                        </Paper>
+                      ))
+                    : Object.entries(listingStats?.metrics ?? {}).map(([metric, m]) => {
+                        const label = metric
+                          .replace(/([A-Z])/g, ' $1')
+                          .replace(/^./, s => s.toUpperCase())
+                          .trim();
+                        return (
+                          <Paper key={metric} withBorder p="md" radius="md">
+                            <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={4}>{label}</Text>
+                            <Text size="xl" fw={700}>
+                              {m.mean.toLocaleString(undefined, { maximumSignificantDigits: 4 })}
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                              ±{m.stddev.toLocaleString(undefined, { maximumSignificantDigits: 3 })} stddev · {m.count.toLocaleString()} samples
+                            </Text>
+                          </Paper>
+                        );
+                      })}
+                </SimpleGrid>
+                {listingStats?.lastUpdated && (
+                  <Text size="xs" c="dimmed" mt="xs">
+                    Last updated: {new Date(listingStats.lastUpdated * 1000).toLocaleString()}
+                  </Text>
+                )}
+              </div>
+
+              {/* Quality Issues Summary */}
+              <div>
+                <Group justify="space-between" mb="sm">
+                  <Text size="sm" fw={600}>Quality Issues</Text>
+                  {listing && (
+                    <Link
+                      to={`/market-data/quality-issues?listingId=${listing.listingId}`}
+                      style={{ fontSize: 'var(--mantine-font-size-xs)', color: 'var(--mantine-color-blue-6)' }}
+                    >
+                      View all issues →
+                    </Link>
+                  )}
+                </Group>
+                <Skeleton visible={statsLoading && qualityIssueSummary.length === 0}>
+                  {Object.keys(qualityByRuleType).length === 0 ? (
+                    <Text size="sm" c="dimmed">No quality issues found</Text>
+                  ) : (
+                    <Group gap="xs">
+                      {(Object.entries(qualityByRuleType) as [string, number][]).map(([ruleType, count]) => (
+                        <Badge
+                          key={ruleType}
+                          color={getRuleTypeColor(ruleType)}
+                          size="md"
+                          variant="light"
+                        >
+                          {formatRuleType(ruleType)}: {count}
+                        </Badge>
+                      ))}
+                    </Group>
+                  )}
+                </Skeleton>
+              </div>
+
+              {/* Coverage Trend Chart */}
+              <div>
+                <Text size="sm" fw={600} mb="sm">Coverage Trend</Text>
+                {chartData.length === 0 ? (
+                  <Text size="sm" c="dimmed">No coverage data available</Text>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="coverageGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="var(--mantine-color-green-6)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="var(--mantine-color-green-6)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--mantine-color-gray-3)" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={val => val.slice(5)}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={val => formatMinutes(val)}
+                        width={52}
+                      />
+                      <RechartsTooltip
+                        formatter={(val: number) => [formatMinutes(val), 'Coverage']}
+                        labelFormatter={label => `Date: ${label}`}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="minutes"
+                        stroke="var(--mantine-color-green-6)"
+                        strokeWidth={2}
+                        fill="url(#coverageGradient)"
+                        dot={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </Stack>
           </Tabs.Panel>
         </Tabs>
       </Card>

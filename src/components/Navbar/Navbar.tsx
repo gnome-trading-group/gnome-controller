@@ -21,6 +21,7 @@ const routes = [
       { label: 'Collectors', link: '/market-data/collectors' },
       { label: 'Transform Jobs', link: '/market-data/transform-jobs' },
       { label: 'Gaps', link: '/market-data/gaps' },
+      { label: 'Quality Issues', link: '/market-data/quality-issues' },
     ],
   },
   { icon: IconLockSquareRounded, label: 'Security Master', link: '/security-master' },
