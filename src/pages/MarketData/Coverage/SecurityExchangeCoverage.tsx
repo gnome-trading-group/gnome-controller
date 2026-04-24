@@ -23,12 +23,12 @@ import {
   Skeleton,
 } from '@mantine/core';
 import { IconRefresh, IconDatabase, IconClock, IconCalendar, IconArrowLeft, IconTable, IconLayoutGrid, IconChartBar } from '@tabler/icons-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { marketDataApi } from '../../../utils/api';
 import { useGlobalState } from '../../../context/GlobalStateContext';
 import { SecurityExchangeCoverageResponse, DayCoverage } from '../../../types/coverage';
-import { ListingStatisticsResponse, QualityIssue, formatRuleType, getRuleTypeColor, QualityRuleType } from '../../../types/quality-issues';
+import { ListingStatisticsHistoryPoint, QualityIssue, formatRuleType, getRuleTypeColor, QualityRuleType } from '../../../types/quality-issues';
 import { Listing } from '../../../types/security-master';
 
 // Helper function to format bytes to human-readable string
@@ -63,6 +63,24 @@ function getCoverageColor(minutes: number, maxMinutes: number): string {
   return 'var(--mantine-color-green-8)';
 }
 
+const METRIC_LABELS: Record<string, string> = {
+  tickCount: 'Tick Count',
+  spread: 'Spread',
+  midPrice: 'Mid Price',
+  tradeVolume: 'Trade Volume',
+  tradeFrequency: 'Trade Frequency',
+  volatility: 'Volatility',
+};
+
+const METRIC_COLORS: Record<string, string> = {
+  tickCount: '#4c6ef5',
+  spread: '#f76707',
+  midPrice: '#2f9e44',
+  tradeVolume: '#ae3ec9',
+  tradeFrequency: '#e03131',
+  volatility: '#1098ad',
+};
+
 // Group dates by month for calendar view
 function groupByMonth(dates: string[]): Map<string, string[]> {
   const groups = new Map<string, string[]>();
@@ -85,7 +103,7 @@ function SecurityExchangeCoverage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<string | null>('calendar');
-  const [listingStats, setListingStats] = useState<ListingStatisticsResponse | null>(null);
+  const [metricsHistory, setMetricsHistory] = useState<ListingStatisticsHistoryPoint[] | null>(null);
   const [qualityIssueSummary, setQualityIssueSummary] = useState<QualityIssue[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
 
@@ -120,10 +138,10 @@ function SecurityExchangeCoverage() {
     if (!listing) return;
     setStatsLoading(true);
     Promise.all([
-      marketDataApi.getListingStatistics(listing.listingId),
+      marketDataApi.getListingStatisticsHistory(listing.listingId),
       marketDataApi.getQualityIssuesByListing({ listingId: listing.listingId, limit: 100 }),
-    ]).then(([stats, issues]) => {
-      setListingStats(stats);
+    ]).then(([statsHistory, issues]) => {
+      setMetricsHistory(statsHistory.history);
       setQualityIssueSummary(issues?.issues ?? []);
     }).catch(() => {
       // Non-critical — statistics may not exist yet
@@ -168,6 +186,15 @@ function SecurityExchangeCoverage() {
       .sort((a, b) => a.date.localeCompare(b.date))
       .map(row => ({ date: row.date, minutes: row.totalMinutes }));
   }, [tableData]);
+
+  const metricNames = useMemo(() => {
+    if (!metricsHistory) return [];
+    const seen = new Set<string>();
+    for (const point of metricsHistory) {
+      for (const key of Object.keys(point.metrics)) seen.add(key);
+    }
+    return Object.keys(METRIC_LABELS).filter(m => seen.has(m));
+  }, [metricsHistory]);
 
   // Quality issues grouped by rule type
   const qualityByRuleType = useMemo(() => {
@@ -441,38 +468,113 @@ function SecurityExchangeCoverage() {
 
           <Tabs.Panel value="statistics">
             <Stack gap="lg">
-              {/* Listing Statistics Cards */}
+              {/* Listing Statistics Charts */}
               <div>
                 <Text size="sm" fw={600} mb="sm">Listing Statistics</Text>
-                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-                  {statsLoading && !listingStats
-                    ? [0, 1, 2].map(i => (
-                        <Paper key={i} withBorder p="md" radius="md">
-                          <Skeleton height={60} />
+                {statsLoading && !metricsHistory ? (
+                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+                    {[0, 1, 2, 3, 4, 5].map(i => (
+                      <Paper key={i} withBorder p="md" radius="md">
+                        <Skeleton height={160} />
+                      </Paper>
+                    ))}
+                  </SimpleGrid>
+                ) : metricNames.length === 0 ? (
+                  <Text size="sm" c="dimmed">No statistics available</Text>
+                ) : (
+                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+                    {metricNames.map(metric => {
+                      const color = METRIC_COLORS[metric] ?? '#868e96';
+                      const chartData = metricsHistory!.map(point => {
+                        const m = point.metrics[metric];
+                        if (!m) return { date: point.date.slice(5), mean: null, lower: null, band: null };
+                        return {
+                          date: point.date.slice(5),
+                          mean: m.mean,
+                          lower: m.mean - m.stddev,
+                          band: 2 * m.stddev,
+                        };
+                      });
+                      return (
+                        <Paper key={metric} withBorder p="sm" radius="md">
+                          <Text size="xs" fw={600} mb="xs" c="dimmed" tt="uppercase">
+                            {METRIC_LABELS[metric] ?? metric}
+                          </Text>
+                          <ResponsiveContainer width="100%" height={160}>
+                            <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="var(--mantine-color-gray-2)" />
+                              <XAxis
+                                dataKey="date"
+                                tick={{ fontSize: 10 }}
+                                interval="preserveStartEnd"
+                                tickLine={false}
+                              />
+                              <YAxis
+                                tick={{ fontSize: 10 }}
+                                tickLine={false}
+                                axisLine={false}
+                                width={50}
+                                tickFormatter={(v: number) =>
+                                  v >= 1_000_000
+                                    ? `${(v / 1_000_000).toFixed(1)}M`
+                                    : v >= 1_000
+                                    ? `${(v / 1_000).toFixed(1)}K`
+                                    : v.toFixed(2)
+                                }
+                              />
+                              <RechartsTooltip
+                                content={(props) => {
+                                  if (!props.active || !props.payload?.length) return null;
+                                  const d = props.payload[0]?.payload;
+                                  if (d?.mean == null) return null;
+                                  const upper = (d.lower + d.band).toFixed(4);
+                                  const lower = Number(d.lower).toFixed(4);
+                                  const mean = Number(d.mean).toFixed(4);
+                                  return (
+                                    <div style={{ background: 'var(--mantine-color-dark-7)', border: '1px solid var(--mantine-color-dark-4)', padding: '6px 10px', fontSize: 11, borderRadius: 4 }}>
+                                      <div style={{ marginBottom: 4, color: 'var(--mantine-color-dimmed)' }}>{props.label}</div>
+                                      <div style={{ color: color }}>Mean: {mean}</div>
+                                      <div style={{ color: 'var(--mantine-color-dimmed)' }}>+1σ: {upper}</div>
+                                      <div style={{ color: 'var(--mantine-color-dimmed)' }}>−1σ: {lower}</div>
+                                    </div>
+                                  );
+                                }}
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="lower"
+                                stackId="band"
+                                fill="transparent"
+                                stroke="none"
+                                dot={false}
+                                isAnimationActive={false}
+                                legendType="none"
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="band"
+                                stackId="band"
+                                fill={color}
+                                fillOpacity={0.15}
+                                stroke="none"
+                                dot={false}
+                                isAnimationActive={false}
+                                legendType="none"
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="mean"
+                                stroke={color}
+                                dot={false}
+                                strokeWidth={1.5}
+                                connectNulls
+                              />
+                            </ComposedChart>
+                          </ResponsiveContainer>
                         </Paper>
-                      ))
-                    : Object.entries(listingStats?.metrics ?? {}).map(([metric, m]) => {
-                        const label = metric
-                          .replace(/([A-Z])/g, ' $1')
-                          .replace(/^./, s => s.toUpperCase())
-                          .trim();
-                        return (
-                          <Paper key={metric} withBorder p="md" radius="md">
-                            <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={4}>{label}</Text>
-                            <Text size="xl" fw={700}>
-                              {m.mean.toLocaleString(undefined, { maximumSignificantDigits: 4 })}
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                              ±{m.stddev.toLocaleString(undefined, { maximumSignificantDigits: 3 })} stddev · {m.count.toLocaleString()} samples
-                            </Text>
-                          </Paper>
-                        );
-                      })}
-                </SimpleGrid>
-                {listingStats?.lastUpdated && (
-                  <Text size="xs" c="dimmed" mt="xs">
-                    Last updated: {new Date(listingStats.lastUpdated * 1000).toLocaleString()}
-                  </Text>
+                      );
+                    })}
+                  </SimpleGrid>
                 )}
               </div>
 

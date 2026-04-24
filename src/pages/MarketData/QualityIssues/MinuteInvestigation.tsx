@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
   Title,
@@ -10,7 +10,6 @@ import {
   Center,
   Loader,
   Badge,
-  Select,
   Anchor,
   Breadcrumbs,
   Paper,
@@ -29,10 +28,13 @@ import {
 } from 'recharts';
 import { marketDataApi } from '../../../utils/api';
 import { useGlobalState } from '../../../context/GlobalStateContext';
-import { MinuteInvestigationResponse, MinuteMetrics, MinuteInvestigationIssue } from '../../../types/quality-issues';
-import { formatRuleType, getRuleTypeColor } from '../../../types/quality-issues';
-
-const SCHEMA_TYPES = ['mbp-10', 'mbp-1', 'mbo', 'trades', 'bbo-1s', 'bbo-1m', 'ohlcv-1s', 'ohlcv-1m', 'ohlcv-1h'];
+import {
+  MinuteInvestigationResponse,
+  MinuteMetrics,
+  MinuteInvestigationIssue,
+  formatRuleType,
+  getRuleTypeColor,
+} from '../../../types/quality-issues';
 
 const METRIC_LABELS: Record<string, string> = {
   tickCount: 'Tick Count',
@@ -41,6 +43,15 @@ const METRIC_LABELS: Record<string, string> = {
   tradeVolume: 'Trade Volume',
   tradeFrequency: 'Trade Frequency',
   volatility: 'Volatility',
+};
+
+const RULE_TYPE_TO_METRIC: Record<string, string> = {
+  TICK_COUNT_ANOMALY: 'tickCount',
+  SPREAD_ANOMALY: 'spread',
+  MID_PRICE_ANOMALY: 'midPrice',
+  TRADE_VOLUME_ANOMALY: 'tradeVolume',
+  TRADE_FREQUENCY_ANOMALY: 'tradeFrequency',
+  VOLATILITY_ANOMALY: 'volatility',
 };
 
 const METRIC_COLORS: Record<string, string> = {
@@ -78,14 +89,15 @@ function formatMetricValue(metricName: string, value: number | null): string {
 interface MetricChartProps {
   metricName: string;
   data: Array<{ timestamp: number; value: number | null }>;
-  centerTimestamp: number;
+  issues: MinuteInvestigationIssue[];
   baselineMean?: number;
 }
 
-function MetricChart({ metricName, data, centerTimestamp, baselineMean }: MetricChartProps) {
+function MetricChart({ metricName, data, issues, baselineMean }: MetricChartProps) {
   const label = METRIC_LABELS[metricName] || metricName;
   const color = METRIC_COLORS[metricName] || '#888';
-  const centerLabel = formatUtcTimestamp(centerTimestamp);
+
+  const issueByTime = new Map(issues.map((i) => [formatUtcTimestamp(i.timestamp), i]));
 
   const chartData = data.map((d) => ({
     time: formatUtcTimestamp(d.timestamp),
@@ -106,16 +118,35 @@ function MetricChart({ metricName, data, centerTimestamp, baselineMean }: Metric
           />
           <YAxis tick={{ fontSize: 10, fill: '#aaa' }} width={60} />
           <RechartsTooltip
-            contentStyle={{ background: '#1a1a1a', border: '1px solid #444', fontSize: 12 }}
-            formatter={(val) => [formatMetricValue(metricName, Number(val)), label]}
+            content={(props) => {
+              if (!props.active || !props.payload?.length) return null;
+              const time = props.label as string;
+              const val = props.payload[0]?.value;
+              const issue = issueByTime.get(time);
+              return (
+                <div style={{ background: '#1a1a1a', border: `1px solid ${issue ? '#fa5252' : '#444'}`, borderRadius: 4, padding: '6px 10px', fontSize: 12, maxWidth: 240 }}>
+                  <div style={{ color: '#aaa', marginBottom: 4 }}>{time}</div>
+                  <div style={{ color }}>{label}: {formatMetricValue(metricName, val != null ? Number(val) : null)}</div>
+                  {issue && (
+                    <div style={{ marginTop: 6, borderTop: '1px solid #333', paddingTop: 6 }}>
+                      <div style={{ color: '#fa5252', fontWeight: 600, marginBottom: 2 }}>{formatRuleType(issue.ruleType)}</div>
+                      {issue.details && <div style={{ color: '#ccc' }}>{issue.details}</div>}
+                    </div>
+                  )}
+                </div>
+              );
+            }}
           />
-          <ReferenceLine
-            x={centerLabel}
-            stroke="#fa5252"
-            strokeWidth={2}
-            strokeDasharray="4 2"
-            label={{ value: '⚠', position: 'top', fill: '#fa5252', fontSize: 12 }}
-          />
+          {[...issueByTime.keys()].map((time) => (
+            <ReferenceLine
+              key={time}
+              x={time}
+              stroke="#fa5252"
+              strokeWidth={2}
+              strokeDasharray="4 2"
+              label={{ value: '⚠', position: 'top', fill: '#fa5252', fontSize: 12 }}
+            />
+          ))}
           {baselineMean !== undefined && (
             <ReferenceLine
               y={baselineMean}
@@ -160,54 +191,54 @@ function IssueCard({ issue }: { issue: MinuteInvestigationIssue }) {
 
 function MinuteInvestigation() {
   const { listingId, timestamp } = useParams<{ listingId: string; timestamp: string }>();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { listings, exchanges, securities } = useGlobalState();
 
-  const initialSchemaType = searchParams.get('schemaType') || 'mbp-10';
-  const [schemaType, setSchemaType] = useState<string>(initialSchemaType);
   const [data, setData] = useState<MinuteInvestigationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const listing = listings.find((l) => l.listingId === Number(listingId));
-  const exchange = listing ? exchanges.find((e) => e.exchangeId === listing.exchangeId) : undefined;
-  const security = listing ? securities.find((s) => s.securityId === listing.securityId) : undefined;
-  const listingLabel = security && exchange ? `${security.symbol} @ ${exchange.exchangeName}` : `Listing ${listingId}`;
+  const { listingLabel } = useMemo(() => {
+    const listing = listings.find((l) => l.listingId === Number(listingId));
+    const exchange = listing ? exchanges.find((e) => e.exchangeId === listing.exchangeId) : undefined;
+    const security = listing ? securities.find((s) => s.securityId === listing.securityId) : undefined;
+    return {
+      listingLabel: security && exchange ? `${security.symbol} @ ${exchange.exchangeName}` : `Listing ${listingId}`,
+    };
+  }, [listingId, listings, exchanges, securities]);
 
   useEffect(() => {
     if (!listingId || !timestamp) return;
     setLoading(true);
     setError(null);
     marketDataApi
-      .investigateQualityIssue(Number(listingId), Number(timestamp), schemaType)
+      .investigateQualityIssue(Number(listingId), Number(timestamp))
       .then(setData)
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load investigation data'))
       .finally(() => setLoading(false));
-  }, [listingId, timestamp, schemaType]);
+  }, [listingId, timestamp]);
 
-  const metricsPresent = useMemo(() => {
-    if (!data) return [];
+  const { metricsPresent, chartDataByMetric } = useMemo(() => {
+    if (!data) return { metricsPresent: [], chartDataByMetric: {} };
+
     const seen = new Set<string>();
     for (const minute of data.minutes) {
       for (const key of Object.keys(minute.metrics)) {
         seen.add(key);
       }
     }
-    return Object.keys(METRIC_LABELS).filter((m) => seen.has(m));
-  }, [data]);
+    const metricsPresent = Object.keys(METRIC_LABELS).filter((m) => seen.has(m));
 
-  const chartDataByMetric = useMemo(() => {
-    if (!data) return {};
-    const result: Record<string, Array<{ timestamp: number; value: number | null }>> = {};
+    const chartDataByMetric: Record<string, Array<{ timestamp: number; value: number | null }>> = {};
     for (const metric of metricsPresent) {
-      result[metric] = data.minutes.map((m: MinuteMetrics) => ({
+      chartDataByMetric[metric] = data.minutes.map((m: MinuteMetrics) => ({
         timestamp: m.timestamp,
         value: m.hasData ? (m.metrics[metric] ?? null) : null,
       }));
     }
-    return result;
-  }, [data, metricsPresent]);
+
+    return { metricsPresent, chartDataByMetric };
+  }, [data]);
 
   return (
     <Container size="xl" py="md">
@@ -218,17 +249,7 @@ function MinuteInvestigation() {
           <Text size="sm">{timestamp ? formatFullUtc(Number(timestamp)) : ''}</Text>
         </Breadcrumbs>
 
-        <Group justify="space-between" align="flex-end">
-          <Title order={2}>Minute Investigation</Title>
-          <Select
-            label="Schema Type"
-            data={SCHEMA_TYPES.map((s) => ({ value: s, label: s }))}
-            value={schemaType}
-            onChange={(v) => v && setSchemaType(v)}
-            style={{ minWidth: 160 }}
-            size="sm"
-          />
-        </Group>
+        <Title order={2}>Minute Investigation</Title>
 
         {error && (
           <Notification color="red" onClose={() => setError(null)}>{error}</Notification>
@@ -247,6 +268,17 @@ function MinuteInvestigation() {
                   ))}
                 </SimpleGrid>
               </Stack>
+            )}
+
+            {data.issues.some((i) => i.ruleType.endsWith('_ANOMALY') && !(i.ruleType in RULE_TYPE_TO_METRIC)) && (
+              <Notification color="yellow" withCloseButton={false}>
+                Some anomaly rule types have no chart mapping:{' '}
+                {[...new Set(data.issues
+                  .filter((i) => i.ruleType.endsWith('_ANOMALY') && !(i.ruleType in RULE_TYPE_TO_METRIC))
+                  .map((i) => i.ruleType)
+                )].join(', ')}
+                . Add them to <code>RULE_TYPE_TO_METRIC</code> to show markers on the relevant chart.
+              </Notification>
             )}
 
             {Object.keys(data.baseline).length > 0 && (
@@ -271,14 +303,14 @@ function MinuteInvestigation() {
                     key={metric}
                     metricName={metric}
                     data={chartDataByMetric[metric] || []}
-                    centerTimestamp={data.centerTimestamp}
+                    issues={data.issues.filter((i) => RULE_TYPE_TO_METRIC[i.ruleType] === metric)}
                     baselineMean={data.baseline[metric]?.mean}
                   />
                 ))}
               </SimpleGrid>
             ) : (
               <Center py="xl">
-                <Text c="dimmed">No data found for schema type <strong>{schemaType}</strong> in this time window.</Text>
+                <Text c="dimmed">No data found for schema type <strong>{data.schemaType}</strong> in this time window.</Text>
               </Center>
             )}
           </>

@@ -344,13 +344,8 @@ function QualityIssues() {
     },
     mantineTableBodyRowProps: ({ row }) => ({
       onClick: () => {
-        const { listingId, timestamp, s3Key } = row.original;
-        const schemaType = s3Key ? s3Key.split('/').pop()?.replace('.zst', '') : undefined;
-        if (schemaType) {
-          navigate(`/market-data/quality-issues/investigate/${listingId}/${timestamp}?schemaType=${schemaType}`);
-        } else {
-          navigate(`/market-data/quality-issues/investigate/${listingId}/${timestamp}`);
-        }
+        const { listingId, timestamp } = row.original;
+        navigate(`/market-data/quality-issues/investigate/${listingId}/${timestamp}`);
       },
       style: { cursor: 'pointer' },
     }),

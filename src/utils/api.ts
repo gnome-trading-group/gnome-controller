@@ -223,12 +223,11 @@ export const marketDataApi = {
       apiUrl: MARKET_DATA_API_URL,
       queryParams: lookbackDays !== undefined ? { lookbackDays } : undefined,
     }),
-  investigateQualityIssue: (listingId: number, timestamp: number, schemaType: string, windowMinutes?: number) =>
+  investigateQualityIssue: (listingId: number, timestamp: number, windowMinutes?: number) =>
     sendApiRequest<MinuteInvestigationResponse>(`/quality-issues/investigate/${listingId}`, 'GET', {
       apiUrl: MARKET_DATA_API_URL,
       queryParams: {
         timestamp,
-        schemaType,
         ...(windowMinutes !== undefined ? { windowMinutes } : {}),
       },
     }),
