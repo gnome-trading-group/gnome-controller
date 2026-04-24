@@ -536,7 +536,7 @@ function SecurityExchangeCoverage() {
                         width={52}
                       />
                       <RechartsTooltip
-                        formatter={(val: number) => [formatMinutes(val), 'Coverage']}
+                        formatter={(val) => [formatMinutes(Number(val)), 'Coverage']}
                         labelFormatter={label => `Date: ${label}`}
                       />
                       <Area

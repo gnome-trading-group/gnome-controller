@@ -107,7 +107,7 @@ function MetricChart({ metricName, data, centerTimestamp, baselineMean }: Metric
           <YAxis tick={{ fontSize: 10, fill: '#aaa' }} width={60} />
           <RechartsTooltip
             contentStyle={{ background: '#1a1a1a', border: '1px solid #444', fontSize: 12 }}
-            formatter={(val: number) => [formatMetricValue(metricName, val), label]}
+            formatter={(val) => [formatMetricValue(metricName, Number(val)), label]}
           />
           <ReferenceLine
             x={centerLabel}

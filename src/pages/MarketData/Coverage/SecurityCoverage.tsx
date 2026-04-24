@@ -354,7 +354,7 @@ function SecurityCoverage() {
                         }
                       />
                       <RechartsTooltip
-                        formatter={(value: number) => [value.toFixed(4), METRIC_LABELS[metric] ?? metric]}
+                        formatter={(value) => [Number(value).toFixed(4), METRIC_LABELS[metric] ?? metric]}
                         labelStyle={{ fontSize: 11 }}
                         contentStyle={{ fontSize: 11 }}
                       />
