@@ -20,7 +20,8 @@ import {
 } from '@mantine/core';
 import { IconRefresh, IconDatabase, IconClock, IconCalendar, IconArrowLeft } from '@tabler/icons-react';
 import {
-  LineChart,
+  ComposedChart,
+  Area,
   Line,
   XAxis,
   YAxis,
@@ -322,17 +323,24 @@ function SecurityCoverage() {
         {!metricsLoading && metricsHistory && metricsHistory.length > 0 && (
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
             {metricNames.map(metric => {
-              const chartData = metricsHistory.map(point => ({
-                date: point.date.slice(5),
-                value: point.metrics[metric]?.mean ?? null,
-              }));
+              const color = METRIC_COLORS[metric] ?? '#868e96';
+              const chartData = metricsHistory.map(point => {
+                const m = point.metrics[metric];
+                if (!m) return { date: point.date.slice(5), mean: null, lower: null, band: null };
+                return {
+                  date: point.date.slice(5),
+                  mean: m.mean,
+                  lower: m.mean - m.stddev,
+                  band: 2 * m.stddev,
+                };
+              });
               return (
                 <Paper key={metric} withBorder p="sm" radius="md">
                   <Text size="xs" fw={600} mb="xs" c="dimmed" tt="uppercase">
                     {METRIC_LABELS[metric] ?? metric}
                   </Text>
                   <ResponsiveContainer width="100%" height={140}>
-                    <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                    <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--mantine-color-gray-2)" />
                       <XAxis
                         dataKey="date"
@@ -354,19 +362,53 @@ function SecurityCoverage() {
                         }
                       />
                       <RechartsTooltip
-                        formatter={(value) => [Number(value).toFixed(4), METRIC_LABELS[metric] ?? metric]}
-                        labelStyle={{ fontSize: 11 }}
-                        contentStyle={{ fontSize: 11 }}
+                        content={(props) => {
+                          if (!props.active || !props.payload?.length) return null;
+                          const d = props.payload[0]?.payload;
+                          if (d?.mean == null) return null;
+                          const upper = (d.lower + d.band).toFixed(4);
+                          const lower = Number(d.lower).toFixed(4);
+                          const mean = Number(d.mean).toFixed(4);
+                          return (
+                            <div style={{ background: 'var(--mantine-color-dark-7)', border: '1px solid var(--mantine-color-dark-4)', padding: '6px 10px', fontSize: 11, borderRadius: 4 }}>
+                              <div style={{ marginBottom: 4, color: 'var(--mantine-color-dimmed)' }}>{props.label}</div>
+                              <div style={{ color }}>Mean: {mean}</div>
+                              <div style={{ color: 'var(--mantine-color-dimmed)' }}>+1σ: {upper}</div>
+                              <div style={{ color: 'var(--mantine-color-dimmed)' }}>−1σ: {lower}</div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="lower"
+                        stackId="band"
+                        fill="transparent"
+                        stroke="none"
+                        dot={false}
+                        isAnimationActive={false}
+                        legendType="none"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="band"
+                        stackId="band"
+                        fill={color}
+                        fillOpacity={0.15}
+                        stroke="none"
+                        dot={false}
+                        isAnimationActive={false}
+                        legendType="none"
                       />
                       <Line
                         type="monotone"
-                        dataKey="value"
-                        stroke={METRIC_COLORS[metric] ?? '#868e96'}
+                        dataKey="mean"
+                        stroke={color}
                         dot={false}
                         strokeWidth={1.5}
                         connectNulls
                       />
-                    </LineChart>
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </Paper>
               );
