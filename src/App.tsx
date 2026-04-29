@@ -20,6 +20,11 @@ import StrategyDetail from './pages/Strategies/StrategyDetail';
 import RiskPolicies from './pages/Risk/RiskPolicies';
 import { GlobalStateProvider } from './context/GlobalStateContext';
 import CollectorDetail from './pages/CollectorDetail/CollectorDetail';
+import BacktestList from './pages/Backtests/BacktestList';
+import BacktestSubmit from './pages/Backtests/BacktestSubmit';
+import BacktestDetail from './pages/Backtests/BacktestDetail';
+import BacktestPresets from './pages/Backtests/BacktestPresets';
+import AgentPage from './pages/Agent/AgentPage';
 import QualityIssues from './pages/MarketData/QualityIssues/QualityIssues';
 import MinuteInvestigation from './pages/MarketData/QualityIssues/MinuteInvestigation';
 
@@ -42,7 +47,7 @@ function LoginScreen() {
 
 function Logout() {
   const navigate = useNavigate();
-  
+
   const handleLogout = async () => {
     await signOut();
     navigate('/');
@@ -116,6 +121,11 @@ function AppContent() {
             <Route path="/market-data/quality-issues" element={<QualityIssues />} />
             <Route path="/market-data/quality-issues/investigate/:listingId/:timestamp" element={<MinuteInvestigation />} />
             <Route path="/tools/latency-probe" element={<LatencyProbe />} />
+            <Route path="/backtests" element={<BacktestList />} />
+            <Route path="/backtests/new" element={<BacktestSubmit />} />
+            <Route path="/backtests/presets" element={<BacktestPresets />} />
+            <Route path="/backtests/:jobId" element={<BacktestDetail />} />
+            <Route path="/gnomie" element={<AgentPage />} />
             <Route path="/strategies" element={<Strategies />} />
             <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
             <Route path="/risk/policies" element={<RiskPolicies />} />
