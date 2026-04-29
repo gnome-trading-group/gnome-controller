@@ -25,6 +25,8 @@ import BacktestSubmit from './pages/Backtests/BacktestSubmit';
 import BacktestDetail from './pages/Backtests/BacktestDetail';
 import BacktestPresets from './pages/Backtests/BacktestPresets';
 import AgentPage from './pages/Agent/AgentPage';
+import QualityIssues from './pages/MarketData/QualityIssues/QualityIssues';
+import MinuteInvestigation from './pages/MarketData/QualityIssues/MinuteInvestigation';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -116,6 +118,8 @@ function AppContent() {
             <Route path="/market-data/coverage/:securityId/:exchangeId" element={<SecurityExchangeCoverage />} />
             <Route path="/market-data/transform-jobs" element={<TransformJobs />} />
             <Route path="/market-data/gaps" element={<Gaps />} />
+            <Route path="/market-data/quality-issues" element={<QualityIssues />} />
+            <Route path="/market-data/quality-issues/investigate/:listingId/:timestamp" element={<MinuteInvestigation />} />
             <Route path="/tools/latency-probe" element={<LatencyProbe />} />
             <Route path="/backtests" element={<BacktestList />} />
             <Route path="/backtests/new" element={<BacktestSubmit />} />
