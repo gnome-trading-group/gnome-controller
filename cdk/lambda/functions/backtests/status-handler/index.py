@@ -45,13 +45,17 @@ def _read_summary(run_id: str, array_index: int) -> dict:
         return {}
 
 
-def _update_job(run_id: str, array_index: int, batch_status: str, job_id: str) -> None:
+def _update_job(run_id: str, array_index: int, batch_status: str, job_id: str, log_stream_name: str | None) -> None:
     our_status = _STATUS_MAP.get(batch_status, batch_status)
     sk = f"JOB#{array_index:04d}"
 
     update_expr = "SET #st = :s, batch_child_job_id = :jid"
     names = {"#st": "status"}
     values: dict = {":s": our_status, ":jid": job_id}
+
+    if log_stream_name:
+        update_expr += ", log_stream_name = :lsn"
+        values[":lsn"] = log_stream_name
 
     if batch_status == "SUCCEEDED":
         summary = _read_summary(run_id, array_index)
@@ -110,6 +114,7 @@ def handler(event: dict, context) -> None:
     batch_status = detail.get("status", "")
     job_name = detail.get("jobName", "")
     job_id = detail.get("jobId", "")
+    log_stream_name = (detail.get("container") or {}).get("logStreamName")
 
     # Array child jobs have jobName like "backtest-<run_id>:<array_index>"
     array_index = 0
@@ -124,7 +129,7 @@ def handler(event: dict, context) -> None:
     if not run_id:
         return
 
-    _update_job(run_id, array_index, batch_status, job_id)
+    _update_job(run_id, array_index, batch_status, job_id, log_stream_name)
 
     if batch_status in _TERMINAL:
         _try_finalize_run(run_id)
