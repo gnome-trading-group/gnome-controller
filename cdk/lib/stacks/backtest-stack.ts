@@ -131,6 +131,7 @@ export class BacktestStack extends cdk.Stack {
         memory: cdk.Size.gibibytes(8),
         jobRole: batchJobRole,
         executionRole: batchExecutionRole,
+        environment: { AWS_DEFAULT_REGION: this.region },
       }),
       retryAttempts: 2,
     });
