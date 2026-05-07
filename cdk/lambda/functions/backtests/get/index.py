@@ -11,6 +11,9 @@ from utils import create_response
 
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
 S3_BUCKET = os.environ["S3_BUCKET"]
+AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+_JOB_DEF_NAME = "gnome-backtest"
+_LOG_GROUP = "/aws/batch/job"
 
 _ddb = boto3.resource("dynamodb")
 _table = _ddb.Table(DYNAMODB_TABLE)
@@ -25,6 +28,14 @@ def _decimal_to_native(obj):
     if isinstance(obj, list):
         return [_decimal_to_native(v) for v in obj]
     return obj
+
+
+def _cloudwatch_log_url(child_job_id: str) -> str:
+    log_stream = f"{_JOB_DEF_NAME}/default/{child_job_id}"
+    encoded_group = _LOG_GROUP.replace("/", "$252F")
+    encoded_stream = log_stream.replace("/", "$2F")
+    base = f"https://{AWS_REGION}.console.aws.amazon.com/cloudwatch/home?region={AWS_REGION}"
+    return f"{base}#logsV2:log-groups/log-group/{encoded_group}/log-events/{encoded_stream}"
 
 
 def _presigned_report_url(run_id: str, array_index: int) -> str | None:
@@ -64,11 +75,13 @@ def handler(event: dict, context) -> dict:
         key=lambda i: i.get("array_index", 0),
     )
 
-    # Add presigned report URLs for completed jobs
+    # Add presigned report URLs and CloudWatch log links for each job
     for job in jobs:
         idx = job.get("array_index", 0)
         if job.get("status") == "SUCCEEDED":
             job["report_url"] = _presigned_report_url(run_id, idx)
+        if child_job_id := job.get("batch_child_job_id"):
+            job["log_url"] = _cloudwatch_log_url(child_job_id)
 
     result = {**meta, "jobs": jobs}
     result.pop("config_yaml", None)  # exclude large field from list view

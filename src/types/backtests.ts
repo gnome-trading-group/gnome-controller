@@ -19,6 +19,7 @@ export interface BacktestJob {
   finalPnl?: number;
   sharpe?: number;
   reportUrl?: string;
+  logUrl?: string;
   batchChildJobId?: string;
 }
 

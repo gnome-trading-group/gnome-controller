@@ -158,6 +158,16 @@ function BacktestDetail() {
           ? <Anchor href={row.original.reportUrl} target="_blank" size="sm">Open</Anchor>
           : <Text c="dimmed" size="sm">—</Text>,
     },
+    {
+      id: 'logs',
+      header: 'Logs',
+      size: 70,
+      enableSorting: false,
+      Cell: ({ row }: { row: MRT_Row<BacktestJob> }) =>
+        row.original.logUrl
+          ? <Anchor href={row.original.logUrl} target="_blank" size="sm">Open</Anchor>
+          : <Text c="dimmed" size="sm">—</Text>,
+    },
   ], []);
 
   const table = useMantineReactTable({
@@ -187,7 +197,7 @@ function BacktestDetail() {
         <Group ml="auto">
           {run && CANCELLABLE.has(run.status) && (
             <Button
-              size="xs"
+              size="sm"
               color="red"
               variant="light"
               leftSection={<IconX size={14} />}
