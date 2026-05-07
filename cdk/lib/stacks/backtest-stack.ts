@@ -71,7 +71,13 @@ export class BacktestStack extends cdk.Stack {
     // AWS Batch — Spot compute
     // ---------------------------------------------------------------------------
 
-    const vpc = ec2.Vpc.fromLookup(this, "DefaultVpc", { isDefault: true });
+    const vpc = new ec2.Vpc(this, "BatchVpc", {
+      maxAzs: 2,
+      natGateways: 0,
+      subnetConfiguration: [
+        { name: "PublicSubnet", subnetType: ec2.SubnetType.PUBLIC },
+      ],
+    });
 
     const batchJobRole = new iam.Role(this, "BatchJobRole", {
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
