@@ -7,6 +7,7 @@ import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { CONFIGS, GITHUB_BRANCH, GITHUB_REPO, ControllerConfig } from "./config";
 import { FrontendStack } from "./stacks/frontend-stack";
 import { BackendStack } from "./stacks/backend-stack";
+import { BacktestStack } from "./stacks/backtest-stack";
 import { MonitoringStack } from "./stacks/monitoring-stack";
 import { LatencyProbeStack, PROBE_REGIONS } from "./stacks/latency-probe-stack";
 
@@ -22,6 +23,11 @@ class AppStage extends cdk.Stage {
     const backendStack = new BackendStack(this, "ControllerBackendStack", {
       crossRegionReferences: true,
       userPool: frontendStack.userPool,
+    });
+
+    new BacktestStack(this, "ControllerBacktestStack", {
+      apiGateway: backendStack.apiGateway,
+      cognitoAuthorizer: backendStack.cognitoAuthorizer,
     });
 
     new MonitoringStack(this, "ControllerMonitoringStack", {

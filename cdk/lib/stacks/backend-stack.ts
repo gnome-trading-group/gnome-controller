@@ -12,7 +12,8 @@ interface BackendStackProps extends cdk.StackProps {
 
 export class BackendStack extends cdk.Stack {
 
-  public readonly apiGateway: apigateway.RestApi; 
+  public readonly apiGateway: apigateway.RestApi;
+  public readonly cognitoAuthorizer: apigateway.CognitoUserPoolsAuthorizer;
 
   constructor(scope: Construct, id: string, props: BackendStackProps) {
     super(scope, id, props);
@@ -37,7 +38,7 @@ export class BackendStack extends cdk.Stack {
       },
     });
 
-    const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "CognitoAuthorizer", {
+    this.cognitoAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "CognitoAuthorizer", {
       cognitoUserPools: [props.userPool],
       identitySource: 'method.request.header.Authorization',
     });
@@ -63,7 +64,7 @@ export class BackendStack extends cdk.Stack {
       new apigateway.LambdaIntegration(latencyProbeOrchestrator.function),
       {
         authorizationType: apigateway.AuthorizationType.COGNITO,
-        authorizer: authorizer,
+        authorizer: this.cognitoAuthorizer,
       }
     );
 

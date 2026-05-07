@@ -413,4 +413,24 @@ export const controllerApi = {
       apiUrl: CONTROLLER_API_URL,
       body: request,
     }),
+  listBacktests: (params?: { status?: string; limit?: number }) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.status) queryParams.status = params.status;
+    if (params?.limit) queryParams.limit = params.limit;
+    return sendApiRequest<{ runs: any[]; count: number }>('/backtests', 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  getBacktest: (runId: string) =>
+    sendApiRequest<any>(`/backtests/${runId}`, 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+    }),
+  cancelBacktest: (runId: string) =>
+    sendApiRequest<{ runId: string; status: string }>(`/backtests/${runId}`, 'DELETE', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+    }),
 }

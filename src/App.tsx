@@ -22,6 +22,8 @@ import { GlobalStateProvider } from './context/GlobalStateContext';
 import CollectorDetail from './pages/CollectorDetail/CollectorDetail';
 import QualityIssues from './pages/MarketData/QualityIssues/QualityIssues';
 import MinuteInvestigation from './pages/MarketData/QualityIssues/MinuteInvestigation';
+import BacktestList from './pages/Backtests/BacktestList';
+import BacktestDetail from './pages/Backtests/BacktestDetail';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -119,6 +121,8 @@ function AppContent() {
             <Route path="/strategies" element={<Strategies />} />
             <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
             <Route path="/risk/policies" element={<RiskPolicies />} />
+            <Route path="/backtests" element={<BacktestList />} />
+            <Route path="/backtests/:runId" element={<BacktestDetail />} />
             <Route path="/logout" element={<Logout />} />
             <Route path="/" element={<Navigate to="/security-master" replace />} />
           </Routes>

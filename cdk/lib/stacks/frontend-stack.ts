@@ -16,6 +16,7 @@ interface FrontendStackProps extends cdk.StackProps {
 
 export class FrontendStack extends cdk.Stack {
   public readonly userPool: cognito.UserPool;
+  public readonly cliClientId: string;
 
   constructor(scope: Construct, id: string, props: FrontendStackProps) {
     super(scope, id, props);
@@ -105,6 +106,23 @@ export class FrontendStack extends cdk.Stack {
       idTokenValidity: cdk.Duration.hours(24),
     });
 
+    const cliClient = this.userPool.addClient("ControllerCliClient", {
+      oAuth: {
+        flows: { authorizationCodeGrant: true },
+        scopes: [cognito.OAuthScope.EMAIL, cognito.OAuthScope.OPENID, cognito.OAuthScope.PROFILE],
+        callbackUrls: ["http://localhost:9876/callback"],
+        logoutUrls: ["http://localhost:9876/callback"],
+      },
+      preventUserExistenceErrors: true,
+      authFlows: { adminUserPassword: false, custom: false, userPassword: false, userSrp: false },
+      refreshTokenValidity: cdk.Duration.days(30),
+      accessTokenValidity: cdk.Duration.hours(24),
+      idTokenValidity: cdk.Duration.hours(24),
+    });
+    const cliPoolClient = cliClient.node.defaultChild as cognito.CfnUserPoolClient;
+    cliPoolClient.supportedIdentityProviders = ["IdentityCenter"];
+    this.cliClientId = cliClient.userPoolClientId;
+
     const identityProvider = new cognito.CfnUserPoolIdentityProvider(this, "IdentityCenterProvider", {
       userPoolId: this.userPool.userPoolId,
       providerName: "IdentityCenter",
@@ -174,6 +192,10 @@ export class FrontendStack extends cdk.Stack {
       value: appClient.userPoolClientId,
       exportName: "AppClientId",
       description: "Cognito App Client ID",
+    });
+    new cdk.CfnOutput(this, "CliClientId", {
+      value: cliClient.userPoolClientId,
+      description: "Cognito CLI App Client ID — set as COGNITO_CLIENT_ID in gnomepy config",
     });
   }
 }
