@@ -6,12 +6,15 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
+import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import { Construct } from "constructs";
+import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 
 export interface BacktestStackProps extends cdk.StackProps {
+  stage: Stage;
   apiGateway: apigateway.RestApi;
   cognitoAuthorizer: apigateway.CognitoUserPoolsAuthorizer;
 }
@@ -19,6 +22,20 @@ export interface BacktestStackProps extends cdk.StackProps {
 export class BacktestStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: BacktestStackProps) {
     super(scope, id, props);
+
+    const bucketName = `gnome-research-${props.stage}`;
+
+    // ---------------------------------------------------------------------------
+    // S3 — research results bucket
+    // ---------------------------------------------------------------------------
+
+    const researchBucket = new s3.Bucket(this, "ResearchBucket", {
+      bucketName,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      versioned: false,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
 
     // ---------------------------------------------------------------------------
     // ECR repository
@@ -59,13 +76,14 @@ export class BacktestStack extends cdk.Stack {
     const batchJobRole = new iam.Role(this, "BatchJobRole", {
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
     });
+    const marketDataBucketName = `gnome-market-data-${props.stage}`;
     batchJobRole.addToPolicy(new iam.PolicyStatement({
       actions: ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
       resources: [
-        "arn:aws:s3:::gnome-market-data-prod",
-        "arn:aws:s3:::gnome-market-data-prod/*",
-        "arn:aws:s3:::gnome-research",
-        "arn:aws:s3:::gnome-research/*",
+        `arn:aws:s3:::${marketDataBucketName}`,
+        `arn:aws:s3:::${marketDataBucketName}/*`,
+        researchBucket.bucketArn,
+        `${researchBucket.bucketArn}/*`,
       ],
     }));
     batchJobRole.addToPolicy(new iam.PolicyStatement({
@@ -117,7 +135,7 @@ export class BacktestStack extends cdk.Stack {
 
     const commonEnv = {
       DYNAMODB_TABLE: table.tableName,
-      S3_BUCKET: "gnome-research",
+      S3_BUCKET: researchBucket.bucketName,
     };
 
     const submitLambda = new PythonLambdaFunction(this, "BacktestSubmitLambda", {
@@ -135,7 +153,7 @@ export class BacktestStack extends cdk.Stack {
     table.grantWriteData(submitLambda.function);
     submitLambda.function.addToRolePolicy(new iam.PolicyStatement({
       actions: ["s3:PutObject"],
-      resources: ["arn:aws:s3:::gnome-research/backtests/*"],
+      resources: [`${researchBucket.bucketArn}/backtests/*`],
     }));
     submitLambda.function.addToRolePolicy(new iam.PolicyStatement({
       actions: ["batch:SubmitJob"],
@@ -154,7 +172,7 @@ export class BacktestStack extends cdk.Stack {
     table.grantReadData(getLambda.function);
     getLambda.function.addToRolePolicy(new iam.PolicyStatement({
       actions: ["s3:GetObject"],
-      resources: ["arn:aws:s3:::gnome-research/backtests/*"],
+      resources: [`${researchBucket.bucketArn}/backtests/*`],
     }));
 
     const listLambda = new PythonLambdaFunction(this, "BacktestListLambda", {
@@ -195,7 +213,7 @@ export class BacktestStack extends cdk.Stack {
     table.grantReadWriteData(statusHandlerLambda.function);
     statusHandlerLambda.function.addToRolePolicy(new iam.PolicyStatement({
       actions: ["s3:GetObject"],
-      resources: ["arn:aws:s3:::gnome-research/backtests/*"],
+      resources: [`${researchBucket.bucketArn}/backtests/*`],
     }));
     statusHandlerLambda.function.addToRolePolicy(new iam.PolicyStatement({
       actions: ["batch:DescribeJobs"],

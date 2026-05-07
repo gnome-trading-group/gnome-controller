@@ -26,6 +26,7 @@ class AppStage extends cdk.Stage {
     });
 
     new BacktestStack(this, "ControllerBacktestStack", {
+      stage: config.account.stage,
       apiGateway: backendStack.apiGateway,
       cognitoAuthorizer: backendStack.cognitoAuthorizer,
     });
