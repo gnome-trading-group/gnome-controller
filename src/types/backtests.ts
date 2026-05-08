@@ -37,6 +37,7 @@ export interface BacktestRun {
   failedCount: number;
   sweepParams?: Record<string, string[]>;
   researchCommit?: string;
+  configYaml?: string;
   jobs?: BacktestJob[];
 }
 

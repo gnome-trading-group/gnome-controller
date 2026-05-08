@@ -82,6 +82,5 @@ def handler(event: dict, context) -> dict:
             job["log_url"] = _cloudwatch_log_url(log_stream_name)
 
     result = {**meta, "jobs": jobs}
-    result.pop("config_yaml", None)  # exclude large field from list view
 
     return create_response(200, result)

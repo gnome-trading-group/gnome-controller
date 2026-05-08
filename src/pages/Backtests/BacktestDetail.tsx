@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
+  Accordion,
   ActionIcon,
   Anchor,
   Badge,
   Button,
   Card,
+  Code,
   Container,
   Group,
   HoverCard,
@@ -292,7 +294,34 @@ function BacktestDetail() {
               </InfoRow>
             </Stack>
           </SimpleGrid>
+          {run.sweepParams && Object.keys(run.sweepParams).length > 0 && (
+            <Stack gap={4} mt="xs">
+              {Object.entries(run.sweepParams).map(([param, values]) => (
+                <Group key={param} gap="xs" wrap="nowrap">
+                  <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>{param}</Text>
+                  <Group gap={4}>
+                    {values.map((v) => (
+                      <Badge key={v} variant="outline" size="sm" color="gray">{v}</Badge>
+                    ))}
+                  </Group>
+                </Group>
+              ))}
+            </Stack>
+          )}
         </Card>
+      )}
+
+      {run?.configYaml && (
+        <Accordion variant="contained" mb="md">
+          <Accordion.Item value="config">
+            <Accordion.Control>Config</Accordion.Control>
+            <Accordion.Panel>
+              <Code block style={{ whiteSpace: 'pre', fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                {run.configYaml}
+              </Code>
+            </Accordion.Panel>
+          </Accordion.Item>
+        </Accordion>
       )}
 
       {chartData.length > 0 && (
