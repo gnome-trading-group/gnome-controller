@@ -132,7 +132,7 @@ function BacktestDetail() {
       size: 110,
       accessorFn: (row) => row.summary?.[key],
       Cell: ({ cell }: { cell: any }) => {
-        const v = cell.getValue<number | string | undefined>();
+        const v = cell.getValue() as number | string | undefined;
         if (v === undefined) return <Text c="dimmed" size="sm">—</Text>;
         return <Text size="sm">{typeof v === 'number' ? v : String(v)}</Text>;
       },
