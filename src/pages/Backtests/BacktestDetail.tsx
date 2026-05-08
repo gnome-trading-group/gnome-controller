@@ -7,6 +7,7 @@ import {
   Card,
   Container,
   Group,
+  HoverCard,
   Modal,
   SimpleGrid,
   Stack,
@@ -14,7 +15,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconArrowLeft, IconRefresh, IconX } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowLeft, IconRefresh, IconX } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -50,6 +51,10 @@ const JOB_STATUS_COLORS: Record<JobStatus, string> = {
 
 const CANCELLABLE = new Set<BacktestStatus>(['SUBMITTED', 'PENDING', 'RUNNING']);
 
+function toCamelWords(key: string): string {
+  return key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).trim();
+}
+
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <Group gap="xs" wrap="nowrap">
@@ -66,6 +71,8 @@ function BacktestDetail() {
   const [loading, setLoading] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
+  const [visibilityInitialized, setVisibilityInitialized] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!runId) return;
@@ -105,6 +112,32 @@ function BacktestDetail() {
     [jobs],
   );
 
+  const summaryKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const job of jobs) {
+      if (job.summary) {
+        Object.keys(job.summary).forEach((k) => keys.add(k));
+      }
+    }
+    keys.delete('backtestId');
+    return Array.from(keys);
+  }, [jobs]);
+
+  const metricColumns = useMemo<MRT_ColumnDef<BacktestJob>[]>(() =>
+    summaryKeys.map((key) => ({
+      id: `summary_${key}`,
+      header: toCamelWords(key),
+      size: 110,
+      accessorFn: (row) => row.summary?.[key],
+      Cell: ({ cell }: { cell: any }) => {
+        const v = cell.getValue<number | string | undefined>();
+        if (v === undefined) return <Text c="dimmed" size="sm">—</Text>;
+        return <Text size="sm">{typeof v === 'number' ? v : String(v)}</Text>;
+      },
+    })),
+    [summaryKeys],
+  );
+
   const columns = useMemo<MRT_ColumnDef<BacktestJob>[]>(() => [
     {
       accessorKey: 'arrayIndex',
@@ -125,29 +158,38 @@ function BacktestDetail() {
       ),
     },
     {
+      id: 'warnings',
+      header: '',
+      size: 40,
+      enableSorting: false,
+      Cell: ({ row }: { row: MRT_Row<BacktestJob> }) => {
+        const warnings = row.original.warnings;
+        if (!warnings?.length) return null;
+        return (
+          <HoverCard width={320} shadow="md">
+            <HoverCard.Target>
+              <IconAlertTriangle size={16} color="var(--mantine-color-yellow-6)" style={{ cursor: 'pointer' }} />
+            </HoverCard.Target>
+            <HoverCard.Dropdown>
+              <Stack gap={4}>
+                {warnings.slice(0, 10).map((w, i) => (
+                  <Text key={i} size="xs">{w}</Text>
+                ))}
+                {warnings.length > 10 && (
+                  <Text size="xs" c="dimmed">+{warnings.length - 10} more</Text>
+                )}
+              </Stack>
+            </HoverCard.Dropdown>
+          </HoverCard>
+        );
+      },
+    },
+    {
       id: 'configParams',
       header: 'Parameters',
       accessorFn: (row) => Object.entries(row.configParams ?? {}).map(([k, v]) => `${k}=${v}`).join(', '),
     },
-    {
-      accessorKey: 'finalPnl',
-      header: 'PnL',
-      size: 100,
-      Cell: ({ row }: { row: MRT_Row<BacktestJob> }) => {
-        const v = row.original.finalPnl;
-        if (v === undefined) return <Text c="dimmed" size="sm">—</Text>;
-        return <Text c={v >= 0 ? 'green' : 'red'} size="sm">{v.toFixed(4)}</Text>;
-      },
-    },
-    {
-      accessorKey: 'sharpe',
-      header: 'Sharpe',
-      size: 90,
-      Cell: ({ row }: { row: MRT_Row<BacktestJob> }) => {
-        const v = row.original.sharpe;
-        return v !== undefined ? <span>{v.toFixed(3)}</span> : <Text c="dimmed" size="sm">—</Text>;
-      },
-    },
+    ...metricColumns,
     {
       id: 'report',
       header: 'Report',
@@ -168,19 +210,34 @@ function BacktestDetail() {
           ? <Anchor href={row.original.logUrl} target="_blank" size="sm">Open</Anchor>
           : <Text c="dimmed" size="sm">—</Text>,
     },
-  ], []);
+  ], [metricColumns]);
+
+  useEffect(() => {
+    if (!visibilityInitialized && summaryKeys.length > 0) {
+      const hidden: Record<string, boolean> = {};
+      for (const key of summaryKeys) {
+        if (!['finalPnl', 'sharpe', 'sortino', 'fillCount', 'totalFees'].includes(key)) {
+          hidden[`summary_${key}`] = false;
+        }
+      }
+      setColumnVisibility(hidden);
+      setVisibilityInitialized(true);
+    }
+  }, [summaryKeys, visibilityInitialized]);
 
   const table = useMantineReactTable({
     columns,
     data: jobs,
-    state: { isLoading: loading },
+    state: { isLoading: loading, columnVisibility },
+    onColumnVisibilityChange: setColumnVisibility,
     enableColumnFilters: false,
     enableSorting: true,
     enablePagination: jobs.length > 25,
     enableBottomToolbar: jobs.length > 25,
-    enableTopToolbar: false,
+    enableTopToolbar: true,
+    enableHiding: true,
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    initialState: { sorting: [{ id: 'finalPnl', desc: true }], density: 'xs' },
+    initialState: { sorting: [{ id: 'summary_finalPnl', desc: true }], density: 'xs' },
   });
 
   if (!run && !loading) return null;

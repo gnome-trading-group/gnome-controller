@@ -18,6 +18,8 @@ export interface BacktestJob {
   configParams: Record<string, string>;
   finalPnl?: number;
   sharpe?: number;
+  summary?: Record<string, number | string>;
+  warnings?: string[];
   reportUrl?: string;
   logUrl?: string;
   batchJobId?: string;

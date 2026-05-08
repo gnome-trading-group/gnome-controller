@@ -6,7 +6,7 @@ import os
 from decimal import Decimal
 
 import boto3
-from boto3.dynamodb.conditions import Attr, Key
+from boto3.dynamodb.conditions import Key
 
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
 S3_BUCKET = os.environ["S3_BUCKET"]
@@ -45,6 +45,22 @@ def _read_summary(run_id: str, array_index: int) -> dict:
         return {}
 
 
+def _serialize_summary(raw: dict) -> dict:
+    result = {}
+    for k, v in raw.items():
+        if isinstance(v, (dict, list)):
+            continue
+        if isinstance(v, float):
+            result[k] = Decimal(str(v))
+        elif isinstance(v, int):
+            result[k] = v
+        elif v is None:
+            continue
+        else:
+            result[k] = str(v)
+    return result
+
+
 def _update_job(run_id: str, array_index: int, batch_status: str, job_id: str, log_stream_name: str | None) -> None:
     our_status = _STATUS_MAP.get(batch_status, batch_status)
     sk = f"JOB#{array_index:04d}"
@@ -60,9 +76,13 @@ def _update_job(run_id: str, array_index: int, batch_status: str, job_id: str, l
     if batch_status == "SUCCEEDED":
         summary = _read_summary(run_id, array_index)
         if summary:
-            update_expr += ", final_pnl = :pnl, sharpe = :sh"
+            update_expr += ", summary = :sum, final_pnl = :pnl, sharpe = :sh"
+            values[":sum"] = _serialize_summary(summary)
             values[":pnl"] = Decimal(str(summary.get("final_pnl", 0)))
             values[":sh"] = Decimal(str(summary.get("sharpe", 0)))
+            if summary.get("warnings"):
+                update_expr += ", warnings = :w"
+                values[":w"] = summary["warnings"]
 
     _table.update_item(
         Key={"run_id": run_id, "sk": sk},
