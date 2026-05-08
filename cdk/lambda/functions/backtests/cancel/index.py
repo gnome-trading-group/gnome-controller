@@ -8,13 +8,13 @@ from boto3.dynamodb.conditions import Key
 from utils import create_response
 
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
-BATCH_JOB_QUEUE = os.environ["BATCH_JOB_QUEUE"]
 
 _ddb = boto3.resource("dynamodb")
 _table = _ddb.Table(DYNAMODB_TABLE)
 _batch = boto3.client("batch")
 
 _CANCELLABLE = {"SUBMITTED", "PENDING", "RUNNING"}
+_TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED"}
 
 
 def handler(event: dict, context) -> dict:
@@ -36,12 +36,14 @@ def handler(event: dict, context) -> dict:
     if meta.get("status") not in _CANCELLABLE:
         return create_response(409, {"error": f"run is {meta.get('status')}, cannot cancel"})
 
-    batch_job_id = meta.get("batch_job_id")
-    if batch_job_id:
-        try:
-            _batch.terminate_job(jobId=batch_job_id, reason="Cancelled by user")
-        except _batch.exceptions.ClientError:
-            pass
+    jobs = [i for i in items if i.get("sk", "").startswith("JOB#")]
+    for job in jobs:
+        job_id = job.get("batch_job_id")
+        if job_id and job.get("status") not in _TERMINAL:
+            try:
+                _batch.terminate_job(jobId=job_id, reason="Cancelled by user")
+            except Exception:
+                pass
 
     _table.update_item(
         Key={"run_id": run_id, "sk": "META"},

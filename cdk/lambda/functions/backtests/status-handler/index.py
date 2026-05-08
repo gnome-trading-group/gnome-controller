@@ -49,9 +49,9 @@ def _update_job(run_id: str, array_index: int, batch_status: str, job_id: str, l
     our_status = _STATUS_MAP.get(batch_status, batch_status)
     sk = f"JOB#{array_index:04d}"
 
-    update_expr = "SET #st = :s, batch_child_job_id = :jid"
+    update_expr = "SET #st = :s"
     names = {"#st": "status"}
-    values: dict = {":s": our_status, ":jid": job_id}
+    values: dict = {":s": our_status}
 
     if log_stream_name:
         update_expr += ", log_stream_name = :lsn"
@@ -116,12 +116,13 @@ def handler(event: dict, context) -> None:
     job_id = detail.get("jobId", "")
     log_stream_name = (detail.get("container") or {}).get("logStreamName")
 
-    # Array child jobs have jobName like "backtest-<run_id>:<array_index>"
+    # Individual jobs have jobName like "backtest-<run_id>-<job_index>"
     array_index = 0
-    if ":" in job_name:
-        job_name, idx_str = job_name.rsplit(":", 1)
+    parts = job_name.rsplit("-", 1)
+    if len(parts) == 2 and len(parts[1]) <= 4:
         try:
-            array_index = int(idx_str)
+            array_index = int(parts[1])
+            job_name = parts[0]
         except ValueError:
             pass
 

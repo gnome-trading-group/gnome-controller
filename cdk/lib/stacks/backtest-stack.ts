@@ -131,7 +131,7 @@ export class BacktestStack extends cdk.Stack {
         memory: cdk.Size.gibibytes(8),
         jobRole: batchJobRole,
         executionRole: batchExecutionRole,
-        environment: { AWS_DEFAULT_REGION: this.region },
+        environment: { AWS_DEFAULT_REGION: this.region, STAGE: props.stage },
       }),
       retryAttempts: 2,
     });
@@ -196,10 +196,7 @@ export class BacktestStack extends cdk.Stack {
       functionName: "gnome-backtest-cancel",
       description: "Cancel a backtest run",
       timeout: cdk.Duration.seconds(30),
-      environment: {
-        ...commonEnv,
-        BATCH_JOB_QUEUE: jobQueue.jobQueueArn,
-      },
+      environment: { ...commonEnv },
     });
     table.grantReadWriteData(cancelLambda.function);
     cancelLambda.function.addToRolePolicy(new iam.PolicyStatement({

@@ -100,54 +100,45 @@ def handler(event: dict, context) -> dict:
         "ttl": _ttl(),
     })
 
-    # Write JOB records to DynamoDB (one per array index)
-    with _table.batch_writer() as writer:
-        for i, cfg in enumerate(configs):
-            writer.put_item(Item={
-                "run_id": run_id,
-                "sk": f"JOB#{i:04d}",
-                "status": "PENDING",
-                "submitted_at": now,
-                "array_index": i,
-                "config_params": {
-                    k: str(cfg.get("strategy", {}).get("args", {}).get(k, ""))
-                    for k in sweep_params(config)
-                },
-                "ttl": _ttl(),
-            })
+    # Submit individual Batch jobs and write JOB# records
+    batch_job_ids = []
+    for i, cfg in enumerate(configs):
+        resp = _batch.submit_job(
+            jobName=f"backtest-{run_id}-{i}",
+            jobQueue=BATCH_JOB_QUEUE,
+            jobDefinition=BATCH_JOB_DEFINITION,
+            containerOverrides={
+                "environment": [
+                    {"name": "RUN_ID", "value": run_id},
+                    {"name": "S3_BUCKET", "value": S3_BUCKET},
+                    {"name": "RESEARCH_COMMIT", "value": research_commit},
+                    {"name": "JOB_INDEX", "value": str(i)},
+                ]
+            },
+            retryStrategy={"attempts": 2},
+        )
+        job_id = resp["jobId"]
+        batch_job_ids.append(job_id)
 
-    # Submit Batch Array Job (size=1 for non-sweep)
-    submit_kwargs: dict = {
-        "jobName": f"backtest-{run_id}",
-        "jobQueue": BATCH_JOB_QUEUE,
-        "jobDefinition": BATCH_JOB_DEFINITION,
-        "containerOverrides": {
-            "environment": [
-                {"name": "RUN_ID", "value": run_id},
-                {"name": "S3_BUCKET", "value": S3_BUCKET},
-                {"name": "RESEARCH_COMMIT", "value": research_commit},
-            ]
-        },
-        "retryStrategy": {"attempts": 2},
-    }
-    if job_count > 1:
-        submit_kwargs["arrayProperties"] = {"size": job_count}
-
-    batch_response = _batch.submit_job(**submit_kwargs)
-    batch_job_id = batch_response["jobId"]
-
-    # Store Batch job ID in META record
-    _table.update_item(
-        Key={"run_id": run_id, "sk": "META"},
-        UpdateExpression="SET batch_job_id = :jid",
-        ExpressionAttributeValues={":jid": batch_job_id},
-    )
+        _table.put_item(Item={
+            "run_id": run_id,
+            "sk": f"JOB#{i:04d}",
+            "status": "SUBMITTED",
+            "submitted_at": now,
+            "array_index": i,
+            "batch_job_id": job_id,
+            "config_params": {
+                k: str(cfg.get("strategy", {}).get("args", {}).get(k, ""))
+                for k in sweep_params(config)
+            },
+            "ttl": _ttl(),
+        })
 
     return create_response(200, {
         "run_id": run_id,
         "job_count": job_count,
         "status": "SUBMITTED",
-        "batch_job_id": batch_job_id,
+        "batch_job_id": batch_job_ids[0] if batch_job_ids else None,
     })
 
 

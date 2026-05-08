@@ -233,11 +233,6 @@ function BacktestDetail() {
               <InfoRow label="Submitted">
                 {run.submittedAt ? <ReactTimeAgo date={new Date(run.submittedAt)} timeStyle="round" /> : '—'}
               </InfoRow>
-              {run.batchJobId && (
-                <InfoRow label="Batch Job ID">
-                  <span style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{run.batchJobId}</span>
-                </InfoRow>
-              )}
             </Stack>
           </SimpleGrid>
         </Card>

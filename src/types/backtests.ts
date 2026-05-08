@@ -20,7 +20,7 @@ export interface BacktestJob {
   sharpe?: number;
   reportUrl?: string;
   logUrl?: string;
-  batchChildJobId?: string;
+  batchJobId?: string;
 }
 
 export interface BacktestRun {
@@ -33,7 +33,6 @@ export interface BacktestRun {
   jobCount: number;
   completedCount: number;
   failedCount: number;
-  batchJobId?: string;
   sweepParams?: Record<string, string[]>;
   researchCommit?: string;
   jobs?: BacktestJob[];
