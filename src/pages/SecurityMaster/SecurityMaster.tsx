@@ -21,7 +21,7 @@ import { IconPlus, IconEdit, IconRefresh, IconTrash, IconUpload, IconDownload } 
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row, type MRT_TableInstance } from 'mantine-react-table';
 import { useGlobalState } from '../../context/GlobalStateContext';
-import { AWS_REGIONS, Exchange, Listing, Security, SchemaType, SecurityType } from '../../types';
+import { AWS_REGIONS, Exchange, Listing, ListingSpec, Security, SchemaType, SecurityType } from '../../types';
 import { registryApi } from '../../utils/api';
 import * as XLSX from 'xlsx';
 import { formatSecurityType } from '../../utils/security-master';
@@ -34,24 +34,34 @@ function SecurityMaster() {
     exchanges: number;
     securities: number;
     listings: number;
-  }>({ exchanges: 0, securities: 0, listings: 0 });
+    listingSpecs: number;
+  }>({ exchanges: 0, securities: 0, listings: 0, listingSpecs: 0 });
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<{
-    type: 'exchange' | 'security' | 'listing';
+    type: 'exchange' | 'security' | 'listing' | 'listingSpec';
     id: number;
     name: string;
   } | null>(null);
+  const [createListingSpecModalOpen, setCreateListingSpecModalOpen] = useState(false);
+  const [newListingSpec, setNewListingSpec] = useState<{
+    listingId: number;
+    tickSize: number;
+    lotSize: number;
+    minNotional: number;
+  }>({ listingId: 0, tickSize: 0, lotSize: 0, minNotional: 0 });
 
-  const { 
-    securities, 
-    exchanges, 
-    listings, 
-    loading, 
+  const {
+    securities,
+    exchanges,
+    listings,
+    listingSpecs,
+    loading,
     error,
     refreshSecurities,
     refreshExchanges,
     refreshListings,
+    refreshListingSpecs,
   } = useGlobalState();
 
   const handleRefresh = async () => {
@@ -59,6 +69,7 @@ function SecurityMaster() {
       refreshSecurities(),
       refreshExchanges(),
       refreshListings(),
+      refreshListingSpecs(),
     ]);
   };
 
@@ -67,7 +78,7 @@ function SecurityMaster() {
     
     setUploadFile(file);
     setUploadError(null);
-    setUploadProgress({ exchanges: 0, securities: 0, listings: 0 });
+    setUploadProgress({ exchanges: 0, securities: 0, listings: 0, listingSpecs: 0 });
 
     try {
       const data = await file.arrayBuffer();
@@ -97,6 +108,11 @@ function SecurityMaster() {
 
       await processSheet('Listings', async (row) => {
         await registryApi.createListing(row);
+      });
+
+      await processSheet('Listing Specs', async (row) => {
+        await registryApi.createListingSpec(row);
+        setUploadProgress(prev => ({ ...prev, listingSpecs: (prev.listingSpecs || 0) + 1 }));
       });
 
       await handleRefresh();
@@ -129,13 +145,22 @@ function SecurityMaster() {
       exchangeSecuritySymbol: 'BTC',
     }];
 
+    const listingSpecsData = [{
+      listingId: 1,
+      tickSize: 100,
+      lotSize: 1,
+      minNotional: 0,
+    }];
+
     const exchangesWs = XLSX.utils.json_to_sheet(exchangesData);
     const securitiesWs = XLSX.utils.json_to_sheet(securitiesData);
     const listingsWs = XLSX.utils.json_to_sheet(listingsData);
+    const listingSpecsWs = XLSX.utils.json_to_sheet(listingSpecsData);
 
     XLSX.utils.book_append_sheet(wb, exchangesWs, 'Exchanges');
     XLSX.utils.book_append_sheet(wb, securitiesWs, 'Securities');
     XLSX.utils.book_append_sheet(wb, listingsWs, 'Listings');
+    XLSX.utils.book_append_sheet(wb, listingSpecsWs, 'Listing Specs');
 
     XLSX.writeFile(wb, 'security_master_template.xlsx');
   };
@@ -146,10 +171,12 @@ function SecurityMaster() {
     const exchangesWs = XLSX.utils.json_to_sheet(exchanges);
     const securitiesWs = XLSX.utils.json_to_sheet(securities);
     const listingsWs = XLSX.utils.json_to_sheet(listings);
+    const listingSpecsWs = XLSX.utils.json_to_sheet(listingSpecs);
 
     XLSX.utils.book_append_sheet(wb, exchangesWs, 'Exchanges');
     XLSX.utils.book_append_sheet(wb, securitiesWs, 'Securities');
     XLSX.utils.book_append_sheet(wb, listingsWs, 'Listings');
+    XLSX.utils.book_append_sheet(wb, listingSpecsWs, 'Listing Specs');
 
     XLSX.writeFile(wb, 'security_master_data.xlsx');
   };
@@ -171,7 +198,18 @@ function SecurityMaster() {
     },
   });
 
-  const handleDelete = async (type: 'exchange' | 'security' | 'listing', id: number, name: string) => {
+  const handleCreateListingSpec = async () => {
+    try {
+      await registryApi.createListingSpec(newListingSpec);
+      await refreshListingSpecs();
+      setCreateListingSpecModalOpen(false);
+      setNewListingSpec({ listingId: 0, tickSize: 0, lotSize: 0, minNotional: 0 });
+    } catch (err) {
+      console.error('Failed to create listing spec:', err);
+    }
+  };
+
+  const handleDelete = async (type: 'exchange' | 'security' | 'listing' | 'listingSpec', id: number, name: string) => {
     setDeleteItem({ type, id, name });
     setDeleteModalOpen(true);
   };
@@ -192,6 +230,10 @@ function SecurityMaster() {
         case 'listing':
           await registryApi.deleteListing(deleteItem.id);
           await refreshListings();
+          break;
+        case 'listingSpec':
+          await registryApi.deleteListingSpec(deleteItem.id);
+          await refreshListingSpecs();
           break;
       }
     } catch (error) {
@@ -253,6 +295,25 @@ function SecurityMaster() {
         variant="subtle"
         color="red"
         onClick={() => handleDelete('listing', row.original.listingId, row.original.exchangeSecuritySymbol)}
+      >
+        <IconTrash size={16} />
+      </ActionIcon>
+    </Group>
+  );
+
+  const renderListingSpecRowActions = ({ row, table }: { row: MRT_Row<ListingSpec>; table: MRT_TableInstance<ListingSpec> }) => (
+    <Group gap={4} justify="center" wrap="nowrap">
+      <ActionIcon
+        variant="subtle"
+        color="blue"
+        onClick={() => table.setEditingRow(row)}
+      >
+        <IconEdit size={16} />
+      </ActionIcon>
+      <ActionIcon
+        variant="subtle"
+        color="red"
+        onClick={() => handleDelete('listingSpec', row.original.listingId, `Listing ${row.original.listingId}`)}
       >
         <IconTrash size={16} />
       </ActionIcon>
@@ -497,6 +558,77 @@ function SecurityMaster() {
     },
   ], []);
 
+  const listingSpecColumns = useMemo<MRT_ColumnDef<ListingSpec>[]>(() => [
+    {
+      accessorKey: 'listingId',
+      header: 'Listing ID',
+      enableSorting: true,
+      enableEditing: false,
+    },
+    {
+      accessorKey: 'tickSize',
+      header: 'Tick Size',
+      enableSorting: true,
+      enableEditing: true,
+      Edit: ({ cell, row }) => (
+        <NumberInput
+          defaultValue={cell.getValue<number>()}
+          onChange={(value) => {
+            row.original.tickSize = Number(value) || 0;
+          }}
+        />
+      ),
+    },
+    {
+      accessorKey: 'lotSize',
+      header: 'Lot Size',
+      enableSorting: true,
+      enableEditing: true,
+      Edit: ({ cell, row }) => (
+        <NumberInput
+          defaultValue={cell.getValue<number>()}
+          onChange={(value) => {
+            row.original.lotSize = Number(value) || 0;
+          }}
+        />
+      ),
+    },
+    {
+      accessorKey: 'minNotional',
+      header: 'Min Notional',
+      enableSorting: true,
+      enableEditing: true,
+      Edit: ({ cell, row }) => (
+        <NumberInput
+          defaultValue={cell.getValue<number>()}
+          onChange={(value) => {
+            row.original.minNotional = Number(value) || 0;
+          }}
+        />
+      ),
+    },
+    {
+      accessorKey: 'dateCreated',
+      header: 'Created',
+      enableSorting: true,
+      enableEditing: false,
+      Cell: ({ row }: { row: MRT_Row<ListingSpec> }) =>
+        row.original.dateCreated ?
+          <ReactTimeAgo date={new Date(row.original.dateCreated)} timeStyle="round" /> :
+          '-',
+    },
+    {
+      accessorKey: 'dateModified',
+      header: 'Modified',
+      enableSorting: true,
+      enableEditing: false,
+      Cell: ({ row }: { row: MRT_Row<ListingSpec> }) =>
+        row.original.dateModified ?
+          <ReactTimeAgo date={new Date(row.original.dateModified)} timeStyle="round" /> :
+          '-',
+    },
+  ], []);
+
   const securityTable = useMantineReactTable({
     columns: securityColumns,
     data: securities,
@@ -540,6 +672,23 @@ function SecurityMaster() {
       await registryApi.updateListing(row.original.listingId, row.original);
       table.setEditingRow(null);
       refreshListings();
+    },
+    initialState: {
+      sorting: [{ id: 'listingId', desc: false }],
+      density: 'xs',
+    },
+    ...getDefaultTableProps(),
+  });
+
+  const listingSpecTable = useMantineReactTable({
+    columns: listingSpecColumns,
+    data: listingSpecs,
+    state: { isLoading: loading.listingSpecs },
+    renderRowActions: renderListingSpecRowActions,
+    onEditingRowSave: async ({ row, table }: { row: MRT_Row<ListingSpec>; table: MRT_TableInstance<ListingSpec> }) => {
+      await registryApi.updateListingSpec(row.original.listingId, row.original);
+      table.setEditingRow(null);
+      refreshListingSpecs();
     },
     initialState: {
       sorting: [{ id: 'listingId', desc: false }],
@@ -593,7 +742,7 @@ function SecurityMaster() {
         size="lg"
       >
         <Stack>
-          <Text>Upload an Excel file with sheets named "Exchanges", "Securities", and "Listings" to create new entries.</Text>
+          <Text>Upload an Excel file with sheets named "Exchanges", "Securities", "Listings", and "Listing Specs" to create new entries.</Text>
           
           <Group>
             <FileButton
@@ -628,6 +777,7 @@ function SecurityMaster() {
               <Text>Exchanges processed: {uploadProgress.exchanges}</Text>
               <Text>Securities processed: {uploadProgress.securities}</Text>
               <Text>Listings processed: {uploadProgress.listings}</Text>
+              <Text>Listing Specs processed: {uploadProgress.listingSpecs}</Text>
             </Stack>
           )}
 
@@ -669,14 +819,55 @@ function SecurityMaster() {
         </Stack>
       </Modal>
 
-      {(error.securities || error.exchanges || error.listings) && (
-        <Notification 
-          color="red" 
-          title="Error" 
+      <Modal
+        opened={createListingSpecModalOpen}
+        onClose={() => setCreateListingSpecModalOpen(false)}
+        title="Create Listing Spec"
+        size="sm"
+      >
+        <Stack>
+          <NumberInput
+            label="Listing ID"
+            value={newListingSpec.listingId}
+            onChange={(value) => setNewListingSpec(prev => ({ ...prev, listingId: Number(value) || 0 }))}
+            required
+          />
+          <NumberInput
+            label="Tick Size"
+            value={newListingSpec.tickSize}
+            onChange={(value) => setNewListingSpec(prev => ({ ...prev, tickSize: Number(value) || 0 }))}
+            required
+          />
+          <NumberInput
+            label="Lot Size"
+            value={newListingSpec.lotSize}
+            onChange={(value) => setNewListingSpec(prev => ({ ...prev, lotSize: Number(value) || 0 }))}
+            required
+          />
+          <NumberInput
+            label="Min Notional"
+            value={newListingSpec.minNotional}
+            onChange={(value) => setNewListingSpec(prev => ({ ...prev, minNotional: Number(value) || 0 }))}
+          />
+          <Group justify="flex-end">
+            <Button variant="outline" onClick={() => setCreateListingSpecModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button color="green" onClick={handleCreateListingSpec}>
+              Create
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {(error.securities || error.exchanges || error.listings || error.listingSpecs) && (
+        <Notification
+          color="red"
+          title="Error"
           onClose={() => {/* TODO: Add error clear handler */}}
           mb="md"
         >
-          {error.securities || error.exchanges || error.listings}
+          {error.securities || error.exchanges || error.listings || error.listingSpecs}
         </Notification>
       )}
 
@@ -685,6 +876,7 @@ function SecurityMaster() {
           <Tabs.Tab value="listings">Listings</Tabs.Tab>
           <Tabs.Tab value="securities">Securities</Tabs.Tab>
           <Tabs.Tab value="exchanges">Exchanges</Tabs.Tab>
+          <Tabs.Tab value="listingSpecs">Listing Specs</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="listings">
@@ -700,6 +892,23 @@ function SecurityMaster() {
         <Tabs.Panel value="exchanges">
           <Space h="md" />
           <MantineReactTable table={exchangeTable} />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="listingSpecs">
+          <Space h="md" />
+          <Group justify="flex-end" mb="sm">
+            <Tooltip label="Add Listing Spec" position="bottom" withArrow openDelay={500}>
+              <ActionIcon
+                size="lg"
+                variant="filled"
+                color="green"
+                onClick={() => setCreateListingSpecModalOpen(true)}
+              >
+                <IconPlus size={20} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+          <MantineReactTable table={listingSpecTable} />
         </Tabs.Panel>
 
       </Tabs>

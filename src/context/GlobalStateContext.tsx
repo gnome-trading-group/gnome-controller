@@ -1,26 +1,30 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { registryApi } from '../utils/api';
-import { Exchange, Listing, Security } from '../types';
+import { Exchange, Listing, ListingSpec, Security } from '../types';
 
 interface ErrorState {
   securities: string | null;
   exchanges: string | null;
   listings: string | null;
+  listingSpecs: string | null;
 }
 
 interface GlobalState {
   securities: Security[];
   exchanges: Exchange[];
   listings: Listing[];
+  listingSpecs: ListingSpec[];
   loading: {
     securities: boolean;
     exchanges: boolean;
     listings: boolean;
+    listingSpecs: boolean;
   };
   error: ErrorState;
   refreshSecurities: () => Promise<void>;
   refreshExchanges: () => Promise<void>;
   refreshListings: () => Promise<void>;
+  refreshListingSpecs: () => Promise<void>;
 }
 
 const GlobalStateContext = createContext<GlobalState | undefined>(undefined);
@@ -29,15 +33,18 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
   const [securities, setSecurities] = useState<Security[]>([]);
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
+  const [listingSpecs, setListingSpecs] = useState<ListingSpec[]>([]);
   const [loading, setLoading] = useState({
     securities: false,
     exchanges: false,
     listings: false,
+    listingSpecs: false,
   });
   const [error, setError] = useState<ErrorState>({
     securities: null,
     exchanges: null,
     listings: null,
+    listingSpecs: null,
   });
 
   const refreshSecurities = async () => {
@@ -79,22 +86,38 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
     }
   };
 
+  const refreshListingSpecs = async () => {
+    setLoading(prev => ({ ...prev, listingSpecs: true }));
+    setError(prev => ({ ...prev, listingSpecs: null }));
+    try {
+      const response = await registryApi.listListingSpecs();
+      setListingSpecs(response);
+    } catch (err) {
+      setError(prev => ({ ...prev, listingSpecs: err instanceof Error ? err.message : 'Unknown error' }));
+    } finally {
+      setLoading(prev => ({ ...prev, listingSpecs: false }));
+    }
+  };
+
   // Initial data fetch
   useEffect(() => {
     refreshSecurities();
     refreshExchanges();
     refreshListings();
+    refreshListingSpecs();
   }, []);
 
   const value = {
     securities,
     exchanges,
     listings,
+    listingSpecs,
     loading,
     error,
     refreshSecurities,
     refreshExchanges,
     refreshListings,
+    refreshListingSpecs,
   };
 
   return (
