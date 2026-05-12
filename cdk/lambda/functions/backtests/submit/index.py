@@ -10,7 +10,7 @@ import boto3
 import yaml
 from utils import create_response
 
-from sweep import expand_sweep, sweep_params
+from sweep import expand_sweep, get_param_value, sweep_params
 
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
 S3_BUCKET = os.environ["S3_BUCKET"]
@@ -95,7 +95,10 @@ def handler(event: dict, context) -> dict:
         "completed_count": 0,
         "failed_count": 0,
         "config_yaml": config_yaml,
-        "sweep_params": {k: [str(v) for v in vals] for k, vals in sweep_params(config).items()},
+        "sweep_params": {
+            k: [json.dumps(v, sort_keys=True) if isinstance(v, dict) else str(v) for v in vals]
+            for k, vals in sweep_params(config).items()
+        },
         "research_commit": research_commit,
         "ttl": _ttl(),
     })
@@ -128,7 +131,7 @@ def handler(event: dict, context) -> dict:
             "array_index": i,
             "batch_job_id": job_id,
             "config_params": {
-                k: str(cfg.get("strategy", {}).get("args", {}).get(k, ""))
+                k: get_param_value(cfg, k)
                 for k in sweep_params(config)
             },
             "ttl": _ttl(),
