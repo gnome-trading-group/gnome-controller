@@ -143,6 +143,15 @@ function ListingsTab({ onDelete }: ListingsTabProps) {
       ),
     },
     {
+      accessorKey: 'securityType',
+      header: 'Type',
+      enableSorting: true,
+      enableEditing: false,
+      enableGrouping: true,
+      Cell: ({ row }: { row: MRT_Row<DenormalizedListing> }) =>
+        formatSecurityType(row.original.securityType),
+    },
+    {
       accessorKey: 'exchangeSecuritySymbol',
       header: 'Exchange Symbol',
       enableSorting: true,
