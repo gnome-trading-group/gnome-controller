@@ -8,6 +8,8 @@ import {
   Card,
   Code,
   Container,
+  CopyButton,
+  Divider,
   Group,
   HoverCard,
   Modal,
@@ -17,7 +19,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconAlertTriangle, IconArrowLeft, IconRefresh, IconX } from '@tabler/icons-react';
+import { IconAlertTriangle, IconArrowLeft, IconCheck, IconCopy, IconRefresh, IconX } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -52,9 +54,29 @@ const JOB_STATUS_COLORS: Record<JobStatus, string> = {
 };
 
 const CANCELLABLE = new Set<BacktestStatus>(['SUBMITTED', 'PENDING', 'RUNNING']);
+const EXPLORABLE = new Set<BacktestStatus>(['COMPLETED', 'PARTIALLY_FAILED']);
 
 function toCamelWords(key: string): string {
   return key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).trim();
+}
+
+function CliCommand({ command }: { command: string }) {
+  return (
+    <Group gap={6} wrap="nowrap" align="center">
+      <Code style={{ flex: 1, fontFamily: 'monospace', fontSize: '0.72rem', padding: '3px 6px', wordBreak: 'break-all' }}>
+        {command}
+      </Code>
+      <CopyButton value={command} timeout={2000}>
+        {({ copied, copy }) => (
+          <Tooltip label={copied ? 'Copied!' : 'Copy command'} withArrow position="right">
+            <ActionIcon size="sm" variant="subtle" color={copied ? 'teal' : 'gray'} onClick={copy} style={{ flexShrink: 0 }}>
+              {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+            </ActionIcon>
+          </Tooltip>
+        )}
+      </CopyButton>
+    </Group>
+  );
 }
 
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -203,6 +225,34 @@ function BacktestDetail() {
           : <Text c="dimmed" size="sm">—</Text>,
     },
     {
+      id: 'explore',
+      header: 'Explore',
+      size: 100,
+      enableSorting: false,
+      Cell: ({ row }: { row: MRT_Row<BacktestJob> }) => {
+        if (row.original.status !== 'SUCCEEDED') return <Text c="dimmed" size="sm">—</Text>;
+        const cmd = `gnomepy explore --run-id ${runId} --job ${row.original.arrayIndex}`;
+        return (
+          <CopyButton value={cmd} timeout={2000}>
+            {({ copied, copy }) => (
+              <Tooltip label={copied ? 'Copied!' : cmd} withArrow position="left" multiline maw={420}>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color={copied ? 'teal' : 'blue'}
+                  leftSection={copied ? <IconCheck size={12} /> : <IconCopy size={12} />}
+                  onClick={copy}
+                  px={6}
+                >
+                  {copied ? 'Copied' : 'Copy'}
+                </Button>
+              </Tooltip>
+            )}
+          </CopyButton>
+        );
+      },
+    },
+    {
       id: 'logs',
       header: 'Logs',
       size: 70,
@@ -307,6 +357,28 @@ function BacktestDetail() {
                 </Group>
               ))}
             </Stack>
+          )}
+          {EXPLORABLE.has(run.status) && (
+            <>
+              <Divider mt="sm" mb="xs" />
+              <Stack gap={4}>
+                <Text size="xs" c="dimmed" fw={500} tt="uppercase" style={{ letterSpacing: '0.05em' }}>
+                  Explore CLI
+                </Text>
+                <CliCommand
+                  command={
+                    run.jobCount === 1
+                      ? `gnomepy explore --run-id ${run.runId}`
+                      : `gnomepy explore --run-id ${run.runId} --job 0`
+                  }
+                />
+                {run.jobCount > 1 && (
+                  <Text size="xs" c="dimmed">
+                    Use <Code style={{ fontSize: '0.7rem' }}>--job N</Code> for a specific sweep job — copy per-job commands from the table below.
+                  </Text>
+                )}
+              </Stack>
+            </>
           )}
         </Card>
       )}
