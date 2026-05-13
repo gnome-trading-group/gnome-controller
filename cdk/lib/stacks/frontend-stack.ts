@@ -4,6 +4,7 @@ import * as s3deploy from "aws-cdk-lib/aws-s3-deployment";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cognito from "aws-cdk-lib/aws-cognito";
+import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import { Construct } from "constructs";
 import * as path from "path";
 import { execSync } from "child_process";
@@ -12,6 +13,8 @@ import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 interface FrontendStackProps extends cdk.StackProps {
   stage: Stage;
   metadataUrl: string;
+  domainName: string;
+  certificateArn: string;
 }
 
 export class FrontendStack extends cdk.Stack {
@@ -54,7 +57,11 @@ export class FrontendStack extends cdk.Stack {
     const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, "ControllerOAI");
     websiteBucket.grantRead(originAccessIdentity);
 
+    const certificate = acm.Certificate.fromCertificateArn(this, "ControllerCertificate", props.certificateArn);
+
     const distribution = new cloudfront.Distribution(this, "ControllerDistribution", {
+      domainNames: [props.domainName],
+      certificate,
       defaultBehavior: {
         origin: new origins.S3Origin(websiteBucket, {
           originAccessIdentity,
@@ -83,12 +90,14 @@ export class FrontendStack extends cdk.Stack {
         ],
         callbackUrls: [
           `https://${distribution.distributionDomainName}`,
+          `https://${props.domainName}`,
           'http://localhost:5173',
           'http://localhost:3000',
           'http://localhost:8080',
         ],
         logoutUrls: [
           `https://${distribution.distributionDomainName}`,
+          `https://${props.domainName}`,
           'http://localhost:5173',
           'http://localhost:3000',
           'http://localhost:8080',
@@ -179,7 +188,12 @@ export class FrontendStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ControllerDistributionDomainName", {
       value: distribution.distributionDomainName,
       exportName: "ControllerDistributionDomainName",
-      description: "Controller UI URL",
+      description: "Controller UI CloudFront URL",
+    });
+
+    new cdk.CfnOutput(this, "ControllerCustomDomainUrl", {
+      value: `https://${props.domainName}`,
+      description: "Controller UI custom domain URL",
     });
 
     new cdk.CfnOutput(this, "UserPoolId", {
