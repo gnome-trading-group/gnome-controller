@@ -1,9 +1,11 @@
-import React, { useMemo } from 'react';
-import { Badge, Group, Paper, Stack, Text } from '@mantine/core';
+import React, { useMemo, useState } from 'react';
+import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { formatSecurityType } from '../../utils/security-master';
+
+const PAGE_SIZE = 25;
 
 type ActivityEntry =
   | { kind: 'security'; securityId: number; symbol: string; type: number; dateCreated: string }
@@ -12,6 +14,7 @@ type ActivityEntry =
 function ActivityTab() {
   const { securities, listings, exchanges } = useGlobalState();
   const navigate = useNavigate();
+  const [limit, setLimit] = useState(PAGE_SIZE);
 
   const feed = useMemo<ActivityEntry[]>(() => {
     const exchangeMap = new Map(exchanges.map(e => [e.exchangeId, e]));
@@ -38,9 +41,11 @@ function ActivityTab() {
     );
   }, [securities, listings, exchanges]);
 
+  const visible = feed.slice(0, limit);
+
   return (
     <Stack gap="xs" mt="md">
-      {feed.map((entry, i) => (
+      {visible.map((entry, i) => (
         <Paper
           key={i}
           p="sm"
@@ -80,6 +85,14 @@ function ActivityTab() {
       ))}
       {feed.length === 0 && (
         <Text c="dimmed" size="sm">No activity yet.</Text>
+      )}
+      {limit < feed.length && (
+        <Button
+          variant="subtle"
+          onClick={() => setLimit(l => l + PAGE_SIZE)}
+        >
+          Load more ({feed.length - limit} remaining)
+        </Button>
       )}
     </Stack>
   );
