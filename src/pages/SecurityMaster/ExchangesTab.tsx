@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ActionIcon,
   Button,
@@ -215,4 +215,4 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
   );
 }
 
-export default ExchangesTab;
+export default React.memo(ExchangesTab);

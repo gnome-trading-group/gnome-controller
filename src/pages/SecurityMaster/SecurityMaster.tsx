@@ -21,9 +21,10 @@ import * as XLSX from 'xlsx';
 import ListingsTab from './ListingsTab';
 import SecuritiesTab from './SecuritiesTab';
 import ExchangesTab from './ExchangesTab';
-import ListingSpecsTab from './ListingSpecsTab';
+import ActivityTab from './ActivityTab';
+import CurrenciesTab from './CurrenciesTab';
 
-type DeleteType = 'exchange' | 'security' | 'listing' | 'listingSpec';
+type DeleteType = 'exchange' | 'security' | 'listing';
 
 function SecurityMaster() {
   const [activeTab, setActiveTab] = useState<string | null>('listings');
@@ -33,7 +34,6 @@ function SecurityMaster() {
     exchanges: 0,
     securities: 0,
     listings: 0,
-    listingSpecs: 0,
   });
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -47,12 +47,11 @@ function SecurityMaster() {
     exchanges,
     securities,
     listings,
-    listingSpecs,
     error,
     refreshSecurities,
     refreshExchanges,
     refreshListings,
-    refreshListingSpecs,
+    refreshCurrencies,
   } = useGlobalState();
 
   const handleRefresh = async () => {
@@ -60,7 +59,7 @@ function SecurityMaster() {
       refreshSecurities(),
       refreshExchanges(),
       refreshListings(),
-      refreshListingSpecs(),
+      refreshCurrencies(),
     ]);
   };
 
@@ -69,7 +68,7 @@ function SecurityMaster() {
 
     setUploadFile(file);
     setUploadError(null);
-    setUploadProgress({ exchanges: 0, securities: 0, listings: 0, listingSpecs: 0 });
+    setUploadProgress({ exchanges: 0, securities: 0, listings: 0 });
 
     try {
       const data = await file.arrayBuffer();
@@ -99,11 +98,6 @@ function SecurityMaster() {
 
       await processSheet('Listings', async (row) => {
         await registryApi.createListing(row);
-      });
-
-      await processSheet('Listing Specs', async (row) => {
-        await registryApi.createListingSpec(row);
-        setUploadProgress(prev => ({ ...prev, listingSpecs: (prev.listingSpecs || 0) + 1 }));
       });
 
       await handleRefresh();
@@ -136,13 +130,6 @@ function SecurityMaster() {
       exchangeSecuritySymbol: 'BTC',
     }]), 'Listings');
 
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{
-      listingId: 1,
-      tickSize: 100,
-      lotSize: 1,
-      minNotional: 0,
-    }]), 'Listing Specs');
-
     XLSX.writeFile(wb, 'security_master_template.xlsx');
   };
 
@@ -151,7 +138,6 @@ function SecurityMaster() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exchanges), 'Exchanges');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(securities), 'Securities');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(listings), 'Listings');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(listingSpecs), 'Listing Specs');
     XLSX.writeFile(wb, 'security_master_data.xlsx');
   };
 
@@ -176,10 +162,6 @@ function SecurityMaster() {
         case 'listing':
           await registryApi.deleteListing(deleteItem.id);
           await refreshListings();
-          break;
-        case 'listingSpec':
-          await registryApi.deleteListingSpec(deleteItem.id);
-          await refreshListingSpecs();
           break;
       }
     } catch (err) {
@@ -235,7 +217,7 @@ function SecurityMaster() {
         size="lg"
       >
         <Stack>
-          <Text>Upload an Excel file with sheets named "Exchanges", "Securities", "Listings", and "Listing Specs" to create new entries.</Text>
+          <Text>Upload an Excel file with sheets named "Exchanges", "Securities", and "Listings" to create new entries.</Text>
 
           <Group>
             <FileButton
@@ -270,7 +252,6 @@ function SecurityMaster() {
               <Text>Exchanges processed: {uploadProgress.exchanges}</Text>
               <Text>Securities processed: {uploadProgress.securities}</Text>
               <Text>Listings processed: {uploadProgress.listings}</Text>
-              <Text>Listing Specs processed: {uploadProgress.listingSpecs}</Text>
             </Stack>
           )}
 
@@ -312,23 +293,24 @@ function SecurityMaster() {
         </Stack>
       </Modal>
 
-      {(error.securities || error.exchanges || error.listings || error.listingSpecs) && (
+      {(error.securities || error.exchanges || error.listings) && (
         <Notification
           color="red"
           title="Error"
           onClose={() => {}}
           mb="md"
         >
-          {error.securities || error.exchanges || error.listings || error.listingSpecs}
+          {error.securities || error.exchanges || error.listings}
         </Notification>
       )}
 
-      <Tabs value={activeTab} onChange={setActiveTab}>
+      <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
         <Tabs.List>
           <Tabs.Tab value="listings">Listings</Tabs.Tab>
           <Tabs.Tab value="securities">Securities</Tabs.Tab>
           <Tabs.Tab value="exchanges">Exchanges</Tabs.Tab>
-          <Tabs.Tab value="listingSpecs">Listing Specs</Tabs.Tab>
+          <Tabs.Tab value="currencies">Currencies</Tabs.Tab>
+          <Tabs.Tab value="activity">Activity</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="listings">
@@ -346,9 +328,13 @@ function SecurityMaster() {
           <ExchangesTab onDelete={handleDelete} />
         </Tabs.Panel>
 
-        <Tabs.Panel value="listingSpecs">
+        <Tabs.Panel value="currencies">
           <Space h="md" />
-          <ListingSpecsTab onDelete={handleDelete} />
+          <CurrenciesTab />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="activity">
+          <ActivityTab />
         </Tabs.Panel>
       </Tabs>
     </Container>

@@ -1,5 +1,5 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
-import { Exchange, Listing, ListingSpec, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
+import { Currency, Exchange, Listing, ListingSpec, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
 import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsListParams, TransformJobsSearchParams } from '../types/transform-jobs';
@@ -340,13 +340,23 @@ export const registryApi = {
       convertToCamelCase: true,
       body: { strategyId },
     }),
-  listListingSpecs: (listingId?: number) =>
-    sendApiRequest<ListingSpec[]>('/listing-specs', 'GET', {
+  listCurrencies: () =>
+    sendApiRequest<Currency[]>('/currencies', 'GET', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
-      queryParams: listingId !== undefined ? { listingId } : undefined,
     }),
+  listListingSpecs: (listingId?: number, history?: boolean) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (listingId !== undefined) queryParams.listingId = listingId;
+    if (history) queryParams.history = true;
+    return sendApiRequest<ListingSpec[]>('/listing-specs', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
   createListingSpec: (spec: Omit<ListingSpec, 'dateCreated' | 'dateModified'>) =>
     sendApiRequest<ListingSpec>('/listing-specs', 'POST', {
       apiUrl: REGISTRY_API_URL,

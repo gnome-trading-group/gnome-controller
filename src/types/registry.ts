@@ -1,12 +1,3 @@
-export interface ListingSpec {
-  listingId: number;
-  tickSize: number;
-  lotSize: number;
-  minNotional?: number;
-  dateCreated: string;
-  dateModified: string;
-}
-
 export enum StrategyStatus {
   INACTIVE = 0,
   ACTIVE = 1,

@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ActionIcon,
+  Badge,
   Button,
   Group,
   Modal,
@@ -9,13 +10,14 @@ import {
   TextInput,
   Tooltip,
 } from '@mantine/core';
-import { IconEdit, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconPlus, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
-import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row, type MRT_TableInstance } from 'mantine-react-table';
+import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
+import { useNavigate } from 'react-router-dom';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { Security, SecurityType } from '../../types';
 import { registryApi } from '../../utils/api';
-import { formatSecurityType } from '../../utils/security-master';
+import { formatAssetClass, formatSecurityType } from '../../utils/security-master';
 
 interface SecuritiesTabProps {
   onDelete: (type: 'security', id: number, name: string) => void;
@@ -23,17 +25,18 @@ interface SecuritiesTabProps {
 
 function SecuritiesTab({ onDelete }: SecuritiesTabProps) {
   const { securities, loading, refreshSecurities } = useGlobalState();
+  const navigate = useNavigate();
 
   const [createSecurityOpen, setCreateSecurityOpen] = useState(false);
   const [newSecurityForm, setNewSecurityForm] = useState({
     symbol: '',
-    type: SecurityType.SPOT,
+    type: SecurityType.SPOT as number,
     description: '',
   });
 
   const handleCreateSecurity = async () => {
     try {
-      await registryApi.createSecurity(newSecurityForm);
+      await registryApi.createSecurity(newSecurityForm as any);
       await refreshSecurities();
       setCreateSecurityOpen(false);
       setNewSecurityForm({ symbol: '', type: SecurityType.SPOT, description: '' });
@@ -44,79 +47,51 @@ function SecuritiesTab({ onDelete }: SecuritiesTabProps) {
 
   const columns = useMemo<MRT_ColumnDef<Security>[]>(() => [
     {
-      accessorKey: 'securityId',
-      header: 'ID',
-      enableSorting: true,
-      enableEditing: false,
-      size: 60,
-    },
-    {
       accessorKey: 'symbol',
       header: 'Symbol',
       enableSorting: true,
-      enableEditing: true,
-      Edit: ({ cell, row }) => (
-        <TextInput
-          defaultValue={cell.getValue<string>()}
-          onChange={(e) => {
-            row.original.symbol = e.target.value;
-          }}
-        />
-      ),
+      enableGrouping: true,
     },
     {
       accessorKey: 'type',
       header: 'Type',
       enableSorting: true,
-      enableEditing: true,
-      Edit: ({ cell, row }) => (
-        <Select
-          defaultValue={cell.getValue<number>().toString()}
-          data={Object.entries(SecurityType)
-            .filter(([key]) => isNaN(Number(key)))
-            .map(([, value]) => ({
-              value: value.toString(),
-              label: formatSecurityType(value as number),
-            }))}
-          onChange={(value) => {
-            row.original.type = parseInt(value || '0');
-          }}
-        />
-      ),
+      enableGrouping: true,
       Cell: ({ row }: { row: MRT_Row<Security> }) => formatSecurityType(row.original.type),
     },
     {
-      accessorKey: 'description',
-      header: 'Description',
+      accessorKey: 'assetClass',
+      header: 'Asset Class',
       enableSorting: true,
-      enableEditing: true,
-      Edit: ({ cell, row }) => (
-        <TextInput
-          defaultValue={cell.getValue<string>()}
-          onChange={(e) => {
-            row.original.description = e.target.value;
-          }}
-        />
+      enableGrouping: true,
+      Cell: ({ row }: { row: MRT_Row<Security> }) => formatAssetClass(row.original.assetClass),
+    },
+    {
+      accessorKey: 'quoteCurrency',
+      header: 'Quote Currency',
+      enableSorting: true,
+      enableGrouping: true,
+      Cell: ({ row }: { row: MRT_Row<Security> }) => row.original.quoteCurrency ?? '-',
+    },
+    {
+      accessorKey: 'active',
+      header: 'Active',
+      enableSorting: true,
+      enableGrouping: true,
+      size: 80,
+      Cell: ({ row }: { row: MRT_Row<Security> }) => (
+        <Badge color={row.original.active ? 'green' : 'gray'} variant="light" size="sm">
+          {row.original.active ? 'Active' : 'Inactive'}
+        </Badge>
       ),
     },
     {
       accessorKey: 'dateCreated',
       header: 'Created',
       enableSorting: true,
-      enableEditing: false,
       Cell: ({ row }: { row: MRT_Row<Security> }) =>
         row.original.dateCreated ?
           <ReactTimeAgo date={new Date(row.original.dateCreated)} timeStyle="round" /> :
-          '-',
-    },
-    {
-      accessorKey: 'dateModified',
-      header: 'Modified',
-      enableSorting: true,
-      enableEditing: false,
-      Cell: ({ row }: { row: MRT_Row<Security> }) =>
-        row.original.dateModified ?
-          <ReactTimeAgo date={new Date(row.original.dateModified)} timeStyle="round" /> :
           '-',
     },
   ], []);
@@ -131,41 +106,33 @@ function SecuritiesTab({ onDelete }: SecuritiesTabProps) {
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: true,
-    enableEditing: true,
-    editDisplayMode: 'row',
+    enableGrouping: true,
     positionActionsColumn: 'last',
     mantineTableProps: {
       striped: true,
       highlightOnHover: true,
       withColumnBorders: true,
     },
+    mantineTableBodyRowProps: ({ row }) => ({
+      onClick: () => navigate(`/security-master/securities/${row.original.securityId}`),
+      style: { cursor: 'pointer' },
+    }),
     initialState: {
-      sorting: [{ id: 'securityId', desc: false }],
+      sorting: [{ id: 'symbol', desc: false }],
       density: 'xs',
     },
-    renderRowActions: ({ row, table: t }: { row: MRT_Row<Security>; table: MRT_TableInstance<Security> }) => (
-      <Group gap={4} justify="center" wrap="nowrap">
-        <ActionIcon
-          variant="subtle"
-          color="blue"
-          onClick={() => t.setEditingRow(row)}
-        >
-          <IconEdit size={16} />
-        </ActionIcon>
-        <ActionIcon
-          variant="subtle"
-          color="red"
-          onClick={() => onDelete('security', row.original.securityId, row.original.symbol)}
-        >
-          <IconTrash size={16} />
-        </ActionIcon>
-      </Group>
+    renderRowActions: ({ row }: { row: MRT_Row<Security> }) => (
+      <ActionIcon
+        variant="subtle"
+        color="red"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete('security', row.original.securityId, row.original.symbol);
+        }}
+      >
+        <IconTrash size={16} />
+      </ActionIcon>
     ),
-    onEditingRowSave: async ({ row, table: t }: { row: MRT_Row<Security>; table: MRT_TableInstance<Security> }) => {
-      await registryApi.updateSecurity(row.original.securityId, row.original);
-      t.setEditingRow(null);
-      refreshSecurities();
-    },
     renderTopToolbarCustomActions: () => (
       <Tooltip label="Add Security" position="bottom" withArrow openDelay={500}>
         <ActionIcon
@@ -223,4 +190,4 @@ function SecuritiesTab({ onDelete }: SecuritiesTabProps) {
   );
 }
 
-export default SecuritiesTab;
+export default React.memo(SecuritiesTab);

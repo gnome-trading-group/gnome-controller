@@ -1,30 +1,30 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { registryApi } from '../utils/api';
-import { Exchange, Listing, ListingSpec, Security } from '../types';
+import { Currency, Exchange, Listing, Security } from '../types';
 
 interface ErrorState {
   securities: string | null;
   exchanges: string | null;
   listings: string | null;
-  listingSpecs: string | null;
+  currencies: string | null;
 }
 
 interface GlobalState {
   securities: Security[];
   exchanges: Exchange[];
   listings: Listing[];
-  listingSpecs: ListingSpec[];
+  currencies: Currency[];
   loading: {
     securities: boolean;
     exchanges: boolean;
     listings: boolean;
-    listingSpecs: boolean;
+    currencies: boolean;
   };
   error: ErrorState;
   refreshSecurities: () => Promise<void>;
   refreshExchanges: () => Promise<void>;
   refreshListings: () => Promise<void>;
-  refreshListingSpecs: () => Promise<void>;
+  refreshCurrencies: () => Promise<void>;
 }
 
 const GlobalStateContext = createContext<GlobalState | undefined>(undefined);
@@ -33,18 +33,18 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
   const [securities, setSecurities] = useState<Security[]>([]);
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
-  const [listingSpecs, setListingSpecs] = useState<ListingSpec[]>([]);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [loading, setLoading] = useState({
     securities: false,
     exchanges: false,
     listings: false,
-    listingSpecs: false,
+    currencies: false,
   });
   const [error, setError] = useState<ErrorState>({
     securities: null,
     exchanges: null,
     listings: null,
-    listingSpecs: null,
+    currencies: null,
   });
 
   const refreshSecurities = async () => {
@@ -86,38 +86,37 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
     }
   };
 
-  const refreshListingSpecs = async () => {
-    setLoading(prev => ({ ...prev, listingSpecs: true }));
-    setError(prev => ({ ...prev, listingSpecs: null }));
+  const refreshCurrencies = async () => {
+    setLoading(prev => ({ ...prev, currencies: true }));
+    setError(prev => ({ ...prev, currencies: null }));
     try {
-      const response = await registryApi.listListingSpecs();
-      setListingSpecs(response);
+      const response = await registryApi.listCurrencies();
+      setCurrencies(response);
     } catch (err) {
-      setError(prev => ({ ...prev, listingSpecs: err instanceof Error ? err.message : 'Unknown error' }));
+      setError(prev => ({ ...prev, currencies: err instanceof Error ? err.message : 'Unknown error' }));
     } finally {
-      setLoading(prev => ({ ...prev, listingSpecs: false }));
+      setLoading(prev => ({ ...prev, currencies: false }));
     }
   };
 
-  // Initial data fetch
   useEffect(() => {
     refreshSecurities();
     refreshExchanges();
     refreshListings();
-    refreshListingSpecs();
+    refreshCurrencies();
   }, []);
 
   const value = {
     securities,
     exchanges,
     listings,
-    listingSpecs,
+    currencies,
     loading,
     error,
     refreshSecurities,
     refreshExchanges,
     refreshListings,
-    refreshListingSpecs,
+    refreshCurrencies,
   };
 
   return (
@@ -133,4 +132,4 @@ export function useGlobalState() {
     throw new Error('useGlobalState must be used within a GlobalStateProvider');
   }
   return context;
-} 
+}

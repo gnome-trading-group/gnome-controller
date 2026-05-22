@@ -14,6 +14,8 @@ import SecurityExchangeCoverage from './pages/MarketData/Coverage/SecurityExchan
 import TransformJobs from './pages/MarketData/TransformJobs/TransformJobs';
 import Gaps from './pages/MarketData/Gaps/Gaps';
 import SecurityMaster from './pages/SecurityMaster/SecurityMaster';
+import ListingDetail from './pages/SecurityMaster/ListingDetail';
+import SecurityDetail from './pages/SecurityMaster/SecurityDetail';
 import LatencyProbe from './pages/LatencyProbe/LatencyProbe';
 import Strategies from './pages/Strategies/Strategies';
 import StrategyDetail from './pages/Strategies/StrategyDetail';
@@ -108,6 +110,8 @@ function AppContent() {
           </Transition>
           <Routes>
             <Route path="/security-master" element={<SecurityMaster />} />
+            <Route path="/security-master/listings/:listingId" element={<ListingDetail />} />
+            <Route path="/security-master/securities/:securityId" element={<SecurityDetail />} />
             <Route path="/market-data/collectors" element={<Collectors />} />
             <Route path="/market-data/collectors/:listingId" element={<CollectorDetail />} />
             <Route path="/market-data/coverage" element={<CoverageSummary />} />
