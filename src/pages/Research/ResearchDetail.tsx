@@ -268,7 +268,7 @@ function ResearchDetail() {
               <YAxis tick={{ fontSize: 11 }} />
               <RechartsTooltip
                 contentStyle={{ backgroundColor: 'var(--mantine-color-dark-7)', border: 'none', fontSize: 12 }}
-                formatter={(v: number) => [v?.toFixed(4), 'PnL']}
+                formatter={(v) => [Number(v)?.toFixed(4), 'PnL']}
               />
               <Bar dataKey="pnl">
                 {chartData.map((entry, i) => (
