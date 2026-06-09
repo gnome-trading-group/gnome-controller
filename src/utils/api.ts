@@ -1,5 +1,6 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { Currency, Exchange, Listing, ListingSpec, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
+import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
 import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsListParams, TransformJobsSearchParams } from '../types/transform-jobs';
@@ -443,4 +444,27 @@ export const controllerApi = {
       apiUrl: CONTROLLER_API_URL,
       convertToCamelCase: true,
     }),
+  listResearchSessions: (params?: { status?: string; limit?: number }) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.status) queryParams.status = params.status;
+    if (params?.limit) queryParams.limit = params.limit;
+    return sendApiRequest<ResearchSessionListResponse>('/research/sessions', 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  getResearchSession: (sessionName: string) =>
+    sendApiRequest<ResearchSession>(`/research/sessions/${sessionName}`, 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+    }),
+  addResearchNote: (sessionName: string, content: string) =>
+    sendApiRequest<{ sessionName: string; timestamp: string }>(
+      `/research/sessions/${sessionName}/notes`, 'POST', {
+        apiUrl: CONTROLLER_API_URL,
+        convertToCamelCase: true,
+        body: { content },
+      }
+    ),
 }

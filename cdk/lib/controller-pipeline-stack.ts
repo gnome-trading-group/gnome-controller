@@ -8,6 +8,7 @@ import { CONFIGS, GITHUB_BRANCH, GITHUB_REPO, ControllerConfig } from "./config"
 import { FrontendStack } from "./stacks/frontend-stack";
 import { BackendStack } from "./stacks/backend-stack";
 import { BacktestStack } from "./stacks/backtest-stack";
+import { ResearchStack } from "./stacks/research-stack";
 import { MonitoringStack } from "./stacks/monitoring-stack";
 import { LatencyProbeStack, PROBE_REGIONS } from "./stacks/latency-probe-stack";
 
@@ -28,6 +29,12 @@ class AppStage extends cdk.Stage {
     });
 
     new BacktestStack(this, "ControllerBacktestStack", {
+      stage: config.account.stage,
+      apiGateway: backendStack.apiGateway,
+      cognitoAuthorizer: backendStack.cognitoAuthorizer,
+    });
+
+    new ResearchStack(this, "ControllerResearchStack", {
       stage: config.account.stage,
       apiGateway: backendStack.apiGateway,
       cognitoAuthorizer: backendStack.cognitoAuthorizer,

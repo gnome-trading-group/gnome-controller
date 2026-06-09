@@ -26,6 +26,8 @@ import QualityIssues from './pages/MarketData/QualityIssues/QualityIssues';
 import MinuteInvestigation from './pages/MarketData/QualityIssues/MinuteInvestigation';
 import BacktestList from './pages/Backtests/BacktestList';
 import BacktestDetail from './pages/Backtests/BacktestDetail';
+import ResearchList from './pages/Research/ResearchList';
+import ResearchDetail from './pages/Research/ResearchDetail';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -127,6 +129,8 @@ function AppContent() {
             <Route path="/risk/policies" element={<RiskPolicies />} />
             <Route path="/backtests" element={<BacktestList />} />
             <Route path="/backtests/:runId" element={<BacktestDetail />} />
+            <Route path="/research" element={<ResearchList />} />
+            <Route path="/research/:sessionName" element={<ResearchDetail />} />
             <Route path="/logout" element={<Logout />} />
             <Route path="/" element={<Navigate to="/security-master" replace />} />
           </Routes>
