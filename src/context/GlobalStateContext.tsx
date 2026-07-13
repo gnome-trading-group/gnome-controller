@@ -1,64 +1,26 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { registryApi } from '../utils/api';
-import { Currency, Exchange, Listing, Security } from '../types';
-
-interface ErrorState {
-  securities: string | null;
-  exchanges: string | null;
-  listings: string | null;
-  currencies: string | null;
-}
+import { Exchange } from '../types';
 
 interface GlobalState {
-  securities: Security[];
   exchanges: Exchange[];
-  listings: Listing[];
-  currencies: Currency[];
-  loading: {
-    securities: boolean;
-    exchanges: boolean;
-    listings: boolean;
-    currencies: boolean;
-  };
-  error: ErrorState;
-  refreshSecurities: () => Promise<void>;
+  securitySymbols: Record<number, string>;
+  loading: { exchanges: boolean; securitySymbols: boolean };
+  error: { exchanges: string | null; securitySymbols: string | null };
   refreshExchanges: () => Promise<void>;
-  refreshListings: () => Promise<void>;
-  refreshCurrencies: () => Promise<void>;
+  refreshSecuritySymbols: () => Promise<void>;
 }
 
 const GlobalStateContext = createContext<GlobalState | undefined>(undefined);
 
 export function GlobalStateProvider({ children }: { children: React.ReactNode }) {
-  const [securities, setSecurities] = useState<Security[]>([]);
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
-  const [listings, setListings] = useState<Listing[]>([]);
-  const [currencies, setCurrencies] = useState<Currency[]>([]);
-  const [loading, setLoading] = useState({
-    securities: false,
-    exchanges: false,
-    listings: false,
-    currencies: false,
-  });
-  const [error, setError] = useState<ErrorState>({
-    securities: null,
+  const [securitySymbols, setSecuritySymbols] = useState<Record<number, string>>({});
+  const [loading, setLoading] = useState({ exchanges: false, securitySymbols: false });
+  const [error, setError] = useState<{ exchanges: string | null; securitySymbols: string | null }>({
     exchanges: null,
-    listings: null,
-    currencies: null,
+    securitySymbols: null,
   });
-
-  const refreshSecurities = async () => {
-    setLoading(prev => ({ ...prev, securities: true }));
-    setError(prev => ({ ...prev, securities: null }));
-    try {
-      const response = await registryApi.listSecurities();
-      setSecurities(response);
-    } catch (err) {
-      setError(prev => ({ ...prev, securities: err instanceof Error ? err.message : 'Unknown error' }));
-    } finally {
-      setLoading(prev => ({ ...prev, securities: false }));
-    }
-  };
 
   const refreshExchanges = async () => {
     setLoading(prev => ({ ...prev, exchanges: true }));
@@ -73,54 +35,26 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
     }
   };
 
-  const refreshListings = async () => {
-    setLoading(prev => ({ ...prev, listings: true }));
-    setError(prev => ({ ...prev, listings: null }));
+  const refreshSecuritySymbols = async () => {
+    setLoading(prev => ({ ...prev, securitySymbols: true }));
+    setError(prev => ({ ...prev, securitySymbols: null }));
     try {
-      const response = await registryApi.listListings();
-      setListings(response);
+      const map = await registryApi.listSecuritySymbols();
+      setSecuritySymbols(map);
     } catch (err) {
-      setError(prev => ({ ...prev, listings: err instanceof Error ? err.message : 'Unknown error' }));
+      setError(prev => ({ ...prev, securitySymbols: err instanceof Error ? err.message : 'Unknown error' }));
     } finally {
-      setLoading(prev => ({ ...prev, listings: false }));
-    }
-  };
-
-  const refreshCurrencies = async () => {
-    setLoading(prev => ({ ...prev, currencies: true }));
-    setError(prev => ({ ...prev, currencies: null }));
-    try {
-      const response = await registryApi.listCurrencies();
-      setCurrencies(response);
-    } catch (err) {
-      setError(prev => ({ ...prev, currencies: err instanceof Error ? err.message : 'Unknown error' }));
-    } finally {
-      setLoading(prev => ({ ...prev, currencies: false }));
+      setLoading(prev => ({ ...prev, securitySymbols: false }));
     }
   };
 
   useEffect(() => {
-    refreshSecurities();
     refreshExchanges();
-    refreshListings();
-    refreshCurrencies();
+    refreshSecuritySymbols();
   }, []);
 
-  const value = {
-    securities,
-    exchanges,
-    listings,
-    currencies,
-    loading,
-    error,
-    refreshSecurities,
-    refreshExchanges,
-    refreshListings,
-    refreshCurrencies,
-  };
-
   return (
-    <GlobalStateContext.Provider value={value}>
+    <GlobalStateContext.Provider value={{ exchanges, securitySymbols, loading, error, refreshExchanges, refreshSecuritySymbols }}>
       {children}
     </GlobalStateContext.Provider>
   );

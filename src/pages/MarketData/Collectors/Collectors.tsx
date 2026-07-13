@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { marketDataApi } from '../../../utils/api';
-import { ApiError } from '../../../utils/api';
+import { marketDataApi, registryApi, ApiError } from '../../../utils/api';
+import { DenormalizedListing } from '../../../types';
 import {
   Button,
   ActionIcon,
   Group,
+  Loader,
   Modal,
   Stack,
   Title,
@@ -20,7 +21,7 @@ import { IconPlus, IconRefresh, IconPlayerStop, IconAB2 } from '@tabler/icons-re
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useGlobalState } from '../../../context/GlobalStateContext';
-import { formatSecurityType } from '../../../utils/security-master';
+import { useListingSearch } from '../../../hooks/useAsyncSearch';
 
 interface Collector {
   listingId: number;
@@ -32,12 +33,15 @@ interface Collector {
 
 function Collectors() {
   const navigate = useNavigate();
-  const { listings, exchanges, securities } = useGlobalState();
+  const { exchanges } = useGlobalState();
   const [collectors, setCollectors] = useState<Collector[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
+  const [listingSearchValue, setListingSearchValue] = useState('');
+  const { options: listingSearchOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearchValue);
+  const [selectedListing, setSelectedListing] = useState<DenormalizedListing | null>(null);
   const [creating, setCreating] = useState(false);
   const [stopModalOpen, setStopModalOpen] = useState(false);
   const [collectorToStop, setCollectorToStop] = useState<number | null>(null);
@@ -45,32 +49,11 @@ function Collectors() {
   const [collectorToRedeploy, setCollectorToRedeploy] = useState<number | null>(null);
   const [redeployAllModalOpen, setRedeployAllModalOpen] = useState(false);
 
-  const exchangeRegionMap = useMemo(() => {
-    const map = new Map<number, string>();
-    exchanges.forEach((exchange) => {
-      map.set(exchange.exchangeId, exchange.region);
-    });
-    return map;
-  }, [exchanges]);
-
-  const listingOptions = useMemo(() => {
-    return listings
-      .map((listing) => {
-        const exchange = exchanges.find((e) => e.exchangeId === listing.exchangeId);
-        const security = securities.find((s) => s.securityId === listing.securityId);
-        return {
-          value: String(listing.listingId),
-          label: `${listing.listingId} - ${exchange?.exchangeName} - ${security?.symbol} (${formatSecurityType(security?.type || 0)})`,
-        }
-      });
-  }, [listings, securities, exchanges]);
-
   const selectedListingRegion = useMemo(() => {
-    if (!selectedListingId) return null;
-    const listing = listings.find((l) => l.listingId === Number(selectedListingId));
-    if (!listing) return null;
-    return exchangeRegionMap.get(listing.exchangeId) || null;
-  }, [selectedListingId, listings, exchangeRegionMap]);
+    if (!selectedListing) return null;
+    const exchange = exchanges.find(e => e.exchangeId === selectedListing.exchangeId);
+    return exchange?.region ?? null;
+  }, [selectedListing, exchanges]);
 
   useEffect(() => {
     loadCollectors();
@@ -105,6 +88,17 @@ function Collectors() {
     }
   };
 
+  const handleListingSelect = (listingId: string | null) => {
+    setSelectedListingId(listingId);
+    if (!listingId) {
+      setSelectedListing(null);
+      return;
+    }
+    registryApi.listListingsPaginated({ listingId: parseInt(listingId), limit: 1 })
+      .then(rows => setSelectedListing(rows[0] ?? null))
+      .catch(() => setSelectedListing(null));
+  };
+
   const handleCreateCollector = async () => {
     if (!selectedListingId || !selectedListingRegion) return;
 
@@ -114,6 +108,7 @@ function Collectors() {
       await marketDataApi.createCollector(Number(selectedListingId), selectedListingRegion);
       setCreateModalOpen(false);
       setSelectedListingId(null);
+      setSelectedListing(null);
       await loadCollectors();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -320,10 +315,14 @@ function Collectors() {
           <Select
             label="Listing"
             value={selectedListingId}
-            onChange={setSelectedListingId}
-            data={listingOptions}
-            placeholder="Select a listing"
+            onChange={handleListingSelect}
+            data={listingSearchOptions}
+            placeholder="Search listings..."
             searchable
+            onSearchChange={setListingSearchValue}
+            searchValue={listingSearchValue}
+            filter={({ options }) => options}
+            rightSection={listingSearchLoading ? <Loader size="xs" /> : undefined}
             required
           />
           {selectedListingRegion && (

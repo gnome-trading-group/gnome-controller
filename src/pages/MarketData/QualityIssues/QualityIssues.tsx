@@ -22,10 +22,11 @@ import {
 import { DatePickerInput } from '@mantine/dates';
 import { IconRefresh, IconCheck, IconEye, IconEyeOff, IconPlayerPlay } from '@tabler/icons-react';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_RowSelectionState } from 'mantine-react-table';
-import { marketDataApi } from '../../../utils/api';
+import { marketDataApi, registryApi } from '../../../utils/api';
 import { useGlobalState } from '../../../context/GlobalStateContext';
+import { useListingSearch, useListingLabels, useSecuritySearch } from '../../../hooks/useAsyncSearch';
+import { DenormalizedListing } from '../../../types';
 import { QualityIssue, QualityIssueStatus, QualityBackfillMode, formatRuleType, getRuleTypeColor } from '../../../types/quality-issues';
-import { formatSecurityType } from '../../../utils/security-master';
 
 const STATUS_CONFIG: Record<QualityIssueStatus, { color: string; icon: React.ReactNode; label: string }> = {
   UNREVIEWED: { color: 'yellow', icon: <IconEyeOff size={14} />, label: 'Unreviewed' },
@@ -60,10 +61,15 @@ function formatDate(d: Date): string {
 function QualityIssues() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { listings, exchanges, securities } = useGlobalState();
+  const { exchanges } = useGlobalState();
 
   const initialListingId = searchParams.get('listingId');
   const [selectedListingId, setSelectedListingId] = useState<string | null>(initialListingId);
+  const [listingSearchValue, setListingSearchValue] = useState('');
+  const { options: listingSearchOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearchValue);
+  const [selectedListingOption, setSelectedListingOption] = useState<{ value: string; label: string } | null>(null);
+  const [securitySearch, setSecuritySearch] = useState('');
+  const { options: securityOptions, isLoading: securitySearchLoading } = useSecuritySearch(securitySearch);
   const [selectedRuleType, setSelectedRuleType] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<QualityIssueStatus>('UNREVIEWED');
 
@@ -83,6 +89,7 @@ function QualityIssues() {
   const [backfillModalOpen, setBackfillModalOpen] = useState(false);
   const [backfillExchangeId, setBackfillExchangeId] = useState<string | null>(null);
   const [backfillSecurityId, setBackfillSecurityId] = useState<string | null>(null);
+  const [backfillListing, setBackfillListing] = useState<DenormalizedListing | null>(null);
   const [backfillStartDate, setBackfillStartDate] = useState<Date | null>(null);
   const [backfillEndDate, setBackfillEndDate] = useState<Date | null>(null);
   const [backfillMode, setBackfillMode] = useState<QualityBackfillMode>('all');
@@ -93,6 +100,7 @@ function QualityIssues() {
 
   const handleListingChange = useCallback((listingId: string | null) => {
     setSelectedListingId(listingId);
+    if (!listingId) setSelectedListingOption(null);
     if (listingId) {
       setSearchParams({ listingId });
     } else {
@@ -100,36 +108,37 @@ function QualityIssues() {
     }
   }, [setSearchParams]);
 
-  const listingOptions = useMemo(() => {
-    return listings.map((listing) => {
-      const exchange = exchanges.find((e) => e.exchangeId === listing.exchangeId);
-      const security = securities.find((s) => s.securityId === listing.securityId);
-      return {
-        value: String(listing.listingId),
-        label: `${listing.listingId} - ${exchange?.exchangeName || 'Unknown'} - ${security?.symbol || 'Unknown'} (${formatSecurityType(security?.type || 0)})`,
-      };
-    });
-  }, [listings, securities, exchanges]);
+  useEffect(() => {
+    if (!initialListingId) return;
+    registryApi.listListingsPaginated({ listingId: parseInt(initialListingId), limit: 1 })
+      .then(rows => {
+        const l = rows[0];
+        if (l) setSelectedListingOption({ value: String(l.listingId), label: `${l.listingId} - ${l.exchangeName} - ${l.securitySymbol}` });
+      })
+      .catch(() => {});
+  }, [initialListingId]);
+
+  useEffect(() => {
+    if (!backfillExchangeId || !backfillSecurityId) {
+      setBackfillListing(null);
+      return;
+    }
+    registryApi.listListingsPaginated({ exchangeId: parseInt(backfillExchangeId), securityId: parseInt(backfillSecurityId), limit: 1 })
+      .then(rows => setBackfillListing(rows[0] ?? null))
+      .catch(() => setBackfillListing(null));
+  }, [backfillExchangeId, backfillSecurityId]);
 
   const exchangeOptions = useMemo(() =>
     exchanges.map((e) => ({ value: String(e.exchangeId), label: e.exchangeName })),
     [exchanges],
   );
 
-  const securityOptions = useMemo(() =>
-    securities.map((s) => ({ value: String(s.securityId), label: `${s.symbol} (${formatSecurityType(s.type)})` })),
-    [securities],
-  );
-
-  const listingLabelMap = useMemo(() => {
-    const map = new Map<number, string>();
-    listings.forEach((listing) => {
-      const exchange = exchanges.find((e) => e.exchangeId === listing.exchangeId);
-      const security = securities.find((s) => s.securityId === listing.securityId);
-      map.set(listing.listingId, `${security?.symbol || 'Unknown'} @ ${exchange?.exchangeName || 'Unknown'}`);
-    });
-    return map;
-  }, [listings, securities, exchanges]);
+  const listingOptions = useMemo(() => {
+    if (selectedListingOption && !listingSearchOptions.some(o => o.value === selectedListingOption.value)) {
+      return [selectedListingOption, ...listingSearchOptions];
+    }
+    return listingSearchOptions;
+  }, [listingSearchOptions, selectedListingOption]);
 
   const fetchIssues = useCallback(async (append = false) => {
     setLoading(true);
@@ -176,10 +185,13 @@ function QualityIssues() {
     fetchIssues(false);
   };
 
+  const issueListingIds = useMemo(() => issues.map(i => i.listingId), [issues]);
+  const listingLabelMap = useListingLabels(issueListingIds);
+
   const tableData = useMemo<TableRow[]>(() => {
     return issues.map((issue) => ({
       ...issue,
-      listingLabel: listingLabelMap.get(issue.listingId) || `Listing ${issue.listingId}`,
+      listingLabel: listingLabelMap[issue.listingId] || `Listing ${issue.listingId}`,
       rowId: `${issue.listingId}-${issue.issueId}`,
     }));
   }, [issues, listingLabelMap]);
@@ -245,14 +257,6 @@ function QualityIssues() {
       setBackfillSubmitting(false);
     }
   };
-
-  const backfillListing = useMemo(() => {
-    if (!backfillExchangeId || !backfillSecurityId) return null;
-    return listings.find(
-      (l) => l.exchangeId === parseInt(backfillExchangeId) && l.securityId === parseInt(backfillSecurityId),
-    ) || null;
-  }, [backfillExchangeId, backfillSecurityId, listings]);
-
 
   const columns = useMemo<MRT_ColumnDef<TableRow>[]>(() => [
     { accessorKey: 'listingId', header: 'Listing ID', size: 100 },
@@ -394,12 +398,16 @@ function QualityIssues() {
         <Group align="flex-end">
           <Select
             label="Filter by Listing"
-            placeholder="All listings"
+            placeholder="Search listings..."
             searchable
             clearable
             data={listingOptions}
             value={selectedListingId}
-            onChange={handleListingChange}
+            onChange={(v) => { handleListingChange(v); if (v) { const opt = listingOptions.find(o => o.value === v); if (opt) setSelectedListingOption(opt); } }}
+            onSearchChange={setListingSearchValue}
+            searchValue={listingSearchValue}
+            filter={({ options }) => options}
+            rightSection={listingSearchLoading ? <Loader size="xs" /> : undefined}
             style={{ minWidth: 300 }}
           />
           {!selectedListingId && (
@@ -492,10 +500,14 @@ function QualityIssues() {
           />
           <Select
             label="Security"
-            placeholder="Select security"
+            placeholder="Search securities..."
             data={securityOptions}
             value={backfillSecurityId}
             onChange={setBackfillSecurityId}
+            onSearchChange={setSecuritySearch}
+            searchValue={securitySearch}
+            filter={({ options }) => options}
+            rightSection={securitySearchLoading ? <Loader size="xs" /> : undefined}
             searchable
           />
           {backfillListing && (

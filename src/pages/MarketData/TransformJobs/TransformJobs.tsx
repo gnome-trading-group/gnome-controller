@@ -21,11 +21,10 @@ import {
 import { IconRefresh, IconClock, IconCheck, IconX } from '@tabler/icons-react';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import ReactTimeAgo from 'react-time-ago';
-import { marketDataApi } from '../../../utils/api';
-import { useGlobalState } from '../../../context/GlobalStateContext';
+import { marketDataApi, registryApi } from '../../../utils/api';
+import { useListingSearch, useListingLabels } from '../../../hooks/useAsyncSearch';
 import { TransformJob, TransformJobStatus } from '../../../types/transform-jobs';
 import { SchemaType } from '../../../types/schema';
-import { formatSecurityType } from '../../../utils/security-master';
 
 const STATUS_CONFIG: Record<TransformJobStatus, { color: string; icon: React.ReactNode; label: string }> = {
   PENDING: { color: 'blue', icon: <IconClock size={14} />, label: 'Pending' },
@@ -42,7 +41,6 @@ interface TableRow extends TransformJob {
 
 function TransformJobs() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { listings, exchanges, securities } = useGlobalState();
   const [jobs, setJobs] = useState<TransformJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +51,9 @@ function TransformJobs() {
   const [selectedStatus, setSelectedStatus] = useState<TransformJobStatus>('PENDING');
   const [selectedListingId, setSelectedListingId] = useState<string | null>(initialListingId);
   const [selectedSchemaType, setSelectedSchemaType] = useState<string | null>(null);
+  const [listingSearchValue, setListingSearchValue] = useState('');
+  const { options: listingSearchOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearchValue);
+  const [selectedListingOption, setSelectedListingOption] = useState<{ value: string; label: string } | null>(null);
 
   const [lastEvaluatedKey, setLastEvaluatedKey] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -60,6 +61,7 @@ function TransformJobs() {
   // Update URL when listing selection changes
   const handleListingChange = useCallback((listingId: string | null) => {
     setSelectedListingId(listingId);
+    if (!listingId) setSelectedListingOption(null);
     if (listingId) {
       setSearchParams({ listingId });
     } else {
@@ -67,26 +69,22 @@ function TransformJobs() {
     }
   }, [setSearchParams]);
 
-  const listingOptions = useMemo(() => {
-    return listings.map((listing) => {
-      const exchange = exchanges.find((e) => e.exchangeId === listing.exchangeId);
-      const security = securities.find((s) => s.securityId === listing.securityId);
-      return {
-        value: String(listing.listingId),
-        label: `${listing.listingId} - ${exchange?.exchangeName || 'Unknown'} - ${security?.symbol || 'Unknown'} (${formatSecurityType(security?.type || 0)})`,
-      };
-    });
-  }, [listings, securities, exchanges]);
+  useEffect(() => {
+    if (!initialListingId) return;
+    registryApi.listListingsPaginated({ listingId: parseInt(initialListingId), limit: 1 })
+      .then(rows => {
+        const l = rows[0];
+        if (l) setSelectedListingOption({ value: String(l.listingId), label: `${l.listingId} - ${l.exchangeName} - ${l.securitySymbol}` });
+      })
+      .catch(() => {});
+  }, [initialListingId]);
 
-  const listingLabelMap = useMemo(() => {
-    const map = new Map<number, string>();
-    listings.forEach((listing) => {
-      const exchange = exchanges.find((e) => e.exchangeId === listing.exchangeId);
-      const security = securities.find((s) => s.securityId === listing.securityId);
-      map.set(listing.listingId, `${security?.symbol || 'Unknown'} @ ${exchange?.exchangeName || 'Unknown'}`);
-    });
-    return map;
-  }, [listings, securities, exchanges]);
+  const listingOptions = useMemo(() => {
+    if (selectedListingOption && !listingSearchOptions.some(o => o.value === selectedListingOption.value)) {
+      return [selectedListingOption, ...listingSearchOptions];
+    }
+    return listingSearchOptions;
+  }, [listingSearchOptions, selectedListingOption]);
 
   const loadJobs = useCallback(async (append = false) => {
     try {
@@ -134,10 +132,13 @@ function TransformJobs() {
     loadJobs(false);
   }, [selectedStatus, selectedListingId, selectedSchemaType]);
 
+  const jobListingIds = useMemo(() => jobs.map(j => j.listingId), [jobs]);
+  const listingLabelMap = useListingLabels(jobListingIds);
+
   const tableData = useMemo((): TableRow[] => {
     return jobs.map(job => ({
       ...job,
-      listingLabel: listingLabelMap.get(job.listingId) || `Listing ${job.listingId}`,
+      listingLabel: listingLabelMap[job.listingId] || `Listing ${job.listingId}`,
     }));
   }, [jobs, listingLabelMap]);
 
@@ -294,12 +295,16 @@ function TransformJobs() {
         <Group align="flex-end" gap="md">
           <Select
             label="Filter by Listing"
-            placeholder="All listings"
+            placeholder="Search listings..."
             searchable
             clearable
             data={listingOptions}
             value={selectedListingId}
-            onChange={handleListingChange}
+            onChange={(v) => { handleListingChange(v); if (v) { const opt = listingOptions.find(o => o.value === v); if (opt) setSelectedListingOption(opt); } }}
+            onSearchChange={setListingSearchValue}
+            searchValue={listingSearchValue}
+            filter={({ options }) => options}
+            rightSection={listingSearchLoading ? <Loader size="xs" /> : undefined}
             style={{ minWidth: 300 }}
           />
           {selectedListingId && (

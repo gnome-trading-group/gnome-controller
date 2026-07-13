@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Anchor,
@@ -7,6 +7,7 @@ import {
   Container,
   Grid,
   Group,
+  Loader,
   Paper,
   Stack,
   Table,
@@ -15,6 +16,8 @@ import {
 } from '@mantine/core';
 import ReactTimeAgo from 'react-time-ago';
 import { useGlobalState } from '../../context/GlobalStateContext';
+import { DenormalizedListing, Security } from '../../types';
+import { registryApi } from '../../utils/api';
 import {
   formatAssetClass,
   formatContractType,
@@ -33,24 +36,33 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 function SecurityDetail() {
   const { securityId } = useParams<{ securityId: string }>();
   const navigate = useNavigate();
-  const { securities, listings, exchanges } = useGlobalState();
+  const { exchanges } = useGlobalState();
 
   const id = parseInt(securityId ?? '0');
 
-  const security = useMemo(() => securities.find(s => s.securityId === id), [securities, id]);
+  const [security, setSecurity] = useState<Security | null>(null);
+  const [listings, setListings] = useState<DenormalizedListing[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const securityListings = useMemo(() =>
-    listings.filter(l => l.securityId === id),
-    [listings, id],
-  );
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    Promise.all([
+      registryApi.listSecuritiesPaginated({ securityId: id, limit: 1 }),
+      registryApi.listListingsPaginated({ securityId: id, limit: 5000 }),
+    ]).then(([secs, lists]) => {
+      setSecurity(secs[0] ?? null);
+      setListings(lists);
+    }).catch(console.error)
+      .finally(() => setLoading(false));
+  }, [id]);
 
+  if (loading) {
+    return <Container size="xl" py="xl"><Loader /></Container>;
+  }
 
   if (!security) {
-    return (
-      <Container size="xl" py="xl">
-        <Text>Security not found.</Text>
-      </Container>
-    );
+    return <Container size="xl" py="xl"><Text>Security not found.</Text></Container>;
   }
 
   return (
@@ -95,12 +107,8 @@ function SecurityDetail() {
                 } />
               )}
               {security.description && <InfoRow label="Description" value={security.description} />}
-              <InfoRow label="Created" value={
-                <ReactTimeAgo date={new Date(security.dateCreated)} timeStyle="round" />
-              } />
-              <InfoRow label="Modified" value={
-                <ReactTimeAgo date={new Date(security.dateModified)} timeStyle="round" />
-              } />
+              <InfoRow label="Created" value={<ReactTimeAgo date={new Date(security.dateCreated)} timeStyle="round" />} />
+              <InfoRow label="Modified" value={<ReactTimeAgo date={new Date(security.dateModified)} timeStyle="round" />} />
             </Stack>
           </Paper>
         </Grid.Col>
@@ -108,7 +116,7 @@ function SecurityDetail() {
         <Grid.Col span={12}>
           <Paper p="md" withBorder>
             <Title order={4} mb="md">Listings</Title>
-            {securityListings.length === 0 ? (
+            {listings.length === 0 ? (
               <Text c="dimmed" size="sm">No listings for this security.</Text>
             ) : (
               <Table striped withColumnBorders highlightOnHover>
@@ -121,7 +129,7 @@ function SecurityDetail() {
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {securityListings.map(l => {
+                  {listings.map(l => {
                     const ex = exchanges.find(e => e.exchangeId === l.exchangeId);
                     return (
                       <Table.Tr
@@ -129,7 +137,7 @@ function SecurityDetail() {
                         onClick={() => navigate(`/security-master/listings/${l.listingId}`)}
                         style={{ cursor: 'pointer' }}
                       >
-                        <Table.Td>{ex?.exchangeName ?? l.exchangeId}</Table.Td>
+                        <Table.Td>{l.exchangeName}</Table.Td>
                         <Table.Td>{l.exchangeSecuritySymbol}</Table.Td>
                         <Table.Td>{ex?.schemaType ?? '-'}</Table.Td>
                         <Table.Td>

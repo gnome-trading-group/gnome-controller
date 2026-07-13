@@ -7,6 +7,7 @@ import {
   Group,
   Modal,
   Notification,
+  Progress,
   Space,
   Stack,
   Tabs,
@@ -30,38 +31,18 @@ function SecurityMaster() {
   const [activeTab, setActiveTab] = useState<string | null>('listings');
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState({
-    exchanges: 0,
-    securities: 0,
-    listings: 0,
-  });
+  const [uploadProgress, setUploadProgress] = useState({ exchanges: 0, securities: 0, listings: 0 });
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteItem, setDeleteItem] = useState<{
-    type: DeleteType;
-    id: number;
-    name: string;
-  } | null>(null);
+  const [deleteItem, setDeleteItem] = useState<{ type: DeleteType; id: number; name: string } | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<string | null>(null);
 
-  const {
-    exchanges,
-    securities,
-    listings,
-    error,
-    refreshSecurities,
-    refreshExchanges,
-    refreshListings,
-    refreshCurrencies,
-  } = useGlobalState();
+  const [securitiesRefreshKey, setSecuritiesRefreshKey] = useState(0);
+  const [listingsRefreshKey, setListingsRefreshKey] = useState(0);
 
-  const handleRefresh = async () => {
-    await Promise.all([
-      refreshSecurities(),
-      refreshExchanges(),
-      refreshListings(),
-      refreshCurrencies(),
-    ]);
-  };
+  const { exchanges, error, refreshExchanges } = useGlobalState();
+
+  const handleRefresh = () => refreshExchanges();
 
   const handleFileUpload = async (file: File | null) => {
     if (!file) return;
@@ -74,33 +55,23 @@ function SecurityMaster() {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
 
-      const processSheet = async (sheetName: string, processFn: (row: any) => Promise<void>) => {
+      const processSheet = async (sheetName: string, processFn: (row: any) => Promise<unknown>, key: keyof typeof uploadProgress) => {
         const sheet = workbook.Sheets[sheetName];
         if (!sheet) return;
-
         const rows = XLSX.utils.sheet_to_json(sheet);
         for (let i = 0; i < rows.length; i++) {
           await processFn(rows[i]);
-          setUploadProgress(prev => ({
-            ...prev,
-            [sheetName.toLowerCase()]: i + 1
-          }));
+          setUploadProgress(prev => ({ ...prev, [key]: i + 1 }));
         }
       };
 
-      await processSheet('Exchanges', async (row) => {
-        await registryApi.createExchange(row);
-      });
+      await processSheet('Exchanges', row => registryApi.createExchange(row), 'exchanges');
+      await processSheet('Securities', row => registryApi.createSecurity(row), 'securities');
+      await processSheet('Listings', row => registryApi.createListing(row), 'listings');
 
-      await processSheet('Securities', async (row) => {
-        await registryApi.createSecurity(row);
-      });
-
-      await processSheet('Listings', async (row) => {
-        await registryApi.createListing(row);
-      });
-
-      await handleRefresh();
+      await refreshExchanges();
+      setSecuritiesRefreshKey(k => k + 1);
+      setListingsRefreshKey(k => k + 1);
       setUploadModalOpen(false);
       setUploadFile(null);
     } catch (err) {
@@ -110,35 +81,48 @@ function SecurityMaster() {
 
   const handleDownloadTemplate = () => {
     const wb = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{
-      exchangeName: 'Binance',
-      region: 'us-east-1',
-      schemaType: 'mbp-10',
-    }]), 'Exchanges');
-
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{
-      symbol: 'BTC',
-      type: 0,
-      description: 'BTC Spot',
-    }]), 'Securities');
-
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{
-      exchangeId: 1,
-      securityId: 1,
-      exchangeSecurityId: 'BTC',
-      exchangeSecuritySymbol: 'BTC',
-    }]), 'Listings');
-
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ exchangeName: 'Binance', region: 'us-east-1', schemaType: 'mbp-10' }]), 'Exchanges');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ symbol: 'BTC', type: 0, description: 'BTC Spot' }]), 'Securities');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ exchangeId: 1, securityId: 1, exchangeSecurityId: 'BTC', exchangeSecuritySymbol: 'BTC' }]), 'Listings');
     XLSX.writeFile(wb, 'security_master_template.xlsx');
   };
 
-  const handleDownloadData = () => {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exchanges), 'Exchanges');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(securities), 'Securities');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(listings), 'Listings');
-    XLSX.writeFile(wb, 'security_master_data.xlsx');
+  const handleDownloadData = async () => {
+    setDownloadProgress('Fetching exchanges...');
+    try {
+      const wb = XLSX.utils.book_new();
+
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(exchanges), 'Exchanges');
+
+      const PAGE = 5000;
+      const fetchAll = async <T,>(
+        fetchFn: (p: { limit: number; offset: number }) => Promise<T[]>,
+        label: string,
+      ): Promise<T[]> => {
+        const all: T[] = [];
+        let offset = 0;
+        while (true) {
+          setDownloadProgress(`Fetching ${label}... (${all.length} so far)`);
+          const page = await fetchFn({ limit: PAGE, offset });
+          all.push(...page);
+          if (page.length < PAGE) break;
+          offset += PAGE;
+        }
+        return all;
+      };
+
+      const securities = await fetchAll(registryApi.listSecuritiesPaginated, 'securities');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(securities), 'Securities');
+
+      const listings = await fetchAll(p => registryApi.listListingsPaginated(p), 'listings');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(listings), 'Listings');
+
+      XLSX.writeFile(wb, 'security_master_data.xlsx');
+    } catch (err) {
+      console.error('Download failed:', err);
+    } finally {
+      setDownloadProgress(null);
+    }
   };
 
   const handleDelete = (type: DeleteType, id: number, name: string) => {
@@ -148,7 +132,6 @@ function SecurityMaster() {
 
   const confirmDelete = async () => {
     if (!deleteItem) return;
-
     try {
       switch (deleteItem.type) {
         case 'exchange':
@@ -157,11 +140,11 @@ function SecurityMaster() {
           break;
         case 'security':
           await registryApi.deleteSecurity(deleteItem.id);
-          await refreshSecurities();
+          setSecuritiesRefreshKey(k => k + 1);
           break;
         case 'listing':
           await registryApi.deleteListing(deleteItem.id);
-          await refreshListings();
+          setListingsRefreshKey(k => k + 1);
           break;
       }
     } catch (err) {
@@ -178,74 +161,44 @@ function SecurityMaster() {
         <Title order={2}>Security Master</Title>
         <Group>
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon
-              size="lg"
-              variant="filled"
-              color="green"
-              onClick={handleRefresh}
-            >
+            <ActionIcon size="lg" variant="filled" color="green" onClick={handleRefresh}>
               <IconRefresh size={20} />
             </ActionIcon>
           </Tooltip>
-          <Tooltip label="Download Data" position="bottom" withArrow openDelay={500}>
+          <Tooltip label={downloadProgress ?? 'Download Data'} position="bottom" withArrow openDelay={500}>
             <ActionIcon
               size="lg"
               variant="filled"
               color="blue"
               onClick={handleDownloadData}
+              loading={!!downloadProgress}
             >
               <IconDownload size={20} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label="Upload New Data" position="bottom" withArrow openDelay={500}>
-            <ActionIcon
-              size="lg"
-              variant="filled"
-              color="green"
-              onClick={() => setUploadModalOpen(true)}
-            >
+            <ActionIcon size="lg" variant="filled" color="green" onClick={() => setUploadModalOpen(true)}>
               <IconPlus size={20} />
             </ActionIcon>
           </Tooltip>
         </Group>
       </Group>
 
-      <Modal
-        opened={uploadModalOpen}
-        onClose={() => setUploadModalOpen(false)}
-        title="Upload Excel File"
-        size="lg"
-      >
+      <Modal opened={uploadModalOpen} onClose={() => setUploadModalOpen(false)} title="Upload Excel File" size="lg">
         <Stack>
           <Text>Upload an Excel file with sheets named "Exchanges", "Securities", and "Listings" to create new entries.</Text>
-
           <Group>
-            <FileButton
-              onChange={handleFileUpload}
-              accept=".xlsx,.xls"
-            >
+            <FileButton onChange={handleFileUpload} accept=".xlsx,.xls">
               {(props) => (
-                <Button
-                  {...props}
-                  leftSection={<IconUpload size={20} />}
-                  variant="filled"
-                  color="blue"
-                >
+                <Button {...props} leftSection={<IconUpload size={20} />} variant="filled" color="blue">
                   Upload Excel File
                 </Button>
               )}
             </FileButton>
-
-            <Button
-              onClick={handleDownloadTemplate}
-              leftSection={<IconDownload size={20} />}
-              variant="outline"
-              color="blue"
-            >
+            <Button onClick={handleDownloadTemplate} leftSection={<IconDownload size={20} />} variant="outline" color="blue">
               Download Template
             </Button>
           </Group>
-
           {uploadFile && (
             <Stack>
               <Text>Processing file: {uploadFile.name}</Text>
@@ -254,53 +207,33 @@ function SecurityMaster() {
               <Text>Listings processed: {uploadProgress.listings}</Text>
             </Stack>
           )}
-
-          {uploadError && (
-            <Text c="red">{uploadError}</Text>
-          )}
+          {uploadError && <Text c="red">{uploadError}</Text>}
         </Stack>
       </Modal>
 
-      <Modal
-        opened={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        title="Confirm Delete"
-        size="sm"
-      >
+      <Modal opened={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} title="Confirm Delete" size="sm">
         <Stack>
           <Text>
             Are you sure you want to delete this {deleteItem?.type}?
-            {deleteItem && (
-              <Text fw={500} mt="xs">
-                {deleteItem.name}
-              </Text>
-            )}
+            {deleteItem && <Text fw={500} mt="xs">{deleteItem.name}</Text>}
           </Text>
           <Group justify="flex-end">
-            <Button
-              variant="outline"
-              onClick={() => setDeleteModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              color="red"
-              onClick={confirmDelete}
-            >
-              Delete
-            </Button>
+            <Button variant="outline" onClick={() => setDeleteModalOpen(false)}>Cancel</Button>
+            <Button color="red" onClick={confirmDelete}>Delete</Button>
           </Group>
         </Stack>
       </Modal>
 
-      {(error.securities || error.exchanges || error.listings) && (
-        <Notification
-          color="red"
-          title="Error"
-          onClose={() => {}}
-          mb="md"
-        >
-          {error.securities || error.exchanges || error.listings}
+      {downloadProgress && (
+        <Notification color="blue" title="Downloading" mb="md" withCloseButton={false}>
+          {downloadProgress}
+          <Progress value={100} animated mt="xs" />
+        </Notification>
+      )}
+
+      {error.exchanges && (
+        <Notification color="red" title="Error" onClose={() => {}} mb="md">
+          {error.exchanges}
         </Notification>
       )}
 
@@ -315,12 +248,12 @@ function SecurityMaster() {
 
         <Tabs.Panel value="listings">
           <Space h="md" />
-          <ListingsTab onDelete={handleDelete} />
+          <ListingsTab onDelete={handleDelete} externalRefreshKey={listingsRefreshKey} />
         </Tabs.Panel>
 
         <Tabs.Panel value="securities">
           <Space h="md" />
-          <SecuritiesTab onDelete={handleDelete} />
+          <SecuritiesTab onDelete={handleDelete} externalRefreshKey={securitiesRefreshKey} />
         </Tabs.Panel>
 
         <Tabs.Panel value="exchanges">

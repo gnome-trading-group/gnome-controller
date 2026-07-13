@@ -25,11 +25,11 @@ import {
 import { IconRefresh, IconDatabase, IconClock, IconCalendar, IconArrowLeft, IconTable, IconLayoutGrid, IconChartBar } from '@tabler/icons-react';
 import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
-import { marketDataApi } from '../../../utils/api';
+import { marketDataApi, registryApi } from '../../../utils/api';
 import { useGlobalState } from '../../../context/GlobalStateContext';
+import { Security, DenormalizedListing } from '../../../types';
 import { SecurityExchangeCoverageResponse, DayCoverage } from '../../../types/coverage';
 import { ListingStatisticsHistoryPoint, QualityIssue, formatRuleType, getRuleTypeColor, QualityRuleType } from '../../../types/quality-issues';
-import { Listing } from '../../../types/security-master';
 
 // Helper function to format bytes to human-readable string
 function formatBytes(bytes: number): string {
@@ -98,7 +98,7 @@ function groupByMonth(dates: string[]): Map<string, string[]> {
 function SecurityExchangeCoverage() {
   const { securityId, exchangeId } = useParams<{ securityId: string; exchangeId: string }>();
   const navigate = useNavigate();
-  const { securities, exchanges, listings } = useGlobalState();
+  const { exchanges } = useGlobalState();
   const [data, setData] = useState<SecurityExchangeCoverageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,12 +106,10 @@ function SecurityExchangeCoverage() {
   const [metricsHistory, setMetricsHistory] = useState<ListingStatisticsHistoryPoint[] | null>(null);
   const [qualityIssueSummary, setQualityIssueSummary] = useState<QualityIssue[]>([]);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [security, setSecurity] = useState<Security | null>(null);
+  const [listing, setListing] = useState<DenormalizedListing | null>(null);
 
-  const security = securities.find(s => s.securityId === Number(securityId));
   const exchange = exchanges.find(e => e.exchangeId === Number(exchangeId));
-  const listing = listings.find(
-    (l: Listing) => l.securityId === Number(securityId) && l.exchangeId === Number(exchangeId)
-  );
 
   const loadData = async () => {
     if (!securityId || !exchangeId) return;
@@ -132,6 +130,20 @@ function SecurityExchangeCoverage() {
 
   useEffect(() => {
     loadData();
+  }, [securityId, exchangeId]);
+
+  useEffect(() => {
+    if (!securityId) return;
+    registryApi.listSecuritiesPaginated({ securityId: Number(securityId), limit: 1 })
+      .then(rows => setSecurity(rows[0] ?? null))
+      .catch(() => {});
+  }, [securityId]);
+
+  useEffect(() => {
+    if (!securityId || !exchangeId) return;
+    registryApi.listListingsPaginated({ securityId: Number(securityId), exchangeId: parseInt(exchangeId), limit: 1 })
+      .then(rows => setListing(rows[0] ?? null))
+      .catch(() => setListing(null));
   }, [securityId, exchangeId]);
 
   useEffect(() => {

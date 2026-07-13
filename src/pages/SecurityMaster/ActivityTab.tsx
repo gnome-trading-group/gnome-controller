@@ -1,51 +1,93 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate } from 'react-router-dom';
-import { useGlobalState } from '../../context/GlobalStateContext';
+import { DenormalizedListing, Security } from '../../types';
+import { registryApi } from '../../utils/api';
 import { formatSecurityType } from '../../utils/security-master';
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50;
 
 type ActivityEntry =
   | { kind: 'security'; securityId: number; symbol: string; type: number; dateCreated: string }
   | { kind: 'listing'; listingId: number; exchangeName: string; securitySymbol: string; dateCreated: string };
 
+function mergeAndSort(securities: Security[], listings: DenormalizedListing[]): ActivityEntry[] {
+  const securityEntries: ActivityEntry[] = securities.map(s => ({
+    kind: 'security',
+    securityId: s.securityId,
+    symbol: s.symbol,
+    type: s.type,
+    dateCreated: s.dateCreated,
+  }));
+  const listingEntries: ActivityEntry[] = listings.map(l => ({
+    kind: 'listing',
+    listingId: l.listingId,
+    exchangeName: l.exchangeName,
+    securitySymbol: l.securitySymbol,
+    dateCreated: l.dateCreated,
+  }));
+  return [...securityEntries, ...listingEntries].sort(
+    (a, b) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime(),
+  );
+}
+
 function ActivityTab() {
-  const { securities, listings, exchanges } = useGlobalState();
   const navigate = useNavigate();
-  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [securities, setSecurities] = useState<Security[]>([]);
 
-  const feed = useMemo<ActivityEntry[]>(() => {
-    const exchangeMap = new Map(exchanges.map(e => [e.exchangeId, e]));
-    const securityMap = new Map(securities.map(s => [s.securityId, s]));
+  const [listings, setListings] = useState<DenormalizedListing[]>([]);
+  const [securityOffset, setSecurityOffset] = useState(PAGE_SIZE);
+  const [listingOffset, setListingOffset] = useState(PAGE_SIZE);
+  const [hasMoreSecurities, setHasMoreSecurities] = useState(false);
+  const [hasMoreListings, setHasMoreListings] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-    const securityEntries: ActivityEntry[] = securities.map(s => ({
-      kind: 'security',
-      securityId: s.securityId,
-      symbol: s.symbol,
-      type: s.type,
-      dateCreated: s.dateCreated,
-    }));
+  useEffect(() => {
+    Promise.all([
+      registryApi.listSecuritiesPaginated({ limit: PAGE_SIZE, sortBy: 'date_created', sortOrder: 'desc' }),
+      registryApi.listListingsPaginated({ limit: PAGE_SIZE, sortBy: 'date_created', sortOrder: 'desc' }),
+    ]).then(([secs, lists]) => {
+      setSecurities(secs);
+      setListings(lists);
+      setHasMoreSecurities(secs.length === PAGE_SIZE);
+      setHasMoreListings(lists.length === PAGE_SIZE);
+    }).catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
-    const listingEntries: ActivityEntry[] = listings.map(l => ({
-      kind: 'listing',
-      listingId: l.listingId,
-      exchangeName: exchangeMap.get(l.exchangeId)?.exchangeName ?? `Exchange ${l.exchangeId}`,
-      securitySymbol: securityMap.get(l.securityId)?.symbol ?? `Security ${l.securityId}`,
-      dateCreated: l.dateCreated,
-    }));
+  const loadMore = async () => {
+    const promises: Promise<void>[] = [];
+    if (hasMoreSecurities) {
+      promises.push(
+        registryApi.listSecuritiesPaginated({ limit: PAGE_SIZE, offset: securityOffset, sortBy: 'date_created', sortOrder: 'desc' })
+          .then(secs => {
+            setSecurities(prev => [...prev, ...secs]);
+            setSecurityOffset(o => o + PAGE_SIZE);
+            setHasMoreSecurities(secs.length === PAGE_SIZE);
+          })
+      );
+    }
+    if (hasMoreListings) {
+      promises.push(
+        registryApi.listListingsPaginated({ limit: PAGE_SIZE, offset: listingOffset, sortBy: 'date_created', sortOrder: 'desc' })
+          .then(lists => {
+            setListings(prev => [...prev, ...lists]);
+            setListingOffset(o => o + PAGE_SIZE);
+            setHasMoreListings(lists.length === PAGE_SIZE);
+          })
+      );
+    }
+    await Promise.all(promises);
+  };
 
-    return [...securityEntries, ...listingEntries].sort(
-      (a, b) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime(),
-    );
-  }, [securities, listings, exchanges]);
-
-  const visible = feed.slice(0, limit);
+  const feed = mergeAndSort(securities, listings);
+  const hasMore = hasMoreSecurities || hasMoreListings;
 
   return (
     <Stack gap="xs" mt="md">
-      {visible.map((entry, i) => (
+      {loading && <Text c="dimmed" size="sm">Loading activity...</Text>}
+      {feed.map((entry, i) => (
         <Paper
           key={i}
           p="sm"
@@ -61,11 +103,7 @@ function ActivityTab() {
         >
           <Group justify="space-between">
             <Group gap="sm">
-              <Badge
-                color={entry.kind === 'security' ? 'blue' : 'violet'}
-                variant="light"
-                size="sm"
-              >
+              <Badge color={entry.kind === 'security' ? 'blue' : 'violet'} variant="light" size="sm">
                 {entry.kind === 'security' ? 'Security' : 'Listing'}
               </Badge>
               {entry.kind === 'security' ? (
@@ -83,15 +121,12 @@ function ActivityTab() {
           </Group>
         </Paper>
       ))}
-      {feed.length === 0 && (
+      {!loading && feed.length === 0 && (
         <Text c="dimmed" size="sm">No activity yet.</Text>
       )}
-      {limit < feed.length && (
-        <Button
-          variant="subtle"
-          onClick={() => setLimit(l => l + PAGE_SIZE)}
-        >
-          Load more ({feed.length - limit} remaining)
+      {hasMore && (
+        <Button variant="subtle" onClick={loadMore}>
+          Load more
         </Button>
       )}
     </Stack>

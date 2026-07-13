@@ -30,8 +30,9 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
-import { marketDataApi } from '../../../utils/api';
+import { marketDataApi, registryApi } from '../../../utils/api';
 import { useGlobalState } from '../../../context/GlobalStateContext';
+import { Security, DenormalizedListing } from '../../../types';
 import { SecurityCoverageResponse, ExchangeCoverage } from '../../../types/coverage';
 import { ListingStatisticsHistoryPoint } from '../../../types/quality-issues';
 
@@ -74,16 +75,16 @@ interface TableRow extends ExchangeCoverage {
 function SecurityCoverage() {
   const { securityId } = useParams<{ securityId: string }>();
   const navigate = useNavigate();
-  const { securities, exchanges, listings } = useGlobalState();
+  const { exchanges } = useGlobalState();
   const [data, setData] = useState<SecurityCoverageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [security, setSecurity] = useState<Security | null>(null);
+  const [securityListingsData, setSecurityListingsData] = useState<DenormalizedListing[]>([]);
 
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
   const [metricsHistory, setMetricsHistory] = useState<ListingStatisticsHistoryPoint[] | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
-
-  const security = securities.find(s => s.securityId === Number(securityId));
 
   const loadData = async () => {
     if (!securityId) return;
@@ -103,14 +104,23 @@ function SecurityCoverage() {
     loadData();
   }, [securityId]);
 
+  useEffect(() => {
+    if (!securityId) return;
+    Promise.all([
+      registryApi.listSecuritiesPaginated({ securityId: Number(securityId), limit: 1 }),
+      registryApi.listListingsPaginated({ securityId: Number(securityId), limit: 100 }),
+    ]).then(([secs, lists]) => {
+      setSecurity(secs[0] ?? null);
+      setSecurityListingsData(lists);
+    }).catch(() => {});
+  }, [securityId]);
+
   const securityListings = useMemo(() => {
-    return listings
-      .filter(l => l.securityId === Number(securityId))
-      .map(l => ({
-        value: String(l.listingId),
-        label: exchanges.find(e => e.exchangeId === l.exchangeId)?.exchangeName || `Exchange ${l.exchangeId}`,
-      }));
-  }, [listings, exchanges, securityId]);
+    return securityListingsData.map(l => ({
+      value: String(l.listingId),
+      label: l.exchangeName,
+    }));
+  }, [securityListingsData]);
 
   useEffect(() => {
     if (securityListings.length > 0 && !selectedListingId) {

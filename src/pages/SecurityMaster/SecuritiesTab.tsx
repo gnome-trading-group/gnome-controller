@@ -14,17 +14,17 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
-import { useGlobalState } from '../../context/GlobalStateContext';
 import { Security, SecurityType } from '../../types';
 import { registryApi } from '../../utils/api';
 import { formatAssetClass, formatSecurityType } from '../../utils/security-master';
+import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 
 interface SecuritiesTabProps {
   onDelete: (type: 'security', id: number, name: string) => void;
+  externalRefreshKey?: number;
 }
 
-function SecuritiesTab({ onDelete }: SecuritiesTabProps) {
-  const { securities, loading, refreshSecurities } = useGlobalState();
+function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
   const navigate = useNavigate();
 
   const [createSecurityOpen, setCreateSecurityOpen] = useState(false);
@@ -34,10 +34,27 @@ function SecuritiesTab({ onDelete }: SecuritiesTabProps) {
     description: '',
   });
 
+  const {
+    data: securities,
+    total,
+    isLoading,
+    pagination,
+    sorting,
+    globalFilter,
+    setPagination,
+    setSorting,
+    setGlobalFilter,
+    refresh,
+  } = useServerPaginatedTable<Security>({
+    fetchFn: registryApi.listSecuritiesPaginated,
+    countFn: registryApi.countSecurities,
+    externalRefreshKey,
+  });
+
   const handleCreateSecurity = async () => {
     try {
       await registryApi.createSecurity(newSecurityForm as any);
-      await refreshSecurities();
+      await refresh();
       setCreateSecurityOpen(false);
       setNewSecurityForm({ symbol: '', type: SecurityType.SPOT, description: '' });
     } catch (err) {
@@ -99,14 +116,25 @@ function SecuritiesTab({ onDelete }: SecuritiesTabProps) {
   const table = useMantineReactTable({
     columns,
     data: securities,
-    state: { isLoading: loading.securities },
+    rowCount: total,
+    manualPagination: true,
+    manualSorting: true,
+    manualFiltering: true,
+    state: {
+      isLoading,
+      pagination,
+      sorting,
+      globalFilter,
+    },
+    onPaginationChange: setPagination,
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
     enableRowActions: true,
-    enableColumnFilters: true,
+    enableColumnFilters: false,
     enableSorting: true,
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: true,
-    enableGrouping: true,
     positionActionsColumn: 'last',
     mantineTableProps: {
       striped: true,
@@ -118,7 +146,6 @@ function SecuritiesTab({ onDelete }: SecuritiesTabProps) {
       style: { cursor: 'pointer' },
     }),
     initialState: {
-      sorting: [{ id: 'symbol', desc: false }],
       density: 'xs',
     },
     renderRowActions: ({ row }: { row: MRT_Row<Security> }) => (

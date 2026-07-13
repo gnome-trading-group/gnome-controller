@@ -1,5 +1,5 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
-import { Currency, Exchange, Listing, ListingSpec, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
+import { ContractRelationship, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, ExchangeEvent, Exchange, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
@@ -347,6 +347,116 @@ export const registryApi = {
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
     }),
+  listSecuritiesPaginated: (params: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params.limit !== undefined) queryParams.limit = params.limit;
+    if (params.offset !== undefined) queryParams.offset = params.offset;
+    if (params.sortBy) queryParams.sortBy = params.sortBy;
+    if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
+    if (params.search) queryParams.search = params.search;
+    Object.entries(params).forEach(([k, v]) => {
+      if (!['limit','offset','sortBy','sortOrder','search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<Security[]>('/securities', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams,
+    });
+  },
+  countSecurities: (params?: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = { count: true };
+    if (params?.search) queryParams.search = params.search;
+    Object.entries(params ?? {}).forEach(([k, v]) => {
+      if (!['limit','offset','sortBy','sortOrder','search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<{ count: number }>('/securities', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      queryParams,
+    }).then(r => r.count);
+  },
+  listListingsPaginated: (params: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = { denormalize: true };
+    if (params.limit !== undefined) queryParams.limit = params.limit;
+    if (params.offset !== undefined) queryParams.offset = params.offset;
+    if (params.sortBy) queryParams.sortBy = params.sortBy;
+    if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
+    if (params.search) queryParams.search = params.search;
+    Object.entries(params).forEach(([k, v]) => {
+      if (!['limit','offset','sortBy','sortOrder','search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<DenormalizedListing[]>('/listings', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams,
+    });
+  },
+  countListings: (params?: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = { count: true, denormalize: true };
+    if (params?.search) queryParams.search = params.search;
+    Object.entries(params ?? {}).forEach(([k, v]) => {
+      if (!['limit','offset','sortBy','sortOrder','search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<{ count: number }>('/listings', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      queryParams,
+    }).then(r => r.count);
+  },
+  listCurrenciesPaginated: (params: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params.limit !== undefined) queryParams.limit = params.limit;
+    if (params.offset !== undefined) queryParams.offset = params.offset;
+    if (params.sortBy) queryParams.sortBy = params.sortBy;
+    if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
+    if (params.search) queryParams.search = params.search;
+    return sendApiRequest<Currency[]>('/currencies', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams,
+    });
+  },
+  countCurrencies: (params?: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = { count: true };
+    if (params?.search) queryParams.search = params.search;
+    return sendApiRequest<{ count: number }>('/currencies', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      queryParams,
+    }).then(r => r.count);
+  },
+  searchSecurities: (search: string, limit = 50) =>
+    sendApiRequest<Security[]>('/securities', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: { search, limit },
+    }),
+  searchListings: (search: string, limit = 50) =>
+    sendApiRequest<DenormalizedListing[]>('/listings', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: { search, limit, denormalize: true },
+    }),
+  searchCurrencies: (search: string, limit = 50) =>
+    sendApiRequest<Currency[]>('/currencies', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: { search, limit },
+    }),
   listListingSpecs: (listingId?: number, history?: boolean) => {
     const queryParams: Record<string, string | number | boolean> = {};
     if (listingId !== undefined) queryParams.listingId = listingId;
@@ -415,6 +525,94 @@ export const registryApi = {
       convertToCamelCase: true,
       body: { policyId },
     }),
+  listEvents: (params?: { eventId?: number; category?: string; resolved?: boolean }) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.eventId !== undefined) queryParams.eventId = params.eventId;
+    if (params?.category) queryParams.category = params.category;
+    if (params?.resolved !== undefined) queryParams.resolved = params.resolved;
+    return sendApiRequest<Event[]>('/events', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  listEventContracts: (params?: { eventId?: number; securityId?: number }) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.eventId !== undefined) queryParams.eventId = params.eventId;
+    if (params?.securityId !== undefined) queryParams.securityId = params.securityId;
+    return sendApiRequest<EventContract[]>('/event-contracts', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  listContractRelationships: (params?: { reviewed?: boolean; method?: string; relationshipType?: string; securityId?: number }) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.reviewed !== undefined) queryParams.reviewed = params.reviewed;
+    if (params?.method) queryParams.method = params.method;
+    if (params?.relationshipType) queryParams.relationshipType = params.relationshipType;
+    if (params?.securityId !== undefined) queryParams.securityId = params.securityId;
+    return sendApiRequest<ContractRelationship[]>('/contract-relationships', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  createContractRelationship: (body: CreateContractRelationship) =>
+    sendApiRequest<{ message: string }>('/contract-relationships', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body,
+    }),
+  reviewContractRelationship: (relationshipId: number, approved: boolean) =>
+    sendApiRequest<{ message: string }>('/contract-relationships', 'PATCH', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: { reviewed: approved },
+      queryParams: { relationshipId },
+    }),
+  deleteContractRelationship: (relationshipId: number) =>
+    sendApiRequest<{ message: string }>('/contract-relationships', 'DELETE', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: { relationshipId },
+    }),
+  listExchangeEvents: (params?: { eventId?: number; exchangeId?: number; nativeEventId?: string }) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.eventId !== undefined) queryParams.eventId = params.eventId;
+    if (params?.exchangeId !== undefined) queryParams.exchangeId = params.exchangeId;
+    if (params?.nativeEventId) queryParams.nativeEventId = params.nativeEventId;
+    return sendApiRequest<ExchangeEvent[]>('/exchange-events', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  listSecuritySymbols: async (): Promise<Record<number, string>> => {
+    const PAGE_SIZE = 100000;
+    const map: Record<number, string> = {};
+    let offset = 0;
+    while (true) {
+      const rows = await sendApiRequest<{ security_id: number; symbol: string }[]>(
+        '/securities/symbols', 'GET', {
+          apiUrl: REGISTRY_API_URL,
+          apiKey: REGISTRY_API_KEY,
+          queryParams: { limit: PAGE_SIZE, offset },
+        },
+      );
+      for (const row of rows) map[row.security_id] = row.symbol;
+      if (rows.length < PAGE_SIZE) break;
+      offset += PAGE_SIZE;
+    }
+    return map;
+  },
 }
 
 

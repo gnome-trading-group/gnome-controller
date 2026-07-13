@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Anchor,
@@ -16,8 +16,8 @@ import {
 } from '@mantine/core';
 import ReactTimeAgo from 'react-time-ago';
 import { useGlobalState } from '../../context/GlobalStateContext';
+import { DenormalizedListing, Listing, ListingSpec, Security } from '../../types';
 import { registryApi } from '../../utils/api';
-import { ListingSpec } from '../../types';
 import {
   formatAssetClass,
   formatContractType,
@@ -41,21 +41,36 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 function ListingDetail() {
   const { listingId } = useParams<{ listingId: string }>();
   const navigate = useNavigate();
-  const { listings, exchanges, securities } = useGlobalState();
-
-  const [specs, setSpecs] = useState<ListingSpec[]>([]);
-  const [loadingSpecs, setLoadingSpecs] = useState(true);
+  const { exchanges } = useGlobalState();
 
   const id = parseInt(listingId ?? '0');
 
-  const listing = useMemo(() => listings.find(l => l.listingId === id), [listings, id]);
-  const exchange = useMemo(() => exchanges.find(e => e.exchangeId === listing?.exchangeId), [exchanges, listing]);
-  const security = useMemo(() => securities.find(s => s.securityId === listing?.securityId), [securities, listing]);
+  const [listing, setListing] = useState<DenormalizedListing | null>(null);
+  const [security, setSecurity] = useState<Security | null>(null);
+  const [relatedListings, setRelatedListings] = useState<Listing[]>([]);
+  const [specs, setSpecs] = useState<ListingSpec[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingSpecs, setLoadingSpecs] = useState(true);
 
-  const relatedListings = useMemo(() =>
-    listings.filter(l => l.securityId === listing?.securityId && l.listingId !== id),
-    [listings, listing, id],
-  );
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    registryApi.listListingsPaginated({ listingId: id, limit: 1 })
+      .then(async rows => {
+        const l = rows[0] ?? null;
+        setListing(l);
+        if (l) {
+          const [secs, related] = await Promise.all([
+            registryApi.listSecuritiesPaginated({ securityId: l.securityId, limit: 1 }),
+            registryApi.listListings().then(all => all.filter((r: Listing) => r.securityId === l.securityId && r.listingId !== id)),
+          ]);
+          setSecurity(secs[0] ?? null);
+          setRelatedListings(related);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -66,13 +81,15 @@ function ListingDetail() {
       .finally(() => setLoadingSpecs(false));
   }, [id]);
 
-  if (!listing) {
-    return (
-      <Container size="xl" py="xl">
-        <Text>Listing not found.</Text>
-      </Container>
-    );
+  if (loading) {
+    return <Container size="xl" py="xl"><Loader /></Container>;
   }
+
+  if (!listing) {
+    return <Container size="xl" py="xl"><Text>Listing not found.</Text></Container>;
+  }
+
+  const exchange = exchanges.find(e => e.exchangeId === listing.exchangeId);
 
   return (
     <Container size="xl" py="xl">
@@ -83,8 +100,8 @@ function ListingDetail() {
 
       <Group mb="xl">
         <div>
-          <Title order={2}>{security?.symbol ?? `Security ${listing.securityId}`}</Title>
-          <Text c="dimmed">{exchange?.exchangeName ?? `Exchange ${listing.exchangeId}`} &mdash; {listing.exchangeSecuritySymbol}</Text>
+          <Title order={2}>{listing.securitySymbol}</Title>
+          <Text c="dimmed">{listing.exchangeName} &mdash; {listing.exchangeSecuritySymbol}</Text>
         </div>
       </Group>
 
@@ -96,12 +113,8 @@ function ListingDetail() {
               <InfoRow label="Listing ID" value={listing.listingId} />
               <InfoRow label="Exchange Security ID" value={listing.exchangeSecurityId} />
               <InfoRow label="Exchange Symbol" value={listing.exchangeSecuritySymbol} />
-              <InfoRow label="Created" value={
-                <ReactTimeAgo date={new Date(listing.dateCreated)} timeStyle="round" />
-              } />
-              <InfoRow label="Modified" value={
-                <ReactTimeAgo date={new Date(listing.dateModified)} timeStyle="round" />
-              } />
+              <InfoRow label="Created" value={<ReactTimeAgo date={new Date(listing.dateCreated)} timeStyle="round" />} />
+              <InfoRow label="Modified" value={<ReactTimeAgo date={new Date(listing.dateModified)} timeStyle="round" />} />
             </Stack>
           </Paper>
         </Grid.Col>
@@ -142,7 +155,7 @@ function ListingDetail() {
             <Title order={4} mb="md">Exchange</Title>
             <Stack gap={0}>
               <InfoRow label="Exchange ID" value={exchange?.exchangeId ?? listing.exchangeId} />
-              <InfoRow label="Name" value={exchange?.exchangeName ?? '-'} />
+              <InfoRow label="Name" value={listing.exchangeName} />
               <InfoRow label="Region" value={exchange?.region ?? '-'} />
               <InfoRow label="Schema Type" value={exchange?.schemaType ?? '-'} />
             </Stack>
@@ -174,9 +187,7 @@ function ListingDetail() {
                       <Table.Td>{formatUnscaled(unscaleSize(spec.lotSize))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscaleNotional(spec.minNotional))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscaleContractMultiplier(spec.contractMultiplier))}</Table.Td>
-                      <Table.Td>
-                        <ReactTimeAgo date={new Date(spec.recordedAt)} timeStyle="round" />
-                      </Table.Td>
+                      <Table.Td><ReactTimeAgo date={new Date(spec.recordedAt)} timeStyle="round" /></Table.Td>
                     </Table.Tr>
                   ))}
                 </Table.Tbody>
@@ -208,9 +219,7 @@ function ListingDetail() {
                       >
                         <Table.Td>{ex?.exchangeName ?? l.exchangeId}</Table.Td>
                         <Table.Td>{l.exchangeSecuritySymbol}</Table.Td>
-                        <Table.Td>
-                          <ReactTimeAgo date={new Date(l.dateCreated)} timeStyle="round" />
-                        </Table.Td>
+                        <Table.Td><ReactTimeAgo date={new Date(l.dateCreated)} timeStyle="round" /></Table.Td>
                       </Table.Tr>
                     );
                   })}

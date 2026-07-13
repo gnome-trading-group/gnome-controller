@@ -28,6 +28,9 @@ import BacktestList from './pages/Backtests/BacktestList';
 import BacktestDetail from './pages/Backtests/BacktestDetail';
 import ResearchList from './pages/Research/ResearchList';
 import ResearchDetail from './pages/Research/ResearchDetail';
+import EventsList from './pages/Predictions/EventsList';
+import EventDetail from './pages/Predictions/EventDetail';
+import ContractRelationships from './pages/Predictions/ContractRelationships';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -131,6 +134,9 @@ function AppContent() {
             <Route path="/backtests/:runId" element={<BacktestDetail />} />
             <Route path="/research" element={<ResearchList />} />
             <Route path="/research/:sessionName" element={<ResearchDetail />} />
+            <Route path="/predictions/events" element={<EventsList />} />
+            <Route path="/predictions/events/:eventId" element={<EventDetail />} />
+            <Route path="/predictions/relationships" element={<ContractRelationships />} />
             <Route path="/logout" element={<Logout />} />
             <Route path="/" element={<Navigate to="/security-master" replace />} />
           </Routes>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -17,7 +17,7 @@ import {
 } from '@mantine/core';
 import { IconRefresh, IconDatabase, IconClock, IconFiles, IconServer } from '@tabler/icons-react';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
-import { marketDataApi } from '../../../utils/api';
+import { marketDataApi, registryApi } from '../../../utils/api';
 import { useGlobalState } from '../../../context/GlobalStateContext';
 import { CoverageSummaryResponse, SecurityExchangeCoverageSummary } from '../../../types/coverage';
 
@@ -45,10 +45,12 @@ interface TableRow extends SecurityExchangeCoverageSummary {
 
 function CoverageSummary() {
   const navigate = useNavigate();
-  const { securities, exchanges } = useGlobalState();
+  const { exchanges } = useGlobalState();
   const [data, setData] = useState<CoverageSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [securityMap, setSecurityMap] = useState<Record<number, string>>({});
+  const fetchedSecurityIds = useRef<string>('');
 
   const loadData = async () => {
     try {
@@ -67,19 +69,33 @@ function CoverageSummary() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    if (!data?.securities) return;
+    const uniqueIds = [...new Set(Object.values(data.securities).map(c => c.securityId))];
+    const key = [...uniqueIds].sort().join(',');
+    if (key === fetchedSecurityIds.current) return;
+    fetchedSecurityIds.current = key;
+    Promise.all(uniqueIds.map(id =>
+      registryApi.listSecuritiesPaginated({ securityId: id, limit: 1 }).then(rows => rows[0])
+    )).then(results => {
+      const map: Record<number, string> = {};
+      results.forEach(s => { if (s) map[s.securityId] = s.symbol; });
+      setSecurityMap(map);
+    }).catch(() => {});
+  }, [data]);
+
   const tableData = useMemo((): TableRow[] => {
     if (!data?.securities) return [];
     return Object.entries(data.securities).map(([key, coverage]) => {
-      const security = securities.find(s => s.securityId === coverage.securityId);
       const exchange = exchanges.find(e => e.exchangeId === coverage.exchangeId);
       return {
         ...coverage,
         key,
-        securitySymbol: security?.symbol || `Security ${coverage.securityId}`,
+        securitySymbol: securityMap[coverage.securityId] || `Security ${coverage.securityId}`,
         exchangeName: exchange?.exchangeName || `Exchange ${coverage.exchangeId}`,
       };
     });
-  }, [data, securities, exchanges]);
+  }, [data, securityMap, exchanges]);
 
   const columns = useMemo<MRT_ColumnDef<TableRow>[]>(() => [
     { accessorKey: 'securitySymbol', header: 'Security', size: 120 },

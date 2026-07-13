@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { useGlobalState } from '../../context/GlobalStateContext';
+import { DenormalizedListing } from '../../types';
+import { registryApi } from '../../utils/api';
 import {
   Container,
   Title,
@@ -61,8 +62,7 @@ interface LogEvent {
 
 function CollectorDetail() {
   const { listingId } = useParams<{ listingId: string }>();
-  const { listings, exchanges, securities } = useGlobalState();
-  
+  const [listingInfo, setListingInfo] = useState<DenormalizedListing | null>(null);
   const [collector, setCollector] = useState<Collector | null>(null);
   const [taskDetails, setTaskDetails] = useState<TaskDetail[]>([]);
   const [logs, setLogs] = useState<LogsResponse[]>([]);
@@ -74,10 +74,6 @@ function CollectorDetail() {
   const [selectedTaskArn, setSelectedTaskArn] = useState<string>('');
   const [stopModalOpen, setStopModalOpen] = useState(false);
   const [redeployModalOpen, setRedeployModalOpen] = useState(false);
-
-  const listing = listings.find(l => l.listingId === Number(listingId));
-  const exchange = exchanges.find(e => e.exchangeId === listing?.exchangeId);
-  const security = securities.find(s => s.securityId === listing?.securityId);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -176,6 +172,13 @@ function CollectorDetail() {
 
   useEffect(() => {
     loadCollector();
+  }, [listingId]);
+
+  useEffect(() => {
+    if (!listingId) return;
+    registryApi.listListingsPaginated({ listingId: Number(listingId), limit: 1 })
+      .then(rows => setListingInfo(rows[0] ?? null))
+      .catch(() => {});
   }, [listingId]);
 
   useEffect(() => {
@@ -295,19 +298,19 @@ function CollectorDetail() {
         <Grid.Col span={6}>
           <Card withBorder>
             <Title order={4} mb="md">Listing Information</Title>
-            {listing ? (
+            {listingInfo ? (
               <Stack gap="xs">
                 <Group justify="space-between">
                   <Text fw={500}>Exchange:</Text>
-                  <Text>{exchange?.exchangeName}</Text>
+                  <Text>{listingInfo.exchangeName}</Text>
                 </Group>
                 <Group justify="space-between">
                   <Text fw={500}>Security:</Text>
-                  <Text>{security?.symbol}</Text>
+                  <Text>{listingInfo.securitySymbol}</Text>
                 </Group>
                 <Group justify="space-between">
                   <Text fw={500}>Listing ID:</Text>
-                  <Text>{listing.listingId}</Text>
+                  <Text>{listingInfo.listingId}</Text>
                 </Group>
               </Stack>
             ) : (

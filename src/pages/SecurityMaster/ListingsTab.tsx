@@ -3,6 +3,7 @@ import {
   ActionIcon,
   Badge,
   Button,
+  ComboboxItem,
   Group,
   Modal,
   Select,
@@ -15,23 +16,19 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalState } from '../../context/GlobalStateContext';
-import { Listing } from '../../types';
+import { DenormalizedListing } from '../../types';
 import { registryApi } from '../../utils/api';
 import { formatSecurityType } from '../../utils/security-master';
-
-interface DenormalizedListing extends Listing {
-  exchangeName: string;
-  securitySymbol: string;
-  securityType: number;
-  active: boolean;
-}
+import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
+import { useSecuritySearch } from '../../hooks/useAsyncSearch';
 
 interface ListingsTabProps {
   onDelete: (type: 'listing', id: number, name: string) => void;
+  externalRefreshKey?: number;
 }
 
-function ListingsTab({ onDelete }: ListingsTabProps) {
-  const { listings, exchanges, securities, loading, refreshListings } = useGlobalState();
+function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
+  const { exchanges } = useGlobalState();
   const navigate = useNavigate();
 
   const [createListingOpen, setCreateListingOpen] = useState(false);
@@ -41,28 +38,30 @@ function ListingsTab({ onDelete }: ListingsTabProps) {
     exchangeSecurityId: '',
     exchangeSecuritySymbol: '',
   });
+  const [securitySearch, setSecuritySearch] = useState('');
+  const { options: securityOptions, isLoading: securitySearchLoading } = useSecuritySearch(securitySearch);
 
-  const denormalizedListings = useMemo<DenormalizedListing[]>(() => {
-    const exchangeMap = new Map(exchanges.map(e => [e.exchangeId, e]));
-    const securityMap = new Map(securities.map(s => [s.securityId, s]));
-
-    return listings.map(listing => {
-      const exchange = exchangeMap.get(listing.exchangeId);
-      const security = securityMap.get(listing.securityId);
-      return {
-        ...listing,
-        exchangeName: exchange?.exchangeName ?? `Exchange ${listing.exchangeId}`,
-        securitySymbol: security?.symbol ?? `Security ${listing.securityId}`,
-        securityType: security?.type ?? -1,
-        active: security?.active ?? false,
-      };
-    });
-  }, [listings, exchanges, securities]);
+  const {
+    data: listings,
+    total,
+    isLoading,
+    pagination,
+    sorting,
+    globalFilter,
+    setPagination,
+    setSorting,
+    setGlobalFilter,
+    refresh,
+  } = useServerPaginatedTable<DenormalizedListing>({
+    fetchFn: registryApi.listListingsPaginated,
+    countFn: registryApi.countListings,
+    externalRefreshKey,
+  });
 
   const handleCreateListing = async () => {
     try {
       await registryApi.createListing(newListingForm);
-      await refreshListings();
+      await refresh();
       setCreateListingOpen(false);
       setNewListingForm({ exchangeId: 0, securityId: 0, exchangeSecurityId: '', exchangeSecuritySymbol: '' });
     } catch (err) {
@@ -75,19 +74,16 @@ function ListingsTab({ onDelete }: ListingsTabProps) {
       accessorKey: 'securitySymbol',
       header: 'Security',
       enableSorting: true,
-      enableGrouping: true,
     },
     {
       accessorKey: 'exchangeName',
       header: 'Exchange',
       enableSorting: true,
-      enableGrouping: true,
     },
     {
       accessorKey: 'securityType',
       header: 'Type',
       enableSorting: true,
-      enableGrouping: true,
       Cell: ({ row }: { row: MRT_Row<DenormalizedListing> }) =>
         formatSecurityType(row.original.securityType),
     },
@@ -97,14 +93,13 @@ function ListingsTab({ onDelete }: ListingsTabProps) {
       enableSorting: true,
     },
     {
-      accessorKey: 'active',
+      accessorKey: 'securityActive',
       header: 'Active',
       enableSorting: true,
-      enableGrouping: true,
       size: 80,
       Cell: ({ row }: { row: MRT_Row<DenormalizedListing> }) => (
-        <Badge color={row.original.active ? 'green' : 'gray'} variant="light" size="sm">
-          {row.original.active ? 'Active' : 'Inactive'}
+        <Badge color={row.original.securityActive ? 'green' : 'gray'} variant="light" size="sm">
+          {row.original.securityActive ? 'Active' : 'Inactive'}
         </Badge>
       ),
     },
@@ -121,15 +116,26 @@ function ListingsTab({ onDelete }: ListingsTabProps) {
 
   const table = useMantineReactTable({
     columns,
-    data: denormalizedListings,
-    state: { isLoading: loading.listings },
+    data: listings,
+    rowCount: total,
+    manualPagination: true,
+    manualSorting: true,
+    manualFiltering: true,
+    state: {
+      isLoading,
+      pagination,
+      sorting,
+      globalFilter,
+    },
+    onPaginationChange: setPagination,
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
     enableRowActions: true,
-    enableColumnFilters: true,
+    enableColumnFilters: false,
     enableSorting: true,
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: true,
-    enableGrouping: true,
     positionActionsColumn: 'last',
     mantineTableProps: {
       striped: true,
@@ -141,7 +147,6 @@ function ListingsTab({ onDelete }: ListingsTabProps) {
       style: { cursor: 'pointer' },
     }),
     initialState: {
-      sorting: [{ id: 'securitySymbol', desc: false }],
       density: 'xs',
     },
     renderRowActions: ({ row }: { row: MRT_Row<DenormalizedListing> }) => (
@@ -189,10 +194,13 @@ function ListingsTab({ onDelete }: ListingsTabProps) {
           />
           <Select
             label="Security"
-            data={securities.map(s => ({ value: s.securityId.toString(), label: s.symbol }))}
+            data={securityOptions as ComboboxItem[]}
             value={newListingForm.securityId > 0 ? newListingForm.securityId.toString() : null}
             onChange={(value) => setNewListingForm(prev => ({ ...prev, securityId: parseInt(value || '0') }))}
+            onSearchChange={setSecuritySearch}
+            searchValue={securitySearch}
             searchable
+            nothingFoundMessage={securitySearchLoading ? 'Searching...' : 'Type to search securities'}
             required
           />
           <TextInput

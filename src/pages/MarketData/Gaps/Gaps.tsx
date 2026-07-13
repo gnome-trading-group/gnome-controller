@@ -22,10 +22,9 @@ import {
 } from '@mantine/core';
 import { IconRefresh, IconEye, IconEyeOff, IconCheck, IconAlertTriangle } from '@tabler/icons-react';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_RowSelectionState } from 'mantine-react-table';
-import { marketDataApi } from '../../../utils/api';
-import { useGlobalState } from '../../../context/GlobalStateContext';
+import { marketDataApi, registryApi } from '../../../utils/api';
+import { useListingSearch, useListingLabels } from '../../../hooks/useAsyncSearch';
 import { Gap, GapStatus, GapReason } from '../../../types/gaps';
-import { formatSecurityType } from '../../../utils/security-master';
 
 const STATUS_CONFIG: Record<GapStatus, { color: string; icon: React.ReactNode; label: string }> = {
   UNREVIEWED: { color: 'yellow', icon: <IconEyeOff size={14} />, label: 'Unreviewed' },
@@ -59,7 +58,6 @@ function formatTimestamp(ts: number): string {
 
 function Gaps() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { listings, exchanges, securities } = useGlobalState();
   const [gaps, setGaps] = useState<Gap[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +66,9 @@ function Gaps() {
   const initialListingId = searchParams.get('listingId');
   const [selectedStatus, setSelectedStatus] = useState<GapStatus>('UNREVIEWED');
   const [selectedListingId, setSelectedListingId] = useState<string | null>(initialListingId);
+  const [listingSearchValue, setListingSearchValue] = useState('');
+  const { options: listingSearchOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearchValue);
+  const [selectedListingOption, setSelectedListingOption] = useState<{ value: string; label: string } | null>(null);
 
   const [lastEvaluatedKey, setLastEvaluatedKey] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -83,6 +84,7 @@ function Gaps() {
 
   const handleListingChange = useCallback((listingId: string | null) => {
     setSelectedListingId(listingId);
+    if (!listingId) setSelectedListingOption(null);
     if (listingId) {
       setSearchParams({ listingId });
     } else {
@@ -90,16 +92,22 @@ function Gaps() {
     }
   }, [setSearchParams]);
 
+  useEffect(() => {
+    if (!initialListingId) return;
+    registryApi.listListingsPaginated({ listingId: parseInt(initialListingId), limit: 1 })
+      .then(rows => {
+        const l = rows[0];
+        if (l) setSelectedListingOption({ value: String(l.listingId), label: `${l.listingId} - ${l.exchangeName} - ${l.securitySymbol}` });
+      })
+      .catch(() => {});
+  }, [initialListingId]);
+
   const listingOptions = useMemo(() => {
-    return listings.map((listing) => {
-      const exchange = exchanges.find((e) => e.exchangeId === listing.exchangeId);
-      const security = securities.find((s) => s.securityId === listing.securityId);
-      return {
-        value: String(listing.listingId),
-        label: `${listing.listingId} - ${exchange?.exchangeName || 'Unknown'} - ${security?.symbol || 'Unknown'} (${formatSecurityType(security?.type || 0)})`,
-      };
-    });
-  }, [listings, securities, exchanges]);
+    if (selectedListingOption && !listingSearchOptions.some(o => o.value === selectedListingOption.value)) {
+      return [selectedListingOption, ...listingSearchOptions];
+    }
+    return listingSearchOptions;
+  }, [listingSearchOptions, selectedListingOption]);
 
   const fetchGaps = useCallback(async (append = false) => {
     setLoading(true);
@@ -154,20 +162,13 @@ function Gaps() {
     fetchGaps(true);
   };
 
-  const listingLabelMap = useMemo(() => {
-    const map = new Map<number, string>();
-    listings.forEach((listing) => {
-      const exchange = exchanges.find((e) => e.exchangeId === listing.exchangeId);
-      const security = securities.find((s) => s.securityId === listing.securityId);
-      map.set(listing.listingId, `${security?.symbol || 'Unknown'} @ ${exchange?.exchangeName || 'Unknown'}`);
-    });
-    return map;
-  }, [listings, securities, exchanges]);
+  const gapListingIds = useMemo(() => gaps.map(g => g.listingId), [gaps]);
+  const listingLabelMap = useListingLabels(gapListingIds);
 
   const tableData = useMemo<TableRow[]>(() => {
     return gaps.map((gap) => ({
       ...gap,
-      listingLabel: listingLabelMap.get(gap.listingId) || `Listing ${gap.listingId}`,
+      listingLabel: listingLabelMap[gap.listingId] || `Listing ${gap.listingId}`,
       id: `${gap.listingId}-${gap.timestamp}`,
     }));
   }, [gaps, listingLabelMap]);
@@ -353,12 +354,16 @@ function Gaps() {
         <Group align="flex-end">
           <Select
             label="Filter by Listing"
-            placeholder="All listings"
+            placeholder="Search listings..."
             searchable
             clearable
             data={listingOptions}
             value={selectedListingId}
-            onChange={handleListingChange}
+            onChange={(v) => { handleListingChange(v); if (v) { const opt = listingOptions.find(o => o.value === v); if (opt) setSelectedListingOption(opt); } }}
+            onSearchChange={setListingSearchValue}
+            searchValue={listingSearchValue}
+            filter={({ options }) => options}
+            rightSection={listingSearchLoading ? <Loader size="xs" /> : undefined}
             style={{ minWidth: 300 }}
           />
         </Group>

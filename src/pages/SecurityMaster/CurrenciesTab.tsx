@@ -1,11 +1,25 @@
 import React, { useMemo } from 'react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
-import { useGlobalState } from '../../context/GlobalStateContext';
 import { Currency } from '../../types';
+import { registryApi } from '../../utils/api';
+import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 
 function CurrenciesTab() {
-  const { currencies, loading } = useGlobalState();
+  const {
+    data: currencies,
+    total,
+    isLoading,
+    pagination,
+    sorting,
+    globalFilter,
+    setPagination,
+    setSorting,
+    setGlobalFilter,
+  } = useServerPaginatedTable<Currency>({
+    fetchFn: registryApi.listCurrenciesPaginated,
+    countFn: registryApi.countCurrencies,
+  });
 
   const columns = useMemo<MRT_ColumnDef<Currency>[]>(() => [
     {
@@ -39,8 +53,20 @@ function CurrenciesTab() {
   const table = useMantineReactTable({
     columns,
     data: currencies,
-    state: { isLoading: loading.currencies },
-    enableColumnFilters: true,
+    rowCount: total,
+    manualPagination: true,
+    manualSorting: true,
+    manualFiltering: true,
+    state: {
+      isLoading,
+      pagination,
+      sorting,
+      globalFilter,
+    },
+    onPaginationChange: setPagination,
+    onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
+    enableColumnFilters: false,
     enableSorting: true,
     enablePagination: true,
     enableBottomToolbar: true,
@@ -51,7 +77,6 @@ function CurrenciesTab() {
       withColumnBorders: true,
     },
     initialState: {
-      sorting: [{ id: 'symbol', desc: false }],
       density: 'xs',
     },
   });

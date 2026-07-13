@@ -3,6 +3,7 @@ export enum SecurityType {
   PERPETUAL = 1,
   FUTURE = 2,
   OPTION = 3,
+  EVENT_CONTRACT = 4,
 }
 
 export enum ContractType {
@@ -13,6 +14,8 @@ export enum ContractType {
   INVERSE_FUTURE = 4,
   CALL_OPTION = 5,
   PUT_OPTION = 6,
+  BINARY = 7,
+  MULTI_OUTCOME = 8,
 }
 
 export enum AssetClass {
@@ -21,7 +24,16 @@ export enum AssetClass {
   COMMODITY = 2,
   FX = 3,
   INDEX = 4,
+  PREDICTION = 5,
 }
+
+export type ContractRelationshipType =
+  | 'EQUIVALENT'
+  | 'COMPLEMENT'
+  | 'IMPLIES'
+  | 'MUTUALLY_EXCLUSIVE'
+  | 'CORRELATED'
+  | 'HEDGEABLE_WITH';
 
 export interface Security {
   securityId: number;
@@ -62,6 +74,22 @@ export interface Listing {
   dateModified: string;
 }
 
+export interface DenormalizedListing extends Listing {
+  exchangeName: string;
+  securitySymbol: string;
+  securityType: number;
+  securityActive: boolean;
+}
+
+export interface PaginationParams {
+  limit?: number;
+  offset?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  search?: string;
+  [key: string]: string | number | boolean | undefined;
+}
+
 export interface ListingSpec {
   listingId: number;
   tickSize: number;
@@ -78,4 +106,55 @@ export interface Currency {
   decimals: number;
   dateCreated: string;
   dateModified: string;
+}
+
+export interface Event {
+  eventId: number;
+  title: string;
+  description: string | null;
+  category: string | null;
+  resolutionSource: string | null;
+  tags: string[];
+  resolved: boolean;
+  resolvedAt: string | null;
+  expiry: string | null;
+  dateCreated: string;
+  dateModified: string;
+}
+
+export interface EventContract {
+  eventContractId: number;
+  eventId: number;
+  securityId: number;
+  outcomeLabel: string;
+  dateCreated: string;
+}
+
+export interface ContractRelationship {
+  relationshipId: number;
+  securityIdA: number;
+  securityIdB: number;
+  relationshipType: ContractRelationshipType;
+  confidence: number;
+  method: string;
+  reviewed: boolean;
+  reviewedAt: string | null;
+  dateCreated: string;
+}
+
+export interface ExchangeEvent {
+  exchangeEventId: number;
+  exchangeId: number;
+  eventId: number;
+  nativeEventId: string;
+  rawTitle: string;
+  dateCreated: string;
+}
+
+export interface CreateContractRelationship {
+  securityIdA: number;
+  securityIdB: number;
+  relationshipType: ContractRelationshipType;
+  confidence: number;
+  method: string;
 }

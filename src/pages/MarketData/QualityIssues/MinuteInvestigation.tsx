@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { registryApi } from '../../../utils/api';
 import {
   Container,
   Title,
@@ -27,7 +28,6 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { marketDataApi } from '../../../utils/api';
-import { useGlobalState } from '../../../context/GlobalStateContext';
 import {
   MinuteInvestigationResponse,
   MinuteMetrics,
@@ -192,20 +192,21 @@ function IssueCard({ issue }: { issue: MinuteInvestigationIssue }) {
 function MinuteInvestigation() {
   const { listingId, timestamp } = useParams<{ listingId: string; timestamp: string }>();
   const navigate = useNavigate();
-  const { listings, exchanges, securities } = useGlobalState();
 
   const [data, setData] = useState<MinuteInvestigationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [listingLabel, setListingLabel] = useState<string>(`Listing ${listingId}`);
 
-  const { listingLabel } = useMemo(() => {
-    const listing = listings.find((l) => l.listingId === Number(listingId));
-    const exchange = listing ? exchanges.find((e) => e.exchangeId === listing.exchangeId) : undefined;
-    const security = listing ? securities.find((s) => s.securityId === listing.securityId) : undefined;
-    return {
-      listingLabel: security && exchange ? `${security.symbol} @ ${exchange.exchangeName}` : `Listing ${listingId}`,
-    };
-  }, [listingId, listings, exchanges, securities]);
+  useEffect(() => {
+    if (!listingId) return;
+    registryApi.listListingsPaginated({ listingId: Number(listingId), limit: 1 })
+      .then(rows => {
+        const l = rows[0];
+        if (l) setListingLabel(`${l.securitySymbol} @ ${l.exchangeName}`);
+      })
+      .catch(() => {});
+  }, [listingId]);
 
   useEffect(() => {
     if (!listingId || !timestamp) return;
