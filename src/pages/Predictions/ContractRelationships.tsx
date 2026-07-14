@@ -1,9 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ActionIcon,
   Anchor,
   Badge,
-  Button,
   Container,
   Group,
   Paper,
@@ -14,13 +13,14 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCheck, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
-import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row, type MRT_RowSelectionState } from 'mantine-react-table';
+import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { ContractRelationship, ContractRelationshipType } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useGlobalState } from '../../context/GlobalStateContext';
+import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import RelationshipGraph from './RelationshipGraph';
 import CreateRelationshipModal from './CreateRelationshipModal';
 
@@ -51,72 +51,53 @@ const METHOD_OPTIONS = [
 
 function ContractRelationships() {
   const { securitySymbols } = useGlobalState();
-  const [relationships, setRelationships] = useState<ContractRelationship[]>([]);
-  const [loading, setLoading] = useState(false);
   const [view, setView] = useState<'table' | 'graph'>('table');
-  const [reviewedFilter, setReviewedFilter] = useState<string>('pending');
   const [methodFilter, setMethodFilter] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
-  const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
+  const [filterKey, setFilterKey] = useState(0);
+  const isFirstFilterRun = useRef(true);
 
-  const refresh = async () => {
-    setLoading(true);
-    try {
-      const params: { reviewed?: boolean; method?: string; relationshipType?: string } = {};
-      if (reviewedFilter === 'pending') params.reviewed = false;
-      else if (reviewedFilter === 'reviewed') params.reviewed = true;
-      if (methodFilter) params.method = methodFilter;
-      if (typeFilter) params.relationshipType = typeFilter;
+  const extraParams = useMemo(() => {
+    const p: Record<string, string | number | boolean> = {};
+    if (methodFilter) p.method = methodFilter;
+    if (typeFilter) p.relationshipType = typeFilter;
+    return p;
+  }, [methodFilter, typeFilter]);
 
-      const result = await registryApi.listContractRelationships(params);
-      setRelationships(result as ContractRelationship[]);
-    } catch (err) {
-      console.error('Failed to fetch relationships:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    data: relationships,
+    total,
+    isLoading,
+    pagination,
+    sorting,
+    setPagination,
+    setSorting,
+    refresh,
+  } = useServerPaginatedTable<ContractRelationship>({
+    fetchFn: registryApi.listContractRelationshipsPaginated,
+    countFn: registryApi.countContractRelationships,
+    defaultPageSize: 50,
+    extraParams,
+    externalRefreshKey: filterKey,
+  });
 
   useEffect(() => {
-    refresh();
-  }, [reviewedFilter, methodFilter, typeFilter]);
-
-  const handleApprove = async (relationshipId: number) => {
-    try {
-      await registryApi.reviewContractRelationship(relationshipId, true);
-      setRelationships(prev =>
-        prev.map(r =>
-          r.relationshipId === relationshipId
-            ? { ...r, reviewed: true, reviewedAt: new Date().toISOString() }
-            : r,
-        ),
-      );
-    } catch (err) {
-      console.error('Failed to approve relationship:', err);
+    if (isFirstFilterRun.current) {
+      isFirstFilterRun.current = false;
+      return;
     }
-  };
+    setPagination(prev => ({ ...prev, pageIndex: 0 }));
+    setFilterKey(k => k + 1);
+  }, [methodFilter, typeFilter]);
 
   const handleDelete = async (relationshipId: number) => {
     try {
       await registryApi.deleteContractRelationship(relationshipId);
-      setRelationships(prev => prev.filter(r => r.relationshipId !== relationshipId));
+      refresh();
     } catch (err) {
       console.error('Failed to delete relationship:', err);
     }
-  };
-
-  const handleBulkApprove = async () => {
-    const ids = Object.keys(rowSelection).map(Number);
-    await Promise.all(ids.map(id => registryApi.reviewContractRelationship(id, true)));
-    setRelationships(prev =>
-      prev.map(r =>
-        ids.includes(r.relationshipId)
-          ? { ...r, reviewed: true, reviewedAt: new Date().toISOString() }
-          : r,
-      ),
-    );
-    setRowSelection({});
   };
 
   const columns = useMemo<MRT_ColumnDef<ContractRelationship>[]>(() => [
@@ -150,7 +131,6 @@ function ContractRelationships() {
       accessorKey: 'relationshipType',
       header: 'Type',
       enableSorting: true,
-      enableGrouping: true,
       Cell: ({ row }) => (
         <Badge color={RELATIONSHIP_COLORS[row.original.relationshipType] ?? 'gray'} variant="light" size="sm">
           {row.original.relationshipType.replace(/_/g, ' ')}
@@ -168,20 +148,7 @@ function ContractRelationships() {
       accessorKey: 'method',
       header: 'Method',
       enableSorting: true,
-      enableGrouping: true,
       size: 100,
-    },
-    {
-      accessorKey: 'reviewed',
-      header: 'Status',
-      enableSorting: true,
-      enableGrouping: true,
-      size: 100,
-      Cell: ({ row }) => (
-        <Badge color={row.original.reviewed ? 'green' : 'yellow'} variant="light" size="sm">
-          {row.original.reviewed ? 'Reviewed' : 'Pending'}
-        </Badge>
-      ),
     },
     {
       accessorKey: 'dateCreated',
@@ -194,22 +161,23 @@ function ContractRelationships() {
     },
   ], [securitySymbols]);
 
-  const selectedCount = Object.keys(rowSelection).length;
-
   const table = useMantineReactTable({
     columns,
     data: relationships,
-    state: { isLoading: loading, rowSelection },
-    onRowSelectionChange: setRowSelection,
-    getRowId: row => String(row.relationshipId),
-    enableColumnFilters: true,
+    rowCount: total,
+    manualPagination: true,
+    manualSorting: true,
+    manualFiltering: true,
+    state: { isLoading, pagination, sorting },
+    onPaginationChange: setPagination,
+    onSortingChange: setSorting,
+    enableColumnFilters: false,
     enableSorting: true,
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: true,
-    enableGrouping: true,
+    enableGrouping: false,
     enableRowActions: true,
-    enableRowSelection: true,
     positionActionsColumn: 'last',
     mantineTableProps: {
       striped: true,
@@ -217,24 +185,15 @@ function ContractRelationships() {
       withColumnBorders: true,
     },
     initialState: {
-      sorting: [{ id: 'dateCreated', desc: true }],
+      sorting: [{ id: 'confidence', desc: true }],
       density: 'xs',
     },
     renderRowActions: ({ row }: { row: MRT_Row<ContractRelationship> }) => (
-      <Group gap="xs" wrap="nowrap">
-        {!row.original.reviewed && (
-          <Tooltip label="Approve" position="left" withArrow openDelay={500}>
-            <ActionIcon variant="subtle" color="green" onClick={e => { e.stopPropagation(); handleApprove(row.original.relationshipId); }}>
-              <IconCheck size={16} />
-            </ActionIcon>
-          </Tooltip>
-        )}
-        <Tooltip label="Delete" position="left" withArrow openDelay={500}>
-          <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); handleDelete(row.original.relationshipId); }}>
-            <IconTrash size={16} />
-          </ActionIcon>
-        </Tooltip>
-      </Group>
+      <Tooltip label="Delete" position="left" withArrow openDelay={500}>
+        <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); handleDelete(row.original.relationshipId); }}>
+          <IconTrash size={16} />
+        </ActionIcon>
+      </Tooltip>
     ),
   });
 
@@ -243,11 +202,6 @@ function ContractRelationships() {
       <Group justify="space-between" mb="md">
         <Title order={2}>Contract Relationships</Title>
         <Group>
-          {selectedCount > 0 && (
-            <Button leftSection={<IconCheck size={16} />} color="green" variant="light" onClick={handleBulkApprove}>
-              Approve {selectedCount} selected
-            </Button>
-          )}
           <Select
             placeholder="All Methods"
             data={METHOD_OPTIONS}
@@ -266,23 +220,13 @@ function ContractRelationships() {
             size="sm"
             style={{ width: 160 }}
           />
-          <SegmentedControl
-            value={reviewedFilter}
-            onChange={setReviewedFilter}
-            size="sm"
-            data={[
-              { value: 'pending', label: 'Pending' },
-              { value: 'reviewed', label: 'Reviewed' },
-              { value: 'all', label: 'All' },
-            ]}
-          />
           <Tooltip label="Create Manual Relationship" position="bottom" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="green" onClick={openCreate}>
               <IconPlus size={20} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
+            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={isLoading}>
               <IconRefresh size={20} />
             </ActionIcon>
           </Tooltip>
@@ -302,7 +246,7 @@ function ContractRelationships() {
         <MantineReactTable table={table} />
       ) : (
         <Paper withBorder p="xs" style={{ height: 'calc(100vh - 200px)' }}>
-          {loading ? (
+          {isLoading ? (
             <Stack align="center" justify="center" style={{ height: '100%' }}>
               <ActionIcon loading size="xl" variant="transparent" />
             </Stack>
@@ -311,7 +255,6 @@ function ContractRelationships() {
               relationships={relationships}
               securitySymbols={securitySymbols}
               height="100%"
-              onApprove={handleApprove}
               onDelete={handleDelete}
             />
           )}

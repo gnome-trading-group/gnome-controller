@@ -525,6 +525,68 @@ export const registryApi = {
       convertToCamelCase: true,
       body: { policyId },
     }),
+  listEventsPaginated: (params: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params.limit !== undefined) queryParams.limit = params.limit;
+    if (params.offset !== undefined) queryParams.offset = params.offset;
+    if (params.sortBy) queryParams.sortBy = params.sortBy.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
+    if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
+    Object.entries(params).forEach(([k, v]) => {
+      if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<Event[]>('/events', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams,
+    });
+  },
+  countEvents: (params?: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = { count: true };
+    Object.entries(params ?? {}).forEach(([k, v]) => {
+      if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<{ count: number }>('/events', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      queryParams,
+    }).then(r => r.count);
+  },
+  listContractRelationshipsPaginated: (params: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params.limit !== undefined) queryParams.limit = params.limit;
+    if (params.offset !== undefined) queryParams.offset = params.offset;
+    if (params.sortBy) queryParams.sortBy = params.sortBy.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
+    if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
+    Object.entries(params).forEach(([k, v]) => {
+      if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<ContractRelationship[]>('/contract-relationships', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams,
+    });
+  },
+  countContractRelationships: (params?: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = { count: true };
+    Object.entries(params ?? {}).forEach(([k, v]) => {
+      if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<{ count: number }>('/contract-relationships', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      queryParams,
+    }).then(r => r.count);
+  },
   listEvents: (params?: { eventId?: number; category?: string; resolved?: boolean }) => {
     const queryParams: Record<string, string | number | boolean> = {};
     if (params?.eventId !== undefined) queryParams.eventId = params.eventId;
@@ -548,9 +610,8 @@ export const registryApi = {
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
   },
-  listContractRelationships: (params?: { reviewed?: boolean; method?: string; relationshipType?: string; securityId?: number }) => {
+  listContractRelationships: (params?: { method?: string; relationshipType?: string; securityId?: number }) => {
     const queryParams: Record<string, string | number | boolean> = {};
-    if (params?.reviewed !== undefined) queryParams.reviewed = params.reviewed;
     if (params?.method) queryParams.method = params.method;
     if (params?.relationshipType) queryParams.relationshipType = params.relationshipType;
     if (params?.securityId !== undefined) queryParams.securityId = params.securityId;
@@ -567,14 +628,6 @@ export const registryApi = {
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body,
-    }),
-  reviewContractRelationship: (relationshipId: number, approved: boolean) =>
-    sendApiRequest<{ message: string }>('/contract-relationships', 'PATCH', {
-      apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
-      convertToCamelCase: true,
-      body: { reviewed: approved },
-      queryParams: { relationshipId },
     }),
   deleteContractRelationship: (relationshipId: number) =>
     sendApiRequest<{ message: string }>('/contract-relationships', 'DELETE', {

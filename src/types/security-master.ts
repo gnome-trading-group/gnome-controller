@@ -137,8 +137,6 @@ export interface ContractRelationship {
   relationshipType: ContractRelationshipType;
   confidence: number;
   method: string;
-  reviewed: boolean;
-  reviewedAt: string | null;
   dateCreated: string;
 }
 

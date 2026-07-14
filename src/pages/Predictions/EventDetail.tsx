@@ -16,7 +16,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconCheck, IconTrash } from '@tabler/icons-react';
+import { IconTrash } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
@@ -122,21 +122,6 @@ function EventDetail() {
     },
   ], [securitySymbols]);
 
-  const handleApprove = async (relationshipId: number) => {
-    try {
-      await registryApi.reviewContractRelationship(relationshipId, true);
-      setRelationships(prev =>
-        prev.map(r =>
-          r.relationshipId === relationshipId
-            ? { ...r, reviewed: true, reviewedAt: new Date().toISOString() }
-            : r,
-        ),
-      );
-    } catch (err) {
-      console.error('Failed to approve:', err);
-    }
-  };
-
   const handleDelete = async (relationshipId: number) => {
     try {
       await registryApi.deleteContractRelationship(relationshipId);
@@ -191,16 +176,6 @@ function EventDetail() {
       header: 'Method',
       size: 90,
     },
-    {
-      accessorKey: 'reviewed',
-      header: 'Status',
-      size: 90,
-      Cell: ({ row }) => (
-        <Badge color={row.original.reviewed ? 'green' : 'yellow'} variant="light" size="sm">
-          {row.original.reviewed ? 'Reviewed' : 'Pending'}
-        </Badge>
-      ),
-    },
   ], [securitySymbols]);
 
   const contractTable = useMantineReactTable({
@@ -228,20 +203,11 @@ function EventDetail() {
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     initialState: { density: 'xs', sorting: [{ id: 'confidence', desc: true }] },
     renderRowActions: ({ row }: { row: MRT_Row<ContractRelationship> }) => (
-      <Group gap="xs" wrap="nowrap">
-        {!row.original.reviewed && (
-          <Tooltip label="Approve" position="left" withArrow openDelay={500}>
-            <ActionIcon variant="subtle" color="green" onClick={e => { e.stopPropagation(); handleApprove(row.original.relationshipId); }}>
-              <IconCheck size={16} />
-            </ActionIcon>
-          </Tooltip>
-        )}
-        <Tooltip label="Delete" position="left" withArrow openDelay={500}>
-          <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); handleDelete(row.original.relationshipId); }}>
-            <IconTrash size={16} />
-          </ActionIcon>
-        </Tooltip>
-      </Group>
+      <Tooltip label="Delete" position="left" withArrow openDelay={500}>
+        <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); handleDelete(row.original.relationshipId); }}>
+          <IconTrash size={16} />
+        </ActionIcon>
+      </Tooltip>
     ),
   });
 
@@ -363,7 +329,6 @@ function EventDetail() {
             eventContracts={contracts}
             events={[event]}
             height={400}
-            onApprove={handleApprove}
             onDelete={handleDelete}
           />
         </Paper>

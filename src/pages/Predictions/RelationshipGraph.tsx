@@ -45,7 +45,6 @@ export interface RelationshipGraphProps {
   eventContracts?: EventContract[];
   events?: Event[];
   height?: string | number;
-  onApprove?: (relationshipId: number) => void;
   onDelete?: (relationshipId: number) => void;
 }
 
@@ -114,7 +113,6 @@ function RelationshipGraph({
         data: {
           relationshipType: r.relationshipType,
           confidence: r.confidence,
-          reviewed: r.reviewed,
           method: r.method,
         },
       };

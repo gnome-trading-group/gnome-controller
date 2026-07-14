@@ -15,7 +15,6 @@ const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
 export interface RelationshipEdgeData {
   relationshipType: ContractRelationshipType;
   confidence: number;
-  reviewed: boolean;
   method: string;
   [key: string]: unknown;
 }
@@ -38,7 +37,6 @@ function RelationshipEdge({
 
   const color = edgeData ? RELATIONSHIP_COLORS[edgeData.relationshipType] ?? 'gray' : 'gray';
   const strokeColor = selected ? 'var(--mantine-color-green-4)' : `var(--mantine-color-${color}-5)`;
-  const strokeDasharray = edgeData?.reviewed ? undefined : '5,5';
 
   return (
     <>
@@ -50,7 +48,6 @@ function RelationshipEdge({
         style={{
           stroke: strokeColor,
           strokeWidth: selected ? 2.5 : 1.5,
-          strokeDasharray,
         }}
       />
       {edgeData && (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ActionIcon, Badge, Group, Tooltip } from '@mantine/core';
-import { IconCheck, IconTrash } from '@tabler/icons-react';
+import { ActionIcon, Badge, Tooltip } from '@mantine/core';
+import { IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { ContractRelationship, ContractRelationshipType } from '../../types';
@@ -44,21 +44,6 @@ function ContractRelationshipsTab() {
     refresh();
   }, []);
 
-  const handleApprove = async (relationshipId: number) => {
-    try {
-      await registryApi.reviewContractRelationship(relationshipId, true);
-      setRelationships(prev =>
-        prev.map(r =>
-          r.relationshipId === relationshipId
-            ? { ...r, reviewed: true, reviewedAt: new Date().toISOString() }
-            : r
-        )
-      );
-    } catch (err) {
-      console.error('Failed to approve relationship:', err);
-    }
-  };
-
   const handleDelete = async (relationshipId: number) => {
     try {
       await registryApi.deleteContractRelationship(relationshipId);
@@ -71,13 +56,13 @@ function ContractRelationshipsTab() {
   const columns = useMemo<MRT_ColumnDef<ContractRelationship>[]>(() => [
     {
       accessorKey: 'securityIdA',
-      header: 'Contract A',
+      header: 'Security A',
       enableSorting: true,
       Cell: ({ row }) => symbolById[row.original.securityIdA] ?? `#${row.original.securityIdA}`,
     },
     {
       accessorKey: 'securityIdB',
-      header: 'Contract B',
+      header: 'Security B',
       enableSorting: true,
       Cell: ({ row }) => symbolById[row.original.securityIdB] ?? `#${row.original.securityIdB}`,
     },
@@ -111,18 +96,6 @@ function ContractRelationshipsTab() {
       size: 100,
     },
     {
-      accessorKey: 'reviewed',
-      header: 'Reviewed',
-      enableSorting: true,
-      enableGrouping: true,
-      size: 100,
-      Cell: ({ row }) => (
-        <Badge color={row.original.reviewed ? 'green' : 'yellow'} variant="light" size="sm">
-          {row.original.reviewed ? 'Reviewed' : 'Pending'}
-        </Badge>
-      ),
-    },
-    {
       accessorKey: 'dateCreated',
       header: 'Created',
       enableSorting: true,
@@ -153,37 +126,20 @@ function ContractRelationshipsTab() {
     initialState: {
       sorting: [{ id: 'dateCreated', desc: true }],
       density: 'xs',
-      columnFilters: [{ id: 'reviewed', value: false }],
     },
     renderRowActions: ({ row }: { row: MRT_Row<ContractRelationship> }) => (
-      <Group gap="xs" wrap="nowrap">
-        {!row.original.reviewed && (
-          <Tooltip label="Approve" position="left" withArrow openDelay={500}>
-            <ActionIcon
-              variant="subtle"
-              color="green"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleApprove(row.original.relationshipId);
-              }}
-            >
-              <IconCheck size={16} />
-            </ActionIcon>
-          </Tooltip>
-        )}
-        <Tooltip label="Delete" position="left" withArrow openDelay={500}>
-          <ActionIcon
-            variant="subtle"
-            color="red"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDelete(row.original.relationshipId);
-            }}
-          >
-            <IconTrash size={16} />
-          </ActionIcon>
-        </Tooltip>
-      </Group>
+      <Tooltip label="Delete" position="left" withArrow openDelay={500}>
+        <ActionIcon
+          variant="subtle"
+          color="red"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDelete(row.original.relationshipId);
+          }}
+        >
+          <IconTrash size={16} />
+        </ActionIcon>
+      </Tooltip>
     ),
   });
 
