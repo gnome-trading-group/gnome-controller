@@ -155,3 +155,17 @@ export interface CreateContractRelationship {
   confidence: number;
   method: string;
 }
+
+export interface HedgeKeyword {
+  hedgeKeywordId: number;
+  securityId: number;
+  keyword: string;
+  securitySymbol?: string;
+  dateModified: string;
+  dateCreated: string;
+}
+
+export interface CreateHedgeKeyword {
+  securityId: number;
+  keyword: string;
+}

@@ -1,5 +1,5 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
-import { ContractRelationship, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, ExchangeEvent, Exchange, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
+import { ContractRelationship, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, ExchangeEvent, Exchange, HedgeKeyword, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
@@ -635,6 +635,51 @@ export const registryApi = {
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body: { relationshipId },
+    }),
+  listHedgeKeywordsPaginated: (params: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params.limit !== undefined) queryParams.limit = params.limit;
+    if (params.offset !== undefined) queryParams.offset = params.offset;
+    if (params.sortBy) queryParams.sortBy = params.sortBy.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
+    if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
+    Object.entries(params).forEach(([k, v]) => {
+      if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<HedgeKeyword[]>('/hedge-keywords', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams,
+    });
+  },
+  countHedgeKeywords: (params?: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = { count: true };
+    Object.entries(params ?? {}).forEach(([k, v]) => {
+      if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<{ count: number }>('/hedge-keywords', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      queryParams,
+    }).then(r => r.count);
+  },
+  createHedgeKeyword: (body: CreateHedgeKeyword) =>
+    sendApiRequest<HedgeKeyword>('/hedge-keywords', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body,
+    }),
+  deleteHedgeKeyword: (hedgeKeywordId: number) =>
+    sendApiRequest<{ message: string }>('/hedge-keywords', 'DELETE', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: { hedgeKeywordId },
     }),
   listExchangeEvents: (params?: { eventId?: number; exchangeId?: number; nativeEventId?: string }) => {
     const queryParams: Record<string, string | number | boolean> = {};

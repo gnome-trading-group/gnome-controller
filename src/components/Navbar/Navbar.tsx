@@ -31,6 +31,7 @@ const routes = [
     links: [
       { label: 'Events', link: '/predictions/events' },
       { label: 'Relationships', link: '/predictions/relationships' },
+      { label: 'Hedge Keywords', link: '/predictions/hedge-keywords' },
     ],
   },
   {
