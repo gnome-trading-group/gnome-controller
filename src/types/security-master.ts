@@ -113,7 +113,6 @@ export interface Event {
   title: string;
   description: string | null;
   category: string | null;
-  resolutionSource: string | null;
   tags: string[];
   resolved: boolean;
   resolvedAt: string | null;

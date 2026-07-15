@@ -118,12 +118,6 @@ function EventsList() {
       ),
     },
     {
-      accessorKey: 'resolutionSource',
-      header: 'Resolution Source',
-      enableSorting: true,
-      Cell: ({ row }) => row.original.resolutionSource ?? '-',
-    },
-    {
       accessorKey: 'expiry',
       header: 'Expiry',
       enableSorting: true,

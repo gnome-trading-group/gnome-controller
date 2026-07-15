@@ -248,7 +248,6 @@ function EventDetail() {
             <InfoRow label="Event ID" value={event.eventId} />
             <InfoRow label="Description" value={event.description ?? '-'} />
             <InfoRow label="Category" value={event.category ?? '-'} />
-            <InfoRow label="Resolution Source" value={event.resolutionSource ?? '-'} />
             <InfoRow
               label="Tags"
               value={
