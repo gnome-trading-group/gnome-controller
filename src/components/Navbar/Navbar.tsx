@@ -39,6 +39,7 @@ const routes = [
     icon: IconChartLine,
     links: [
       { label: 'Strategies', link: '/strategies' },
+      { label: 'Sessions', link: '/sessions' },
       { label: 'Risk Policies', link: '/risk/policies' },
     ],
   },

@@ -6,7 +6,6 @@ import {
   Container,
   Group,
   Modal,
-  NumberInput,
   Select,
   Stack,
   Text,
@@ -42,7 +41,6 @@ function Strategies() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Strategy | null>(null);
   const [createForm, setCreateForm] = useState({
-    strategyId: 0,
     name: '',
     description: '',
     status: StrategyStatus.INACTIVE,
@@ -70,14 +68,13 @@ function Strategies() {
         parameters = JSON.parse(createForm.parameters);
       }
       await registryApi.createStrategy({
-        strategyId: createForm.strategyId,
         name: createForm.name,
         description: createForm.description || undefined,
         status: createForm.status,
         parameters,
       });
       setCreateModalOpen(false);
-      setCreateForm({ strategyId: 0, name: '', description: '', status: StrategyStatus.INACTIVE, parameters: '' });
+      setCreateForm({ name: '', description: '', status: StrategyStatus.INACTIVE, parameters: '' });
       refresh();
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Failed to create strategy');
@@ -215,13 +212,6 @@ function Strategies() {
 
       <Modal opened={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Create Strategy" size="md">
         <Stack>
-          <NumberInput
-            label="Strategy ID"
-            description="Must be unique — assigned manually"
-            value={createForm.strategyId}
-            onChange={(v) => setCreateForm((f) => ({ ...f, strategyId: Number(v) }))}
-            required
-          />
           <TextInput
             label="Name"
             value={createForm.name}

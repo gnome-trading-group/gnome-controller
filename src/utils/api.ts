@@ -1,6 +1,7 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { ContractRelationship, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, ExchangeEvent, Exchange, HedgeKeyword, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
+import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
 import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsListParams, TransformJobsSearchParams } from '../types/transform-jobs';
@@ -319,7 +320,7 @@ export const registryApi = {
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
   },
-  createStrategy: (strategy: Omit<Strategy, 'dateCreated' | 'dateModified'>) =>
+  createStrategy: (strategy: Omit<Strategy, 'strategyId' | 'dateCreated' | 'dateModified'>) =>
     sendApiRequest<Strategy>('/strategies', 'POST', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
@@ -340,6 +341,63 @@ export const registryApi = {
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body: { strategyId },
+    }),
+  listSessionsPaginated: (params: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params.limit !== undefined) queryParams.limit = params.limit;
+    if (params.offset !== undefined) queryParams.offset = params.offset;
+    if (params.sortBy) queryParams.sortBy = params.sortBy.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
+    if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
+    Object.entries(params).forEach(([k, v]) => {
+      if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<StrategySession[]>('/strategy-sessions', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams,
+    });
+  },
+  countSessions: (params?: PaginationParams) => {
+    const queryParams: Record<string, string | number | boolean> = { count: true };
+    Object.entries(params ?? {}).forEach(([k, v]) => {
+      if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
+        queryParams[k] = v as string | number | boolean;
+      }
+    });
+    return sendApiRequest<{ count: number }>('/strategy-sessions', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      queryParams,
+    }).then(r => r.count);
+  },
+  listSessions: (params?: { sessionId?: string; strategyId?: number; status?: string }) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.sessionId) queryParams.sessionId = params.sessionId;
+    if (params?.strategyId !== undefined) queryParams.strategyId = params.strategyId;
+    if (params?.status) queryParams.status = params.status;
+    return sendApiRequest<StrategySession[]>('/strategy-sessions', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  createSession: (request: CreateStrategySessionRequest) =>
+    sendApiRequest<StrategySession>('/strategy-sessions', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: request,
+    }),
+  stopSession: (sessionId: string) =>
+    sendApiRequest<StrategySession>('/strategy-sessions', 'DELETE', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: { sessionId },
     }),
   listCurrencies: () =>
     sendApiRequest<Currency[]>('/currencies', 'GET', {

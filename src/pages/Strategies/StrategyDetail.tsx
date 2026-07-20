@@ -17,12 +17,25 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconArrowLeft, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconArrowLeft, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
-import { PnlSnapshot, RiskPolicy, RISK_POLICY_TYPES, Strategy, StrategyStatus } from '../../types';
+import { PnlSnapshot, RiskPolicy, RISK_POLICY_TYPES, Strategy, StrategySession, StrategySessionStatus, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
+import DeploySessionModal from '../Sessions/DeploySessionModal';
+
+const SESSION_STATUS_COLORS: Record<string, string> = {
+  [StrategySessionStatus.SUBMITTED]: 'blue',
+  [StrategySessionStatus.RUNNING]: 'green',
+  [StrategySessionStatus.STOPPED]: 'gray',
+  [StrategySessionStatus.FAILED]: 'red',
+};
+
+const MODE_COLORS: Record<string, string> = {
+  paper: 'violet',
+  live: 'red',
+};
 
 const STATUS_LABELS: Record<number, string> = {
   [StrategyStatus.INACTIVE]: 'Inactive',
@@ -44,7 +57,11 @@ function StrategyDetail() {
   const [strategy, setStrategy] = useState<Strategy | null>(null);
   const [pnlRows, setPnlRows] = useState<PnlSnapshot[]>([]);
   const [policies, setPolicies] = useState<RiskPolicy[]>([]);
+  const [sessions, setSessions] = useState<StrategySession[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deployOpen, setDeployOpen] = useState(false);
+  const [stopTarget, setStopTarget] = useState<StrategySession | null>(null);
+  const [stopping, setStopping] = useState(false);
   const [createPolicyOpen, setCreatePolicyOpen] = useState(false);
   const [deletePolicyTarget, setDeletePolicyTarget] = useState<RiskPolicy | null>(null);
   const [policyForm, setPolicyForm] = useState({
@@ -58,14 +75,16 @@ function StrategyDetail() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [allStrategies, pnl, allPolicies] = await Promise.all([
+      const [allStrategies, pnl, allPolicies, sessionList] = await Promise.all([
         registryApi.listStrategies({ strategyId: id }),
         registryApi.listPnlLatest(id),
         registryApi.listRiskPolicies(),
+        registryApi.listSessions({ strategyId: id }),
       ]);
       setStrategy(allStrategies[0] ?? null);
       setPnlRows(pnl);
       setPolicies(allPolicies.filter((p) => p.scope === 0 ? false : p.strategyId === id));
+      setSessions(sessionList);
     } finally {
       setLoading(false);
     }
@@ -107,6 +126,76 @@ function StrategyDetail() {
       console.error('Failed to delete policy:', e);
     }
   };
+
+  const handleStopSession = async () => {
+    if (!stopTarget) return;
+    setStopping(true);
+    try {
+      await registryApi.stopSession(stopTarget.sessionId);
+      setStopTarget(null);
+      refresh();
+    } catch (e) {
+      console.error('Failed to stop session:', e);
+    } finally {
+      setStopping(false);
+    }
+  };
+
+  const isStoppable = (s: StrategySession) =>
+    s.status === StrategySessionStatus.SUBMITTED || s.status === StrategySessionStatus.RUNNING;
+
+  const sessionColumns = useMemo<MRT_ColumnDef<StrategySession>[]>(() => [
+    {
+      accessorKey: 'sessionId',
+      header: 'Session ID',
+      size: 120,
+      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
+        <Tooltip label={row.original.sessionId} position="right" withArrow openDelay={300}>
+          <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+            {row.original.sessionId.slice(0, 8)}…
+          </span>
+        </Tooltip>
+      ),
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      size: 110,
+      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
+        <Badge color={SESSION_STATUS_COLORS[row.original.status] ?? 'gray'} variant="light" size="sm">
+          {row.original.status}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: 'mode',
+      header: 'Mode',
+      size: 90,
+      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
+        <Badge color={MODE_COLORS[row.original.mode] ?? 'gray'} variant="light" size="sm">
+          {row.original.mode}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: 'startedAt',
+      header: 'Started',
+      size: 130,
+      Cell: ({ row }: { row: MRT_Row<StrategySession> }) =>
+        row.original.startedAt
+          ? <ReactTimeAgo date={new Date(row.original.startedAt)} timeStyle="round" />
+          : '—',
+    },
+    {
+      accessorKey: 'stoppedAt',
+      header: 'Stopped',
+      size: 130,
+      Cell: ({ row }: { row: MRT_Row<StrategySession> }) =>
+        row.original.stoppedAt
+          ? <ReactTimeAgo date={new Date(row.original.stoppedAt)} timeStyle="round" />
+          : '—',
+    },
+  ], []);
 
   const pnlColumns = useMemo<MRT_ColumnDef<PnlSnapshot>[]>(() => [
     { accessorKey: 'listingId', header: 'Listing ID', enableSorting: true, size: 80 },
@@ -167,6 +256,36 @@ function StrategyDetail() {
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
   });
 
+  const sessionTable = useMantineReactTable({
+    columns: sessionColumns,
+    data: sessions,
+    state: { isLoading: loading },
+    enableEditing: false,
+    enableRowActions: true,
+    enableColumnFilters: false,
+    enableSorting: true,
+    enablePagination: false,
+    enableBottomToolbar: false,
+    enableTopToolbar: false,
+    positionActionsColumn: 'last' as const,
+    initialState: { density: 'xs', sorting: [{ id: 'startedAt', desc: true }] },
+    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
+    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<StrategySession> }) => ({
+      onClick: () => navigate(`/sessions/${row.original.sessionId}`),
+      style: { cursor: 'pointer' },
+    }),
+    renderRowActions: ({ row }: { row: MRT_Row<StrategySession> }) => (
+      <ActionIcon
+        variant="subtle"
+        color="red"
+        disabled={!isStoppable(row.original)}
+        onClick={e => { e.stopPropagation(); setStopTarget(row.original); }}
+      >
+        <IconPlayerStop size={16} />
+      </ActionIcon>
+    ),
+  });
+
   const policyTable = useMantineReactTable({
     columns: policyColumns,
     data: policies,
@@ -215,12 +334,39 @@ function StrategyDetail() {
       <Space h="xl" />
 
       <Group justify="space-between" mb="xs">
+        <Title order={4}>Sessions</Title>
+        <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setDeployOpen(true)}>
+          <IconPlus size={20} />
+        </ActionIcon>
+      </Group>
+      <MantineReactTable table={sessionTable} />
+
+      <Space h="xl" />
+
+      <Group justify="space-between" mb="xs">
         <Title order={4}>Risk Policies</Title>
         <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setCreatePolicyOpen(true)}>
           <IconPlus size={20} />
         </ActionIcon>
       </Group>
       <MantineReactTable table={policyTable} />
+
+      <DeploySessionModal
+        opened={deployOpen}
+        onClose={() => setDeployOpen(false)}
+        onCreated={() => { setDeployOpen(false); refresh(); }}
+        preselectedStrategyId={id}
+      />
+
+      <Modal opened={!!stopTarget} onClose={() => setStopTarget(null)} title="Stop Session" size="sm">
+        <Stack>
+          <Text>Stop session <Text span fw={500} style={{ fontFamily: 'monospace' }}>{stopTarget?.sessionId.slice(0, 8)}…</Text>?</Text>
+          <Group justify="flex-end">
+            <Button variant="outline" onClick={() => setStopTarget(null)}>Cancel</Button>
+            <Button color="red" loading={stopping} onClick={handleStopSession}>Stop</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal opened={createPolicyOpen} onClose={() => setCreatePolicyOpen(false)} title="Add Risk Policy" size="md">
         <Stack>

@@ -32,6 +32,8 @@ import EventsList from './pages/Predictions/EventsList';
 import EventDetail from './pages/Predictions/EventDetail';
 import ContractRelationships from './pages/Predictions/ContractRelationships';
 import HedgeKeywords from './pages/Predictions/HedgeKeywords';
+import SessionsList from './pages/Sessions/SessionsList';
+import SessionDetail from './pages/Sessions/SessionDetail';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -139,6 +141,8 @@ function AppContent() {
             <Route path="/predictions/events/:eventId" element={<EventDetail />} />
             <Route path="/predictions/relationships" element={<ContractRelationships />} />
             <Route path="/predictions/hedge-keywords" element={<HedgeKeywords />} />
+            <Route path="/sessions" element={<SessionsList />} />
+            <Route path="/sessions/:sessionId" element={<SessionDetail />} />
             <Route path="/logout" element={<Logout />} />
             <Route path="/" element={<Navigate to="/security-master" replace />} />
           </Routes>
