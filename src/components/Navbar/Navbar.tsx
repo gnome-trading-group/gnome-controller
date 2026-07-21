@@ -15,7 +15,6 @@ const routes = [
   {
     label: 'Market Data',
     icon: IconNotes,
-    initiallyOpened: true,
     links: [
       { label: 'Coverage', link: '/market-data/coverage' },
       { label: 'Collectors', link: '/market-data/collectors' },

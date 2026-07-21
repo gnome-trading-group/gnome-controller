@@ -34,6 +34,7 @@ import ContractRelationships from './pages/Predictions/ContractRelationships';
 import HedgeKeywords from './pages/Predictions/HedgeKeywords';
 import SessionsList from './pages/Sessions/SessionsList';
 import SessionDetail from './pages/Sessions/SessionDetail';
+import Dashboard from './pages/Dashboard/Dashboard';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -143,8 +144,9 @@ function AppContent() {
             <Route path="/predictions/hedge-keywords" element={<HedgeKeywords />} />
             <Route path="/sessions" element={<SessionsList />} />
             <Route path="/sessions/:sessionId" element={<SessionDetail />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/logout" element={<Logout />} />
-            <Route path="/" element={<Navigate to="/security-master" replace />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </AppShell.Main>
       </AppShell>
