@@ -8,7 +8,6 @@ import {
   Group,
   Paper,
   SimpleGrid,
-  Stack,
   Text,
   Title,
   Tooltip,
@@ -453,7 +452,7 @@ function Dashboard() {
               <YAxis tick={{ fontSize: 11 }} />
               <RechartsTooltip
                 contentStyle={{ background: 'var(--mantine-color-dark-7)', border: '1px solid var(--mantine-color-dark-4)' }}
-                formatter={(value: number) => [value.toFixed(2), 'Realized PnL']}
+                formatter={(value) => [typeof value === 'number' ? value.toFixed(2) : value, 'Realized PnL']}
               />
               <Bar dataKey="realizedPnl">
                 {pnlByStrategy.map((entry, i) => (
