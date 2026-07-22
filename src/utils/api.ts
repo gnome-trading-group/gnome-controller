@@ -752,7 +752,7 @@ export const registryApi = {
     });
   },
   listSecuritySymbols: async (): Promise<Record<number, string>> => {
-    const PAGE_SIZE = 100000;
+    const PAGE_SIZE = 20000;
     const map: Record<number, string> = {};
     let offset = 0;
     while (true) {
@@ -760,7 +760,7 @@ export const registryApi = {
         '/securities/symbols', 'GET', {
           apiUrl: REGISTRY_API_URL,
           apiKey: REGISTRY_API_KEY,
-          queryParams: { limit: PAGE_SIZE, offset },
+          queryParams: { limit: PAGE_SIZE, offset, active: true },
         },
       );
       for (const row of rows) map[row.security_id] = row.symbol;

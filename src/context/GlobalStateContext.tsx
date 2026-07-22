@@ -42,6 +42,7 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
       const map = await registryApi.listSecuritySymbols();
       setSecuritySymbols(map);
     } catch (err) {
+      console.error('Failed to load security symbols:', err);
       setError(prev => ({ ...prev, securitySymbols: err instanceof Error ? err.message : 'Unknown error' }));
     } finally {
       setLoading(prev => ({ ...prev, securitySymbols: false }));

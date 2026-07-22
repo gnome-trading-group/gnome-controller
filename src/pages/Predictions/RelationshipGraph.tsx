@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -122,8 +122,11 @@ function RelationshipGraph({
     return { initialNodes: laid, initialEdges: rawEdges };
   }, [relationships, securitySymbols, contractBySecurity, eventById]);
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  useEffect(() => { setNodes(initialNodes); }, [initialNodes]);
+  useEffect(() => { setEdges(initialEdges); }, [initialEdges]);
 
   const onInit = useCallback((instance: any) => {
     instance.fitView({ padding: 0.2 });
