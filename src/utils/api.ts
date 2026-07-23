@@ -589,6 +589,7 @@ export const registryApi = {
     if (params.offset !== undefined) queryParams.offset = params.offset;
     if (params.sortBy) queryParams.sortBy = params.sortBy.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
     if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
+    if (params.search) queryParams.search = params.search;
     Object.entries(params).forEach(([k, v]) => {
       if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
         queryParams[k] = v as string | number | boolean;
@@ -603,6 +604,7 @@ export const registryApi = {
   },
   countEvents: (params?: PaginationParams) => {
     const queryParams: Record<string, string | number | boolean> = { count: true };
+    if (params?.search) queryParams.search = params.search;
     Object.entries(params ?? {}).forEach(([k, v]) => {
       if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
         queryParams[k] = v as string | number | boolean;
