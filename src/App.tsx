@@ -35,6 +35,7 @@ import HedgeKeywords from './pages/Predictions/HedgeKeywords';
 import SessionsList from './pages/Sessions/SessionsList';
 import SessionDetail from './pages/Sessions/SessionDetail';
 import Dashboard from './pages/Dashboard/Dashboard';
+import ServiceConfig from './pages/Tools/ServiceConfig';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -130,6 +131,7 @@ function AppContent() {
             <Route path="/market-data/gaps" element={<Gaps />} />
             <Route path="/market-data/quality-issues" element={<QualityIssues />} />
             <Route path="/market-data/quality-issues/investigate/:listingId/:timestamp" element={<MinuteInvestigation />} />
+            <Route path="/tools/service-config" element={<ServiceConfig />} />
             <Route path="/tools/latency-probe" element={<LatencyProbe />} />
             <Route path="/strategies" element={<Strategies />} />
             <Route path="/strategies/:strategyId" element={<StrategyDetail />} />

@@ -48,6 +48,7 @@ const routes = [
     label: 'Tools',
     icon: IconTool,
     links: [
+      { label: 'Service Config', link: '/tools/service-config' },
       { label: 'Latency Probe', link: '/tools/latency-probe' },
     ],
   }

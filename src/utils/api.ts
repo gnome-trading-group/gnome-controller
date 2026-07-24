@@ -8,10 +8,18 @@ import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsLi
 import { GapsListResponse, GapsListParams, GapsByListingParams, GapsUpdateRequest, GapsUpdateResponse } from '../types/gaps';
 import { QualityIssuesListResponse, QualityIssuesListParams, QualityIssuesByListingParams, QualityIssuesUpdateRequest, QualityIssuesUpdateResponse, QualityBackfillRequest, QualityBackfillResponse, ListingStatisticsResponse, ListingStatisticsHistoryResponse, MinuteInvestigationResponse } from '../types/quality-issues';
 
+export interface ServiceConfigResponse {
+  config: Record<string, unknown>;
+  version: number;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
 const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
 const REGISTRY_API_URL = import.meta.env.VITE_REGISTRY_API_URL;
 const REGISTRY_API_KEY = import.meta.env.VITE_REGISTRY_API_KEY;
 const MARKET_DATA_API_URL = import.meta.env.VITE_MARKET_DATA_API_URL;
+const SERVICE_CONFIG_API_KEY = import.meta.env.VITE_SERVICE_CONFIG_API_KEY;
 
 export class ApiError extends Error {
   constructor(public statusCode: number, message: string) {
@@ -51,7 +59,7 @@ function convertObjectToCamelCase(obj: any): any {
 
 export async function sendApiRequest<T>(
   endpoint: string,
-  method: 'GET' | 'POST' | 'DELETE' | 'PATCH' = 'GET',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET',
   config: ApiConfig,
 ): Promise<T> {
   try {
@@ -823,4 +831,14 @@ export const controllerApi = {
         body: { content },
       }
     ),
+  getServiceConfig: (service: string) =>
+    sendApiRequest<ServiceConfigResponse>(`/config/${service}`, 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      apiKey: SERVICE_CONFIG_API_KEY,
+    }),
+  updateServiceConfig: (service: string, config: Record<string, unknown>, version: number) =>
+    sendApiRequest<ServiceConfigResponse>(`/config/${service}`, 'PUT', {
+      apiUrl: CONTROLLER_API_URL,
+      body: { config, version },
+    }),
 }

@@ -68,9 +68,10 @@ export class BackendStack extends cdk.Stack {
       }
     );
 
-    new cdk.CfnOutput(this, "ApiUrl", {
+    new cdk.CfnOutput(this, "ControllerApiUrl", {
       value: this.apiGateway.url,
-      description: "API Gateway URL",
+      exportName: "ControllerApiUrl",
+      description: "Controller API Gateway URL",
     });
   }
-} 
+}

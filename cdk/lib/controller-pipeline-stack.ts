@@ -9,6 +9,7 @@ import { FrontendStack } from "./stacks/frontend-stack";
 import { BackendStack } from "./stacks/backend-stack";
 import { BacktestStack } from "./stacks/backtest-stack";
 import { ResearchStack } from "./stacks/research-stack";
+import { ServiceConfigStack } from "./stacks/service-config-stack";
 import { MonitoringStack } from "./stacks/monitoring-stack";
 import { LatencyProbeStack, PROBE_REGIONS } from "./stacks/latency-probe-stack";
 
@@ -36,6 +37,11 @@ class AppStage extends cdk.Stage {
 
     new ResearchStack(this, "ControllerResearchStack", {
       stage: config.account.stage,
+      apiGateway: backendStack.apiGateway,
+      cognitoAuthorizer: backendStack.cognitoAuthorizer,
+    });
+
+    new ServiceConfigStack(this, "ControllerServiceConfigStack", {
       apiGateway: backendStack.apiGateway,
       cognitoAuthorizer: backendStack.cognitoAuthorizer,
     });
