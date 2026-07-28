@@ -5,6 +5,7 @@ import base64
 import json
 import os
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import boto3
 from utils import create_response
@@ -51,7 +52,7 @@ def handler(event: dict, context) -> dict:
     defaults = None
     if defaults_header:
         try:
-            defaults = json.loads(base64.b64decode(defaults_header))
+            defaults = json.loads(base64.b64decode(defaults_header), parse_float=Decimal)
         except Exception:
             return create_response(400, {"error": "invalid x-config-defaults header"})
 

@@ -7,7 +7,7 @@ import datetime
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):
-            return int(obj)
+            return int(obj) if obj == obj.to_integral_value() else float(obj)
         if isinstance(obj, datetime.datetime):
             return obj.isoformat()
         return super().default(obj)
