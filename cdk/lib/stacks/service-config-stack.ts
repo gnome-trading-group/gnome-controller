@@ -21,21 +21,6 @@ export class ServiceConfigStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
-    const serviceConfigApiKey = props.apiGateway.addApiKey("ServiceConfigApiKey", {
-      apiKeyName: "gnome-service-config-key",
-    });
-    const usagePlan = props.apiGateway.addUsagePlan("ServiceConfigUsagePlan", {
-      name: "ServiceConfigUsagePlan",
-      apiStages: [{ api: props.apiGateway, stage: props.apiGateway.deploymentStage }],
-    });
-    usagePlan.addApiKey(serviceConfigApiKey);
-
-    new cdk.CfnOutput(this, "ServiceConfigApiKeyId", {
-      value: serviceConfigApiKey.keyId,
-      exportName: "ControllerServiceConfigApiKeyId",
-      description: "API key ID for service config access (used by classifier workers)",
-    });
-
     const commonEnv = { DYNAMODB_TABLE: serviceConfigTable.tableName };
 
     const getLambda = new PythonLambdaFunction(this, "ServiceConfigGetLambda", {

@@ -73,5 +73,20 @@ export class BackendStack extends cdk.Stack {
       exportName: "ControllerApiUrl",
       description: "Controller API Gateway URL",
     });
+
+    const serviceConfigApiKey = this.apiGateway.addApiKey("ServiceConfigApiKey", {
+      apiKeyName: "gnome-service-config-key",
+    });
+    const serviceConfigUsagePlan = this.apiGateway.addUsagePlan("ServiceConfigUsagePlan", {
+      name: "ServiceConfigUsagePlan",
+      apiStages: [{ api: this.apiGateway, stage: this.apiGateway.deploymentStage }],
+    });
+    serviceConfigUsagePlan.addApiKey(serviceConfigApiKey);
+
+    new cdk.CfnOutput(this, "ServiceConfigApiKeyId", {
+      value: serviceConfigApiKey.keyId,
+      exportName: "ControllerServiceConfigApiKeyId",
+      description: "API key ID for service config access (used by classifier workers)",
+    });
   }
 }
