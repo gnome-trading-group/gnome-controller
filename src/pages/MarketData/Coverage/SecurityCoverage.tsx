@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { navigateRowProps } from '../../../utils/navigation';
 import {
   Container,
   Title,
@@ -182,10 +183,9 @@ function SecurityCoverage() {
     enableTopToolbar: true,
     initialState: { density: 'xs', sorting: [{ id: 'totalSizeBytes', desc: true }] },
     state: { isLoading: loading },
-    mantineTableBodyRowProps: ({ row }) => ({
-      onClick: () => navigate(`/market-data/coverage/${securityId}/${row.original.exchangeId}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }) => (
+      navigateRowProps(navigate, `/market-data/coverage/${securityId}/${row.original.exchangeId}`)
+    ),
   });
 
   const metricNames = useMemo(() => {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { navigateRowProps } from '../../../utils/navigation';
 import { marketDataApi, registryApi, ApiError } from '../../../utils/api';
 import { DenormalizedListing } from '../../../types';
 import {
@@ -249,10 +250,9 @@ function Collectors() {
     enableTopToolbar: true,
     initialState: { density: 'xs' },
     state: { isLoading: loading },
-    mantineTableBodyRowProps: ({ row }) => ({
-      onClick: () => navigate(`/market-data/collectors/${row.original.listingId}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }) => (
+      navigateRowProps(navigate, `/market-data/collectors/${row.original.listingId}`)
+    ),
   });
 
   return (

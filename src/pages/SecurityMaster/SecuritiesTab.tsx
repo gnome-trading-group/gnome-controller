@@ -14,6 +14,7 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
+import { navigateRowProps } from '../../utils/navigation';
 import { Security, SecurityType } from '../../types';
 import { registryApi } from '../../utils/api';
 import { formatAssetClass, formatSecurityType } from '../../utils/security-master';
@@ -141,10 +142,9 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
       highlightOnHover: true,
       withColumnBorders: true,
     },
-    mantineTableBodyRowProps: ({ row }) => ({
-      onClick: () => navigate(`/security-master/securities/${row.original.securityId}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }) => (
+      navigateRowProps(navigate, `/security-master/securities/${row.original.securityId}`)
+    ),
     initialState: {
       density: 'xs',
     },

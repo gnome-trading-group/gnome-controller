@@ -21,6 +21,7 @@ import { IconArrowLeft, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from 
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
+import { navigateRowProps } from '../../utils/navigation';
 import { PnlSnapshot, RiskPolicy, RISK_POLICY_TYPES, Strategy, StrategySession, StrategySessionStatus, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
 import DeploySessionModal from '../Sessions/DeploySessionModal';
@@ -270,10 +271,9 @@ function StrategyDetail() {
     positionActionsColumn: 'last' as const,
     initialState: { density: 'xs', sorting: [{ id: 'startedAt', desc: true }] },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<StrategySession> }) => ({
-      onClick: () => navigate(`/sessions/${row.original.sessionId}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<StrategySession> }) => (
+      navigateRowProps(navigate, `/sessions/${row.original.sessionId}`)
+    ),
     renderRowActions: ({ row }: { row: MRT_Row<StrategySession> }) => (
       <ActionIcon
         variant="subtle"

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { navigateRowProps } from '../../../utils/navigation';
 import {
   Container,
   Title,
@@ -133,10 +134,9 @@ function CoverageSummary() {
       sorting: [{ id: 'sizeBytes', desc: true }],
     },
     state: { isLoading: loading },
-    mantineTableBodyRowProps: ({ row }) => ({
-      onClick: () => navigate(`/market-data/coverage/${row.original.securityId}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }) => (
+      navigateRowProps(navigate, `/market-data/coverage/${row.original.securityId}`)
+    ),
   });
 
   if (loading && !data) {

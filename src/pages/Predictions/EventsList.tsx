@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { ActionIcon, Badge, CloseButton, Container, Group, Input, Select, Switch, Title, Tooltip } from '@mantine/core';
 import { IconRefresh, IconTag } from '@tabler/icons-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { navigateRowProps } from '../../utils/navigation';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { Event, EventContract } from '../../types';
@@ -161,10 +162,9 @@ function EventsList() {
       highlightOnHover: true,
       withColumnBorders: true,
     },
-    mantineTableBodyRowProps: ({ row }) => ({
-      onClick: () => navigate(`/predictions/events/${row.original.eventId}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }) => (
+      navigateRowProps(navigate, `/predictions/events/${row.original.eventId}`)
+    ),
     initialState: {
       sorting: [{ id: 'dateCreated', desc: true }],
       density: 'xs',

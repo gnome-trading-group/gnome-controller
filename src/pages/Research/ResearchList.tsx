@@ -4,6 +4,7 @@ import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
+import { navigateRowProps } from '../../utils/navigation';
 import { ResearchSession, SessionStatus } from '../../types/research';
 import { controllerApi } from '../../utils/api';
 
@@ -136,10 +137,9 @@ function ResearchList() {
     enableTopToolbar: false,
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     initialState: { sorting: [{ id: 'updatedAt', desc: true }], density: 'xs' },
-    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<ResearchSession> }) => ({
-      onClick: () => navigate(`/research/${row.original.sessionName}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<ResearchSession> }) => (
+      navigateRowProps(navigate, `/research/${row.original.sessionName}`)
+    ),
   });
 
   return (

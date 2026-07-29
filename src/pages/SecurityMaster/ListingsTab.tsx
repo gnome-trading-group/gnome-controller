@@ -15,6 +15,7 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
+import { navigateRowProps } from '../../utils/navigation';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { DenormalizedListing } from '../../types';
 import { registryApi } from '../../utils/api';
@@ -142,10 +143,9 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
       highlightOnHover: true,
       withColumnBorders: true,
     },
-    mantineTableBodyRowProps: ({ row }) => ({
-      onClick: () => navigate(`/security-master/listings/${row.original.listingId}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }) => (
+      navigateRowProps(navigate, `/security-master/listings/${row.original.listingId}`)
+    ),
     initialState: {
       density: 'xs',
     },

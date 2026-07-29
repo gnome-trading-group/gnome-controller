@@ -23,6 +23,7 @@ import {
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
+import { navigateRowProps, handleNavigateClick } from '../../utils/navigation';
 import {
   Bar,
   BarChart,
@@ -290,10 +291,9 @@ function Dashboard() {
     enableRowActions: false,
     initialState: { density: 'xs' },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<StrategySession> }) => ({
-      onClick: () => navigate(`/sessions/${row.original.sessionId}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<StrategySession> }) => (
+      navigateRowProps(navigate, `/sessions/${row.original.sessionId}`)
+    ),
   });
 
   const backtestTable = useMantineReactTable({
@@ -308,10 +308,9 @@ function Dashboard() {
     enableRowActions: false,
     initialState: { density: 'xs' },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<BacktestRun> }) => ({
-      onClick: () => navigate(`/backtests/${row.original.runId}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<BacktestRun> }) => (
+      navigateRowProps(navigate, `/backtests/${row.original.runId}`)
+    ),
   });
 
   const researchTable = useMantineReactTable({
@@ -326,10 +325,9 @@ function Dashboard() {
     enableRowActions: false,
     initialState: { density: 'xs' },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<ResearchSession> }) => ({
-      onClick: () => navigate(`/research/${row.original.sessionName}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<ResearchSession> }) => (
+      navigateRowProps(navigate, `/research/${row.original.sessionName}`)
+    ),
   });
 
   const pnlColor = totalRealizedPnl >= 0 ? 'var(--mantine-color-green-6)' : 'var(--mantine-color-red-6)';
@@ -356,7 +354,7 @@ function Dashboard() {
           color="red"
           title="Trading Halted"
           icon={<IconAlertTriangle size={20} />}
-          onClick={() => navigate('/risk/policies')}
+          onClick={(e) => handleNavigateClick(e, navigate, '/risk/policies')}
           style={{ cursor: 'pointer' }}
         >
           Kill switch is ACTIVE — all order flow is blocked. Click to manage risk policies.
@@ -364,7 +362,7 @@ function Dashboard() {
       )}
 
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="lg">
-        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={() => navigate('/strategies')}>
+        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={(e) => handleNavigateClick(e, navigate, '/strategies')}>
           <Group justify="space-between">
             <div>
               <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Active Strategies</Text>
@@ -375,7 +373,7 @@ function Dashboard() {
           </Group>
         </Paper>
 
-        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={() => navigate('/sessions')}>
+        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={(e) => handleNavigateClick(e, navigate, '/sessions')}>
           <Group justify="space-between">
             <div>
               <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Running Sessions</Text>
@@ -399,7 +397,7 @@ function Dashboard() {
           </Group>
         </Paper>
 
-        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={() => navigate('/market-data/collectors')}>
+        <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={(e) => handleNavigateClick(e, navigate, '/market-data/collectors')}>
           <Group justify="space-between">
             <div>
               <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Collectors</Text>
@@ -421,7 +419,7 @@ function Dashboard() {
             size="sm"
             c="dimmed"
             style={{ cursor: 'pointer' }}
-            onClick={() => navigate('/sessions')}
+            onClick={(e) => handleNavigateClick(e, navigate, '/sessions')}
           >
             View all →
           </Text>
@@ -440,7 +438,7 @@ function Dashboard() {
               size="sm"
               c="dimmed"
               style={{ cursor: 'pointer' }}
-              onClick={() => navigate('/strategies')}
+              onClick={(e) => handleNavigateClick(e, navigate, '/strategies')}
             >
               View all →
             </Text>
@@ -472,7 +470,7 @@ function Dashboard() {
               size="sm"
               c="dimmed"
               style={{ cursor: 'pointer' }}
-              onClick={() => navigate('/backtests')}
+              onClick={(e) => handleNavigateClick(e, navigate, '/backtests')}
             >
               View all →
             </Text>
@@ -490,7 +488,7 @@ function Dashboard() {
               size="sm"
               c="dimmed"
               style={{ cursor: 'pointer' }}
-              onClick={() => navigate('/research')}
+              onClick={(e) => handleNavigateClick(e, navigate, '/research')}
             >
               View all →
             </Text>

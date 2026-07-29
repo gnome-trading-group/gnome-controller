@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { navigateRowProps } from '../../../utils/navigation';
 import {
   Container,
   Title,
@@ -346,13 +347,10 @@ function QualityIssues() {
       density: 'xs',
       columnVisibility: { listingId: false },
     },
-    mantineTableBodyRowProps: ({ row }) => ({
-      onClick: () => {
-        const { listingId, timestamp } = row.original;
-        navigate(`/market-data/quality-issues/investigate/${listingId}/${timestamp}`);
-      },
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }) => {
+      const { listingId, timestamp } = row.original;
+      return navigateRowProps(navigate, `/market-data/quality-issues/investigate/${listingId}/${timestamp}`);
+    },
   });
 
   return (

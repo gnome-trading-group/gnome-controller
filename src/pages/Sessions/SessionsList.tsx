@@ -18,6 +18,7 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { useNavigate } from 'react-router-dom';
 import { Strategy, StrategySession, StrategySessionStatus } from '../../types';
 import { registryApi } from '../../utils/api';
+import { navigateRowProps, handleNavigateClick } from '../../utils/navigation';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import DeploySessionModal from './DeploySessionModal';
 
@@ -178,13 +179,12 @@ function SessionsList() {
     enableColumnFilters: false,
     initialState: { density: 'xs', sorting: [{ id: 'dateCreated', desc: true }] },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<StrategySession> }) => ({
-      onClick: () => navigate(`/sessions/${row.original.sessionId}`),
-      style: { cursor: 'pointer' },
-    }),
+    mantineTableBodyRowProps: ({ row }: { row: MRT_Row<StrategySession> }) => (
+      navigateRowProps(navigate, `/sessions/${row.original.sessionId}`)
+    ),
     renderRowActions: ({ row }: { row: MRT_Row<StrategySession> }) => (
       <Group gap={4} justify="center" wrap="nowrap">
-        <ActionIcon variant="subtle" color="teal" onClick={e => { e.stopPropagation(); navigate(`/sessions/${row.original.sessionId}`); }}>
+        <ActionIcon variant="subtle" color="teal" onClick={e => { e.stopPropagation(); handleNavigateClick(e, navigate, `/sessions/${row.original.sessionId}`); }}>
           <IconEye size={16} />
         </ActionIcon>
         <ActionIcon
