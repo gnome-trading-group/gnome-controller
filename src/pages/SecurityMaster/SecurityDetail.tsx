@@ -16,7 +16,7 @@ import {
 } from '@mantine/core';
 import ReactTimeAgo from 'react-time-ago';
 import { useGlobalState } from '../../context/GlobalStateContext';
-import { DenormalizedListing, Security } from '../../types';
+import { DenormalizedListing, Event, EventContract, Security, SecurityType } from '../../types';
 import { registryApi } from '../../utils/api';
 import {
   formatAssetClass,
@@ -43,6 +43,22 @@ function SecurityDetail() {
   const [security, setSecurity] = useState<Security | null>(null);
   const [listings, setListings] = useState<DenormalizedListing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [eventContract, setEventContract] = useState<EventContract | null>(null);
+  const [event, setEvent] = useState<Event | null>(null);
+
+  useEffect(() => {
+    if (!security || security.type !== SecurityType.EVENT_CONTRACT) return;
+    registryApi.listEventContracts({ securityId: security.securityId })
+      .then(async (contracts: EventContract[]) => {
+        const ec = contracts[0] ?? null;
+        setEventContract(ec);
+        if (ec) {
+          const events = await registryApi.listEvents({ eventId: ec.eventId });
+          setEvent((events as Event[])[0] ?? null);
+        }
+      })
+      .catch(console.error);
+  }, [security]);
 
   useEffect(() => {
     if (!id) return;
@@ -105,6 +121,16 @@ function SecurityDetail() {
                     Security {security.underlyingSecurityId}
                   </Anchor>
                 } />
+              )}
+              {eventContract && event && (
+                <>
+                  <InfoRow label="Event" value={
+                    <Anchor size="sm" onClick={() => navigate(`/predictions/events/${event.eventId}`)}>
+                      {event.title}
+                    </Anchor>
+                  } />
+                  <InfoRow label="Outcome" value={eventContract.outcomeLabel} />
+                </>
               )}
               {security.description && <InfoRow label="Description" value={security.description} />}
               <InfoRow label="Created" value={<ReactTimeAgo date={new Date(security.dateCreated)} timeStyle="round" />} />
