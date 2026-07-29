@@ -19,7 +19,6 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { ContractRelationship, ContractRelationshipType } from '../../types';
 import { registryApi } from '../../utils/api';
-import { useGlobalState } from '../../context/GlobalStateContext';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import RelationshipGraph from './RelationshipGraph';
 import CreateRelationshipModal from './CreateRelationshipModal';
@@ -50,7 +49,6 @@ const METHOD_OPTIONS = [
 ];
 
 function ContractRelationships() {
-  const { securitySymbols } = useGlobalState();
   const [view, setView] = useState<'table' | 'graph'>('table');
   const [methodFilter, setMethodFilter] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
@@ -100,13 +98,22 @@ function ContractRelationships() {
     }
   };
 
+  const symbolMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const r of relationships) {
+      if (r.symbolA) map[r.securityIdA] = r.symbolA;
+      if (r.symbolB) map[r.securityIdB] = r.symbolB;
+    }
+    return map;
+  }, [relationships]);
+
   const columns = useMemo<MRT_ColumnDef<ContractRelationship>[]>(() => [
     {
       accessorKey: 'securityIdA',
       header: 'Security A',
       enableSorting: true,
       Cell: ({ row }) => {
-        const sym = securitySymbols[row.original.securityIdA] ?? `#${row.original.securityIdA}`;
+        const sym = row.original.symbolA ?? `#${row.original.securityIdA}`;
         return (
           <Anchor component={Link} to={`/security-master/securities/${row.original.securityIdA}`} size="sm" onClick={e => e.stopPropagation()}>
             {sym}
@@ -119,7 +126,7 @@ function ContractRelationships() {
       header: 'Security B',
       enableSorting: true,
       Cell: ({ row }) => {
-        const sym = securitySymbols[row.original.securityIdB] ?? `#${row.original.securityIdB}`;
+        const sym = row.original.symbolB ?? `#${row.original.securityIdB}`;
         return (
           <Anchor component={Link} to={`/security-master/securities/${row.original.securityIdB}`} size="sm" onClick={e => e.stopPropagation()}>
             {sym}
@@ -159,7 +166,7 @@ function ContractRelationships() {
           <ReactTimeAgo date={new Date(row.original.dateCreated)} timeStyle="round" />
         ) : '-',
     },
-  ], [securitySymbols]);
+  ], []);
 
   const table = useMantineReactTable({
     columns,
@@ -253,7 +260,7 @@ function ContractRelationships() {
           ) : (
             <RelationshipGraph
               relationships={relationships}
-              securitySymbols={securitySymbols}
+              securitySymbols={symbolMap}
               height="100%"
               onDelete={handleDelete}
             />

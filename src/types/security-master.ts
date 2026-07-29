@@ -127,6 +127,7 @@ export interface EventContract {
   securityId: number;
   outcomeLabel: string;
   dateCreated: string;
+  securitySymbol?: string;
 }
 
 export interface ContractRelationship {
@@ -137,6 +138,8 @@ export interface ContractRelationship {
   confidence: number;
   method: string;
   dateCreated: string;
+  symbolA?: string;
+  symbolB?: string;
 }
 
 export interface ExchangeEvent {

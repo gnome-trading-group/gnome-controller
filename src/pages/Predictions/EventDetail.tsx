@@ -47,7 +47,7 @@ type EnrichedContract = EventContract;
 
 function EventDetail() {
   const { eventId } = useParams<{ eventId: string }>();
-  const { exchanges, securitySymbols } = useGlobalState();
+  const { exchanges } = useGlobalState();
   const id = parseInt(eventId ?? '0');
 
   const [event, setEvent] = useState<Event | null>(null);
@@ -95,7 +95,7 @@ function EventDetail() {
       accessorKey: 'securityId',
       header: 'Security',
       Cell: ({ row }) => {
-        const sym = securitySymbols[row.original.securityId] ?? `#${row.original.securityId}`;
+        const sym = row.original.securitySymbol ?? `#${row.original.securityId}`;
         return (
           <Anchor component={Link} to={`/security-master/securities/${row.original.securityId}`} size="sm">
             {sym}
@@ -120,7 +120,7 @@ function EventDetail() {
           <ReactTimeAgo date={new Date(row.original.dateCreated)} timeStyle="round" />
         ) : '-',
     },
-  ], [securitySymbols]);
+  ], []);
 
   const handleDelete = async (relationshipId: number) => {
     try {
@@ -136,7 +136,7 @@ function EventDetail() {
       accessorKey: 'securityIdA',
       header: 'Security A',
       Cell: ({ row }) => {
-        const sym = securitySymbols[row.original.securityIdA] ?? `#${row.original.securityIdA}`;
+        const sym = row.original.symbolA ?? `#${row.original.securityIdA}`;
         return (
           <Anchor component={Link} to={`/security-master/securities/${row.original.securityIdA}`} size="sm" onClick={e => e.stopPropagation()}>
             {sym}
@@ -148,7 +148,7 @@ function EventDetail() {
       accessorKey: 'securityIdB',
       header: 'Security B',
       Cell: ({ row }) => {
-        const sym = securitySymbols[row.original.securityIdB] ?? `#${row.original.securityIdB}`;
+        const sym = row.original.symbolB ?? `#${row.original.securityIdB}`;
         return (
           <Anchor component={Link} to={`/security-master/securities/${row.original.securityIdB}`} size="sm" onClick={e => e.stopPropagation()}>
             {sym}
@@ -176,7 +176,7 @@ function EventDetail() {
       header: 'Method',
       size: 90,
     },
-  ], [securitySymbols]);
+  ], []);
 
   const contractTable = useMantineReactTable({
     columns: contractColumns,
@@ -215,6 +215,18 @@ function EventDetail() {
     () => Object.fromEntries(exchanges.map(e => [e.exchangeId, e.exchangeName])),
     [exchanges],
   );
+
+  const securitySymbolMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const c of contracts) {
+      if (c.securitySymbol) map[c.securityId] = c.securitySymbol;
+    }
+    for (const r of relationships) {
+      if (r.symbolA) map[r.securityIdA] = r.symbolA;
+      if (r.symbolB) map[r.securityIdB] = r.symbolB;
+    }
+    return map;
+  }, [contracts, relationships]);
 
   if (loading) {
     return <Container size="xl" py="xl"><Loader /></Container>;
@@ -324,7 +336,7 @@ function EventDetail() {
           <Title order={5} mb="sm">Relationship Graph</Title>
           <RelationshipGraph
             relationships={relationships}
-            securitySymbols={securitySymbols}
+            securitySymbols={securitySymbolMap}
             eventContracts={contracts}
             events={[event]}
             height={400}

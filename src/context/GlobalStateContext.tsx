@@ -4,23 +4,17 @@ import { Exchange } from '../types';
 
 interface GlobalState {
   exchanges: Exchange[];
-  securitySymbols: Record<number, string>;
-  loading: { exchanges: boolean; securitySymbols: boolean };
-  error: { exchanges: string | null; securitySymbols: string | null };
+  loading: { exchanges: boolean };
+  error: { exchanges: string | null };
   refreshExchanges: () => Promise<void>;
-  refreshSecuritySymbols: () => Promise<void>;
 }
 
 const GlobalStateContext = createContext<GlobalState | undefined>(undefined);
 
 export function GlobalStateProvider({ children }: { children: React.ReactNode }) {
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
-  const [securitySymbols, setSecuritySymbols] = useState<Record<number, string>>({});
-  const [loading, setLoading] = useState({ exchanges: false, securitySymbols: false });
-  const [error, setError] = useState<{ exchanges: string | null; securitySymbols: string | null }>({
-    exchanges: null,
-    securitySymbols: null,
-  });
+  const [loading, setLoading] = useState({ exchanges: false });
+  const [error, setError] = useState<{ exchanges: string | null }>({ exchanges: null });
 
   const refreshExchanges = async () => {
     setLoading(prev => ({ ...prev, exchanges: true }));
@@ -35,27 +29,12 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
     }
   };
 
-  const refreshSecuritySymbols = async () => {
-    setLoading(prev => ({ ...prev, securitySymbols: true }));
-    setError(prev => ({ ...prev, securitySymbols: null }));
-    try {
-      const map = await registryApi.listSecuritySymbols();
-      setSecuritySymbols(map);
-    } catch (err) {
-      console.error('Failed to load security symbols:', err);
-      setError(prev => ({ ...prev, securitySymbols: err instanceof Error ? err.message : 'Unknown error' }));
-    } finally {
-      setLoading(prev => ({ ...prev, securitySymbols: false }));
-    }
-  };
-
   useEffect(() => {
     refreshExchanges();
-    refreshSecuritySymbols();
   }, []);
 
   return (
-    <GlobalStateContext.Provider value={{ exchanges, securitySymbols, loading, error, refreshExchanges, refreshSecuritySymbols }}>
+    <GlobalStateContext.Provider value={{ exchanges, loading, error, refreshExchanges }}>
       {children}
     </GlobalStateContext.Provider>
   );

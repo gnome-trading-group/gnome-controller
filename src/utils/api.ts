@@ -635,6 +635,7 @@ export const registryApi = {
         queryParams[k] = v as string | number | boolean;
       }
     });
+    queryParams.denormalize = true;
     return sendApiRequest<ContractRelationship[]>('/contract-relationships', 'GET', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
@@ -668,18 +669,18 @@ export const registryApi = {
     });
   },
   listEventContracts: (params?: { eventId?: number; securityId?: number }) => {
-    const queryParams: Record<string, string | number | boolean> = {};
+    const queryParams: Record<string, string | number | boolean> = { denormalize: true };
     if (params?.eventId !== undefined) queryParams.eventId = params.eventId;
     if (params?.securityId !== undefined) queryParams.securityId = params.securityId;
     return sendApiRequest<EventContract[]>('/event-contracts', 'GET', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
-      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+      queryParams,
     });
   },
   listContractRelationships: (params?: { method?: string; relationshipType?: string; securityId?: number }) => {
-    const queryParams: Record<string, string | number | boolean> = {};
+    const queryParams: Record<string, string | number | boolean> = { denormalize: true };
     if (params?.method) queryParams.method = params.method;
     if (params?.relationshipType) queryParams.relationshipType = params.relationshipType;
     if (params?.securityId !== undefined) queryParams.securityId = params.securityId;
@@ -687,7 +688,7 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
-      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+      queryParams,
     });
   },
   createContractRelationship: (body: CreateContractRelationship) =>
@@ -760,24 +761,6 @@ export const registryApi = {
       convertToCamelCase: true,
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
-  },
-  listSecuritySymbols: async (): Promise<Record<number, string>> => {
-    const PAGE_SIZE = 20000;
-    const map: Record<number, string> = {};
-    let offset = 0;
-    while (true) {
-      const rows = await sendApiRequest<{ security_id: number; symbol: string }[]>(
-        '/securities/symbols', 'GET', {
-          apiUrl: REGISTRY_API_URL,
-          apiKey: REGISTRY_API_KEY,
-          queryParams: { limit: PAGE_SIZE, offset, active: true },
-        },
-      );
-      for (const row of rows) map[row.security_id] = row.symbol;
-      if (rows.length < PAGE_SIZE) break;
-      offset += PAGE_SIZE;
-    }
-    return map;
   },
 }
 
