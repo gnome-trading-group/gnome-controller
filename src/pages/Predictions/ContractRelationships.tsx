@@ -9,6 +9,7 @@ import {
   SegmentedControl,
   Select,
   Stack,
+  Switch,
   Title,
   Tooltip,
 } from '@mantine/core';
@@ -52,6 +53,7 @@ function ContractRelationships() {
   const [view, setView] = useState<'table' | 'graph'>('table');
   const [methodFilter, setMethodFilter] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
   const [filterKey, setFilterKey] = useState(0);
   const isFirstFilterRun = useRef(true);
@@ -60,8 +62,9 @@ function ContractRelationships() {
     const p: Record<string, string | number | boolean> = {};
     if (methodFilter) p.method = methodFilter;
     if (typeFilter) p.relationshipType = typeFilter;
+    if (!showResolved) p.eventResolved = false;
     return p;
-  }, [methodFilter, typeFilter]);
+  }, [methodFilter, typeFilter, showResolved]);
 
   const {
     data: relationships,
@@ -87,7 +90,7 @@ function ContractRelationships() {
     }
     setPagination(prev => ({ ...prev, pageIndex: 0 }));
     setFilterKey(k => k + 1);
-  }, [methodFilter, typeFilter]);
+  }, [methodFilter, typeFilter, showResolved]);
 
   const handleDelete = async (relationshipId: number) => {
     try {
@@ -226,6 +229,12 @@ function ContractRelationships() {
             clearable
             size="sm"
             style={{ width: 160 }}
+          />
+          <Switch
+            label="Show Resolved"
+            checked={showResolved}
+            onChange={e => setShowResolved(e.currentTarget.checked)}
+            size="sm"
           />
           <Tooltip label="Create Manual Relationship" position="bottom" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="green" onClick={openCreate}>
