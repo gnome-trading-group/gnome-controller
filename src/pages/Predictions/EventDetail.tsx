@@ -16,7 +16,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconTrash } from '@tabler/icons-react';
+import { IconExternalLink, IconTrash } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
@@ -301,15 +301,25 @@ function EventDetail() {
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {exchangeEvents.map(xe => (
-                    <Table.Tr key={xe.exchangeEventId}>
-                      <Table.Td>{exchangeById[xe.exchangeId] ?? `#${xe.exchangeId}`}</Table.Td>
-                      <Table.Td>{xe.nativeEventId}</Table.Td>
-                      <Table.Td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {xe.rawTitle}
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
+                  {exchangeEvents.map(xe => {
+                    const nativeIdCell = xe.nativeUrl ? (
+                      <Anchor href={xe.nativeUrl} target="_blank" rel="noopener noreferrer" size="sm">
+                        <Group gap={4} wrap="nowrap">
+                          {xe.nativeEventId}
+                          <IconExternalLink size={14} />
+                        </Group>
+                      </Anchor>
+                    ) : xe.nativeEventId;
+                    return (
+                      <Table.Tr key={xe.exchangeEventId}>
+                        <Table.Td>{exchangeById[xe.exchangeId] ?? `#${xe.exchangeId}`}</Table.Td>
+                        <Table.Td>{nativeIdCell}</Table.Td>
+                        <Table.Td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {xe.rawTitle}
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
                 </Table.Tbody>
               </Table>
             )}

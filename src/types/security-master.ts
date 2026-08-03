@@ -149,6 +149,7 @@ export interface ExchangeEvent {
   nativeEventId: string;
   rawTitle: string;
   dateCreated: string;
+  nativeUrl?: string;
 }
 
 export interface CreateContractRelationship {
