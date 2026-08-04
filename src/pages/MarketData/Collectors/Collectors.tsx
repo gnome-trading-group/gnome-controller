@@ -94,20 +94,6 @@ function Collectors() {
     return selectedListingIds.map(Number);
   }, [mode, eventListings, selectedListingIds]);
 
-  const region = useMemo(() => {
-    if (mode === 'event' && selectedExchangeId) {
-      return exchanges.find(e => e.exchangeId === Number(selectedExchangeId))?.region ?? null;
-    }
-    if (mode === 'listings' && selectedListingIds.length > 0) {
-      const firstId = Number(selectedListingIds[0]);
-      const label = selectedListingItems[selectedListingIds[0]];
-      if (!label) return null;
-      // We don't have direct exchange info here; region is resolved when listing is fetched
-      return null;
-    }
-    return null;
-  }, [mode, selectedExchangeId, exchanges, selectedListingIds, selectedListingItems]);
-
   // For listings mode: resolve region from first listing's exchange
   const [listingsRegion, setListingsRegion] = useState<string | null>(null);
 
