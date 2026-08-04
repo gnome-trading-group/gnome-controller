@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect } from 'react';
+import { useMemo, useCallback, useEffect, memo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -164,4 +164,4 @@ function RelationshipGraph({
   );
 }
 
-export default RelationshipGraph;
+export default memo(RelationshipGraph);

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   ActionIcon,
   Anchor,
   Badge,
   Breadcrumbs,
+  Button,
   Container,
   Grid,
   Group,
@@ -55,6 +56,7 @@ function EventDetail() {
   const [exchangeEvents, setExchangeEvents] = useState<ExchangeEvent[]>([]);
   const [relationships, setRelationships] = useState<ContractRelationship[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showGraph, setShowGraph] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -64,29 +66,12 @@ function EventDetail() {
       registryApi.listEvents({ eventId: id }),
       registryApi.listEventContracts({ eventId: id }),
       registryApi.listExchangeEvents({ eventId: id }),
-    ]).then(async ([evts, ecs, exEvts]) => {
-      const ev = (evts as Event[])[0] ?? null;
-      setEvent(ev);
+      registryApi.listContractRelationships({ eventId: id }),
+    ]).then(([evts, ecs, exEvts, rels]) => {
+      setEvent((evts as Event[])[0] ?? null);
       setExchangeEvents(exEvts as ExchangeEvent[]);
-
-      const ecList = ecs as EventContract[];
-      const eventSecIds = [...new Set(ecList.map(ec => ec.securityId))];
-
-      const relResults = await Promise.allSettled(
-        eventSecIds.map(sid => registryApi.listContractRelationships({ securityId: sid })),
-      );
-
-      const allRels = relResults
-        .filter(r => r.status === 'fulfilled')
-        .flatMap(r => (r as PromiseFulfilledResult<ContractRelationship[]>).value);
-      const seen = new Set<number>();
-      const deduped = allRels.filter(r => {
-        if (seen.has(r.relationshipId)) return false;
-        seen.add(r.relationshipId);
-        return true;
-      });
-      setRelationships(deduped);
-      setContracts(ecList);
+      setContracts(ecs as EventContract[]);
+      setRelationships(rels as ContractRelationship[]);
     }).catch(console.error).finally(() => setLoading(false));
   }, [id]);
 
@@ -122,14 +107,14 @@ function EventDetail() {
     },
   ], []);
 
-  const handleDelete = async (relationshipId: number) => {
+  const handleDelete = useCallback(async (relationshipId: number) => {
     try {
       await registryApi.deleteContractRelationship(relationshipId);
       setRelationships(prev => prev.filter(r => r.relationshipId !== relationshipId));
     } catch (err) {
       console.error('Failed to delete:', err);
     }
-  };
+  }, []);
 
   const relColumns = useMemo<MRT_ColumnDef<ContractRelationship>[]>(() => [
     {
@@ -183,11 +168,11 @@ function EventDetail() {
     data: contracts,
     enableColumnFilters: false,
     enableSorting: true,
-    enablePagination: false,
-    enableBottomToolbar: false,
+    enablePagination: true,
+    enableBottomToolbar: true,
     enableTopToolbar: false,
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    initialState: { density: 'xs' },
+    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 25 } },
   });
 
   const relTable = useMantineReactTable({
@@ -343,15 +328,22 @@ function EventDetail() {
 
       {relationships.length > 0 && (
         <Paper withBorder p="md" mb="md">
-          <Title order={5} mb="sm">Relationship Graph</Title>
-          <RelationshipGraph
-            relationships={relationships}
-            securitySymbols={securitySymbolMap}
-            eventContracts={contracts}
-            events={[event]}
-            height={400}
-            onDelete={handleDelete}
-          />
+          <Group justify="space-between" mb={showGraph ? 'sm' : undefined}>
+            <Title order={5}>Relationship Graph</Title>
+            <Button variant="subtle" size="xs" onClick={() => setShowGraph(v => !v)}>
+              {showGraph ? 'Hide Graph' : 'Show Graph'}
+            </Button>
+          </Group>
+          {showGraph && (
+            <RelationshipGraph
+              relationships={relationships}
+              securitySymbols={securitySymbolMap}
+              eventContracts={contracts}
+              events={[event]}
+              height={400}
+              onDelete={handleDelete}
+            />
+          )}
         </Paper>
       )}
     </Container>

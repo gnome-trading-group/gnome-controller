@@ -679,11 +679,12 @@ export const registryApi = {
       queryParams,
     });
   },
-  listContractRelationships: (params?: { method?: string; relationshipType?: string; securityId?: number }) => {
+  listContractRelationships: (params?: { method?: string; relationshipType?: string; securityId?: number; eventId?: number }) => {
     const queryParams: Record<string, string | number | boolean> = { denormalize: true };
     if (params?.method) queryParams.method = params.method;
     if (params?.relationshipType) queryParams.relationshipType = params.relationshipType;
     if (params?.securityId !== undefined) queryParams.securityId = params.securityId;
+    if (params?.eventId !== undefined) queryParams.eventId = params.eventId;
     return sendApiRequest<ContractRelationship[]>('/contract-relationships', 'GET', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
