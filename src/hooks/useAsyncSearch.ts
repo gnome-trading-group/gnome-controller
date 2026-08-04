@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { DenormalizedListing, Security, Currency } from '../types';
+import { DenormalizedListing, Event, Security, Currency } from '../types';
 import { registryApi } from '../utils/api';
 
 interface SearchOption {
@@ -60,6 +60,28 @@ export function useListingSearch(search: string): UseAsyncSearchResult {
           value: String(l.listingId),
           label: `${l.listingId} - ${l.exchangeName} - ${l.securitySymbol}`,
         })))
+      )
+      .catch(() => setOptions([]))
+      .finally(() => setIsLoading(false));
+  }, [debounced]);
+
+  return { options, isLoading };
+}
+
+export function useEventSearch(search: string): UseAsyncSearchResult {
+  const [options, setOptions] = useState<SearchOption[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const debounced = useDebounced(search, 300);
+
+  useEffect(() => {
+    if (!debounced) {
+      setOptions([]);
+      return;
+    }
+    setIsLoading(true);
+    registryApi.listEventsPaginated({ search: debounced, limit: 20 })
+      .then((events: Event[]) =>
+        setOptions(events.map(e => ({ value: String(e.eventId), label: e.title })))
       )
       .catch(() => setOptions([]))
       .finally(() => setIsLoading(false));

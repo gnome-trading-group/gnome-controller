@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { DenormalizedListing } from '../../types';
-import { registryApi } from '../../utils/api';
+import { useListingLabels } from '../../hooks/useAsyncSearch';
 import {
   Container,
   Title,
@@ -29,12 +28,15 @@ import { marketDataApi } from '../../utils/api';
 
 interface Collector {
   listingId: number;
+  listingIds: number[];
   status: string;
   lastStatusChange: number;
   failureReason?: string;
   serviceArn: string;
   deploymentVersion: string;
   taskArns: string[];
+  cpu?: string;
+  memory?: string;
 }
 
 interface TaskDetail {
@@ -62,8 +64,9 @@ interface LogEvent {
 
 function CollectorDetail() {
   const { listingId } = useParams<{ listingId: string }>();
-  const [listingInfo, setListingInfo] = useState<DenormalizedListing | null>(null);
   const [collector, setCollector] = useState<Collector | null>(null);
+  const listingIds = collector?.listingIds ?? (listingId ? [Number(listingId)] : []);
+  const listingLabels = useListingLabels(listingIds);
   const [taskDetails, setTaskDetails] = useState<TaskDetail[]>([]);
   const [logs, setLogs] = useState<LogsResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,12 +177,6 @@ function CollectorDetail() {
     loadCollector();
   }, [listingId]);
 
-  useEffect(() => {
-    if (!listingId) return;
-    registryApi.listListingsPaginated({ listingId: Number(listingId), limit: 1 })
-      .then(rows => setListingInfo(rows[0] ?? null))
-      .catch(() => {});
-  }, [listingId]);
 
   useEffect(() => {
     // Set the first task as selected when taskDetails change
@@ -297,24 +294,18 @@ function CollectorDetail() {
       <Grid>
         <Grid.Col span={6}>
           <Card withBorder>
-            <Title order={4} mb="md">Listing Information</Title>
-            {listingInfo ? (
+            <Title order={4} mb="md">Listings ({listingIds.length})</Title>
+            {listingIds.length > 0 ? (
               <Stack gap="xs">
-                <Group justify="space-between">
-                  <Text fw={500}>Exchange:</Text>
-                  <Text>{listingInfo.exchangeName}</Text>
-                </Group>
-                <Group justify="space-between">
-                  <Text fw={500}>Security:</Text>
-                  <Text>{listingInfo.securitySymbol}</Text>
-                </Group>
-                <Group justify="space-between">
-                  <Text fw={500}>Listing ID:</Text>
-                  <Text>{listingInfo.listingId}</Text>
-                </Group>
+                {listingIds.map(id => (
+                  <Group key={id} justify="space-between">
+                    <Text size="sm" c="dimmed">{id}</Text>
+                    <Text size="sm">{listingLabels[id] ?? '...'}</Text>
+                  </Group>
+                ))}
               </Stack>
             ) : (
-              <Text c="dimmed">Listing information not available</Text>
+              <Text c="dimmed">No listing information available</Text>
             )}
           </Card>
         </Grid.Col>
@@ -342,6 +333,12 @@ function CollectorDetail() {
                 <Text fw={500}>Deployment Version:</Text>
                 <Text>{collector.deploymentVersion}</Text>
               </Group>
+              {(collector.cpu || collector.memory) && (
+                <Group justify="space-between">
+                  <Text fw={500}>Task Size:</Text>
+                  <Text>{collector.cpu ?? '?'} CPU / {collector.memory ?? '?'} MiB</Text>
+                </Group>
+              )}
               {collector.failureReason && (
                 <Group justify="space-between">
                   <Text fw={500}>Failure Reason:</Text>

@@ -292,7 +292,7 @@ function EventDetail() {
             {exchangeEvents.length === 0 ? (
               <Text size="sm" c="dimmed">No exchange mappings.</Text>
             ) : (
-              <Table striped highlightOnHover withColumnBorders fz="sm">
+              <Table striped highlightOnHover withColumnBorders fz="sm" style={{ tableLayout: 'fixed', width: '100%' }}>
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Exchange</Table.Th>
@@ -313,7 +313,7 @@ function EventDetail() {
                     return (
                       <Table.Tr key={xe.exchangeEventId}>
                         <Table.Td>{exchangeById[xe.exchangeId] ?? `#${xe.exchangeId}`}</Table.Td>
-                        <Table.Td>{nativeIdCell}</Table.Td>
+                        <Table.Td style={{ maxWidth: 180, wordBreak: 'break-all' }}>{nativeIdCell}</Table.Td>
                         <Table.Td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {xe.rawTitle}
                         </Table.Td>

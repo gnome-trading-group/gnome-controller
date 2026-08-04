@@ -111,10 +111,10 @@ export const marketDataApi = {
   listCollectors: () => sendApiRequest<{ collectors: any[] }>('/collectors/list', 'GET', {
     apiUrl: MARKET_DATA_API_URL,
   }),
-  createCollector: (listingId: number, region: string) =>
+  createCollector: (listingIds: number[], region: string, cpu?: string, memory?: string) =>
     sendApiRequest<{ message: string }>('/collectors/create', 'POST', {
       apiUrl: MARKET_DATA_API_URL,
-      body: { listingId, region },
+      body: { listingIds, region, cpu, memory },
     }),
   deleteCollector: (listingId: number) =>
     sendApiRequest<{ message: string }>('/collectors/delete', 'DELETE', {
