@@ -17,7 +17,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconExternalLink, IconTrash } from '@tabler/icons-react';
+import { IconExternalLink, IconSearch, IconTrash } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
@@ -34,6 +34,17 @@ const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   CORRELATED: 'gray',
   HEDGEABLE_WITH: 'violet',
 };
+
+function getExchangeSearchUrl(exchangeName: string, query: string): string | null {
+  switch (exchangeName.toLowerCase()) {
+    case 'kalshi':
+      return `https://kalshi.com/search?q=${encodeURIComponent(query)}`;
+    case 'polymarket':
+      return `https://polymarket.com/search?_q=${query.toLowerCase().replace(/\s+/g, '-')}`;
+    default:
+      return null;
+  }
+}
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -283,10 +294,12 @@ function EventDetail() {
                     <Table.Th>Exchange</Table.Th>
                     <Table.Th>Native ID</Table.Th>
                     <Table.Th>Raw Title</Table.Th>
+                    <Table.Th style={{ width: 60 }}>Search</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
                   {exchangeEvents.map(xe => {
+                    const exchangeName = exchangeById[xe.exchangeId] ?? '';
                     const nativeIdCell = xe.nativeUrl ? (
                       <Anchor href={xe.nativeUrl} target="_blank" rel="noopener noreferrer" size="sm">
                         <Group gap={4} wrap="nowrap">
@@ -295,12 +308,29 @@ function EventDetail() {
                         </Group>
                       </Anchor>
                     ) : xe.nativeEventId;
+                    const searchUrl = getExchangeSearchUrl(exchangeName, xe.rawTitle);
                     return (
                       <Table.Tr key={xe.exchangeEventId}>
-                        <Table.Td>{exchangeById[xe.exchangeId] ?? `#${xe.exchangeId}`}</Table.Td>
+                        <Table.Td>{exchangeName || `#${xe.exchangeId}`}</Table.Td>
                         <Table.Td style={{ maxWidth: 180, wordBreak: 'break-all' }}>{nativeIdCell}</Table.Td>
                         <Table.Td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {xe.rawTitle}
+                        </Table.Td>
+                        <Table.Td style={{ textAlign: 'center' }}>
+                          {searchUrl && (
+                            <Tooltip label="Search on exchange" openDelay={500}>
+                              <ActionIcon
+                                component="a"
+                                href={searchUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                variant="subtle"
+                                size="sm"
+                              >
+                                <IconSearch size={14} />
+                              </ActionIcon>
+                            </Tooltip>
+                          )}
                         </Table.Td>
                       </Table.Tr>
                     );
