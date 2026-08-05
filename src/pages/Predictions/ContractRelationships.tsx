@@ -29,7 +29,7 @@ const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   COMPLEMENT: 'teal',
   IMPLIES: 'blue',
   MUTUALLY_EXCLUSIVE: 'orange',
-  CORRELATED: 'gray',
+
   HEDGEABLE_WITH: 'violet',
 };
 
@@ -38,7 +38,7 @@ const RELATIONSHIP_TYPE_OPTIONS = [
   { value: 'COMPLEMENT', label: 'Complement' },
   { value: 'IMPLIES', label: 'Implies' },
   { value: 'MUTUALLY_EXCLUSIVE', label: 'Mutually Exclusive' },
-  { value: 'CORRELATED', label: 'Correlated' },
+
   { value: 'HEDGEABLE_WITH', label: 'Hedgeable With' },
 ];
 

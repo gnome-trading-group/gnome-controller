@@ -699,6 +699,13 @@ export const registryApi = {
       convertToCamelCase: true,
       body,
     }),
+  createContractRelationshipsBulk: (bodies: CreateContractRelationship[]) =>
+    sendApiRequest<any[]>('/contract-relationships', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      apiKey: REGISTRY_API_KEY,
+      convertToCamelCase: true,
+      body: bodies,
+    }),
   deleteContractRelationship: (relationshipId: number) =>
     sendApiRequest<{ message: string }>('/contract-relationships', 'DELETE', {
       apiUrl: REGISTRY_API_URL,

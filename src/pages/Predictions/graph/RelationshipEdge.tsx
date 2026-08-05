@@ -8,7 +8,7 @@ const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   COMPLEMENT: 'teal',
   IMPLIES: 'blue',
   MUTUALLY_EXCLUSIVE: 'orange',
-  CORRELATED: 'gray',
+
   HEDGEABLE_WITH: 'violet',
 };
 

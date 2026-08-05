@@ -9,7 +9,7 @@ const RELATIONSHIP_TYPE_OPTIONS: { value: ContractRelationshipType; label: strin
   { value: 'COMPLEMENT', label: 'Complement' },
   { value: 'IMPLIES', label: 'Implies' },
   { value: 'MUTUALLY_EXCLUSIVE', label: 'Mutually Exclusive' },
-  { value: 'CORRELATED', label: 'Correlated' },
+
   { value: 'HEDGEABLE_WITH', label: 'Hedgeable With' },
 ];
 

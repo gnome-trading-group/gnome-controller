@@ -32,7 +32,7 @@ export type ContractRelationshipType =
   | 'COMPLEMENT'
   | 'IMPLIES'
   | 'MUTUALLY_EXCLUSIVE'
-  | 'CORRELATED'
+
   | 'HEDGEABLE_WITH';
 
 export interface Security {

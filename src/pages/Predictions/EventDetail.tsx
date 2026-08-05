@@ -17,7 +17,8 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconExternalLink, IconSearch, IconTrash } from '@tabler/icons-react';
+import { useDisclosure } from '@mantine/hooks';
+import { IconExternalLink, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
@@ -25,13 +26,14 @@ import { ContractRelationship, ContractRelationshipType, Event, EventContract, E
 import { registryApi } from '../../utils/api';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import RelationshipGraph from './RelationshipGraph';
+import BulkCreateRelationshipModal from './BulkCreateRelationshipModal';
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
   COMPLEMENT: 'teal',
   IMPLIES: 'blue',
   MUTUALLY_EXCLUSIVE: 'orange',
-  CORRELATED: 'gray',
+
   HEDGEABLE_WITH: 'violet',
 };
 
@@ -68,6 +70,7 @@ function EventDetail() {
   const [relationships, setRelationships] = useState<ContractRelationship[]>([]);
   const [loading, setLoading] = useState(true);
   const [showGraph, setShowGraph] = useState(false);
+  const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
 
   useEffect(() => {
     if (!id) return;
@@ -126,6 +129,12 @@ function EventDetail() {
       console.error('Failed to delete:', err);
     }
   }, []);
+
+  const refreshRelationships = useCallback(() => {
+    registryApi.listContractRelationships({ eventId: id })
+      .then(rels => setRelationships(rels as ContractRelationship[]))
+      .catch(console.error);
+  }, [id]);
 
   const relColumns = useMemo<MRT_ColumnDef<ContractRelationship>[]>(() => [
     {
@@ -348,13 +357,29 @@ function EventDetail() {
       </Paper>
 
       <Paper withBorder p="md" mb="md">
-        <Title order={5} mb="sm">Relationships ({relationships.length})</Title>
+        <Group justify="space-between" mb="sm">
+          <Title order={5}>Relationships ({relationships.length})</Title>
+          <Tooltip label="Bulk Create Relationships" position="left" withArrow openDelay={500}>
+            <ActionIcon size="lg" variant="filled" color="green" onClick={openCreate}>
+              <IconPlus size={20} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
         {relationships.length === 0 ? (
           <Text size="sm" c="dimmed">No relationships found for this event's contracts.</Text>
         ) : (
           <MantineReactTable table={relTable} />
         )}
       </Paper>
+
+      <BulkCreateRelationshipModal
+        opened={createOpened}
+        onClose={closeCreate}
+        onCreated={refreshRelationships}
+        currentEventId={id}
+        currentEventTitle={event.title}
+        currentContracts={contracts}
+      />
 
       {relationships.length > 0 && (
         <Paper withBorder p="md" mb="md">
