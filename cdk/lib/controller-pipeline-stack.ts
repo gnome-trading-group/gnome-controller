@@ -68,6 +68,10 @@ export class ControllerPipelineStack extends cdk.Stack {
 
     const npmSecret = secrets.Secret.fromSecretNameV2(this, 'NPMToken', 'npm-token');
     const githubSecret = secrets.Secret.fromSecretNameV2(this, 'GithubMaven', 'GITHUB_MAVEN');
+    const registryKeyDevSecret = secrets.Secret.fromSecretNameV2(this, 'RegistryKeyDev', 'controller-registry-api-key-dev');
+    const registryKeyProdSecret = secrets.Secret.fromSecretNameV2(this, 'RegistryKeyProd', 'controller-registry-api-key-prod');
+    const serviceConfigKeyDevSecret = secrets.Secret.fromSecretNameV2(this, 'ServiceConfigKeyDev', 'controller-service-config-api-key-dev');
+    const serviceConfigKeyProdSecret = secrets.Secret.fromSecretNameV2(this, 'ServiceConfigKeyProd', 'controller-service-config-api-key-prod');
 
     const pipeline = new pipelines.CodePipeline(this, "ControllerPipeline", {
       crossAccountKeys: true,
@@ -76,12 +80,20 @@ export class ControllerPipelineStack extends cdk.Stack {
         input: pipelines.CodePipelineSource.gitHub(GITHUB_REPO, GITHUB_BRANCH),
         commands: [
           'echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" > ~/.npmrc',
+          'printf "\\nVITE_REGISTRY_API_KEY=${REGISTRY_API_KEY_DEV}" >> .env.dev',
+          'printf "\\nVITE_SERVICE_CONFIG_API_KEY=${SERVICE_CONFIG_API_KEY_DEV}" >> .env.dev',
+          'printf "\\nVITE_REGISTRY_API_KEY=${REGISTRY_API_KEY_PROD}" >> .env.prod',
+          'printf "\\nVITE_SERVICE_CONFIG_API_KEY=${SERVICE_CONFIG_API_KEY_PROD}" >> .env.prod',
           "cd cdk/",
           "npm ci",
           "npx cdk synth"
         ],
         env: {
           NPM_TOKEN: npmSecret.secretValue.unsafeUnwrap(),
+          REGISTRY_API_KEY_DEV: registryKeyDevSecret.secretValue.unsafeUnwrap(),
+          SERVICE_CONFIG_API_KEY_DEV: serviceConfigKeyDevSecret.secretValue.unsafeUnwrap(),
+          REGISTRY_API_KEY_PROD: registryKeyProdSecret.secretValue.unsafeUnwrap(),
+          SERVICE_CONFIG_API_KEY_PROD: serviceConfigKeyProdSecret.secretValue.unsafeUnwrap(),
         },
         primaryOutputDirectory: 'cdk/cdk.out',
       }),
@@ -115,5 +127,9 @@ export class ControllerPipelineStack extends cdk.Stack {
     npmSecret.grantRead(pipeline.pipeline.role);
     githubSecret.grantRead(pipeline.synthProject.role!!);
     githubSecret.grantRead(pipeline.pipeline.role);
+    registryKeyDevSecret.grantRead(pipeline.synthProject.role!!);
+    registryKeyProdSecret.grantRead(pipeline.synthProject.role!!);
+    serviceConfigKeyDevSecret.grantRead(pipeline.synthProject.role!!);
+    serviceConfigKeyProdSecret.grantRead(pipeline.synthProject.role!!);
   }
 }
