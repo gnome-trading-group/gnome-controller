@@ -15,10 +15,13 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { HedgeKeyword } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
+import { useUrlTableState } from '../../hooks/useUrlTableState';
 import CreateHedgeKeywordModal from './CreateHedgeKeywordModal';
 
 function HedgeKeywords() {
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
+
+  const urlState = useUrlTableState({ defaultSort: { id: 'dateCreated', desc: true } });
 
   const {
     data: keywords,
@@ -33,6 +36,14 @@ function HedgeKeywords() {
     fetchFn: registryApi.listHedgeKeywordsPaginated,
     countFn: registryApi.countHedgeKeywords,
     defaultPageSize: 50,
+    controlledState: {
+      pagination: urlState.pagination,
+      sorting: urlState.sorting,
+      globalFilter: urlState.globalFilter,
+      setPagination: urlState.setPagination,
+      setSorting: urlState.setSorting,
+      setGlobalFilter: urlState.setGlobalFilter,
+    },
   });
 
   const handleDelete = async (hedgeKeywordId: number) => {
@@ -95,7 +106,6 @@ function HedgeKeywords() {
       withColumnBorders: true,
     },
     initialState: {
-      sorting: [{ id: 'dateCreated', desc: true }],
       density: 'xs',
     },
     renderRowActions: ({ row }: { row: MRT_Row<HedgeKeyword> }) => (

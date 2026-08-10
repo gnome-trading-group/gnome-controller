@@ -16,6 +16,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { IconDownload, IconPlus, IconRefresh, IconUpload } from '@tabler/icons-react';
+import { useSearchParams } from 'react-router-dom';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { registryApi } from '../../utils/api';
 import * as XLSX from 'xlsx';
@@ -27,8 +28,20 @@ import CurrenciesTab from './CurrenciesTab';
 
 type DeleteType = 'exchange' | 'security' | 'listing';
 
+const TABLE_PARAMS = ['search', 'sort', 'sortDir', 'page', 'pageSize'];
+
 function SecurityMaster() {
-  const [activeTab, setActiveTab] = useState<string | null>('listings');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') ?? 'listings';
+
+  const setActiveTab = (tab: string | null) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab ?? 'listings');
+      TABLE_PARAMS.forEach(p => next.delete(p));
+      return next;
+    });
+  };
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState({ exchanges: 0, securities: 0, listings: 0 });

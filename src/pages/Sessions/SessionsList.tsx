@@ -20,6 +20,7 @@ import { Strategy, StrategySession, StrategySessionStatus } from '../../types';
 import { registryApi } from '../../utils/api';
 import { navigateRowProps, handleNavigateClick } from '../../utils/navigation';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
+import { useUrlTableState } from '../../hooks/useUrlTableState';
 import DeploySessionModal from './DeploySessionModal';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -44,14 +45,18 @@ const STATUS_OPTIONS = [
 
 function SessionsList() {
   const navigate = useNavigate();
-  const [statusFilter, setStatusFilter] = useState('');
-  const [strategyFilter, setStrategyFilter] = useState<string | null>(null);
   const [strategyMap, setStrategyMap] = useState<Record<number, string>>({});
   const [strategyOptions, setStrategyOptions] = useState<{ value: string; label: string }[]>([]);
   const [deployOpen, setDeployOpen] = useState(false);
   const [stopTarget, setStopTarget] = useState<StrategySession | null>(null);
   const [stopping, setStopping] = useState(false);
-  const [filterKey, setFilterKey] = useState(0);
+
+  const urlState = useUrlTableState({ defaultSort: { id: 'dateCreated', desc: true } });
+  const statusFilter = urlState.getParam('status');
+  const strategyFilter = urlState.getParam('strategy') || null;
+
+  const setStatusFilter = useCallback((v: string | null) => urlState.setParam('status', v ?? ''), [urlState.setParam]);
+  const setStrategyFilter = useCallback((v: string | null) => urlState.setParam('strategy', v ?? ''), [urlState.setParam]);
 
   useEffect(() => {
     registryApi.listStrategies().then((list: Strategy[]) => {
@@ -72,18 +77,20 @@ function SessionsList() {
     return p;
   }, [statusFilter, strategyFilter]);
 
-  const handleFilterChange = useCallback((setter: (v: any) => void) => (v: any) => {
-    setter(v);
-    setFilterKey(k => k + 1);
-  }, []);
-
   const { data, total, isLoading, pagination, sorting, globalFilter, setPagination, setSorting, setGlobalFilter, refresh } =
     useServerPaginatedTable<StrategySession>({
       fetchFn: registryApi.listSessionsPaginated,
       countFn: registryApi.countSessions,
       defaultPageSize: 50,
       extraParams,
-      externalRefreshKey: filterKey,
+      controlledState: {
+        pagination: urlState.pagination,
+        sorting: urlState.sorting,
+        globalFilter: urlState.globalFilter,
+        setPagination: urlState.setPagination,
+        setSorting: urlState.setSorting,
+        setGlobalFilter: urlState.setGlobalFilter,
+      },
     });
 
   const handleStop = async () => {
@@ -177,7 +184,7 @@ function SessionsList() {
     enableRowActions: true,
     positionActionsColumn: 'last' as const,
     enableColumnFilters: false,
-    initialState: { density: 'xs', sorting: [{ id: 'dateCreated', desc: true }] },
+    initialState: { density: 'xs' },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     mantineTableBodyRowProps: ({ row }: { row: MRT_Row<StrategySession> }) => (
       navigateRowProps(navigate, `/sessions/${row.original.sessionId}`)
@@ -208,7 +215,7 @@ function SessionsList() {
             size="sm"
             data={STATUS_OPTIONS}
             value={statusFilter}
-            onChange={handleFilterChange(setStatusFilter)}
+            onChange={setStatusFilter}
             clearable={false}
             w={160}
           />
@@ -216,7 +223,7 @@ function SessionsList() {
             size="sm"
             data={strategyOptions}
             value={strategyFilter}
-            onChange={handleFilterChange(setStrategyFilter)}
+            onChange={setStrategyFilter}
             clearable
             placeholder="All strategies"
             w={180}

@@ -1,13 +1,15 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ActionIcon, Badge, CloseButton, Container, Group, Input, Select, Switch, Title, Tooltip } from '@mantine/core';
 import { IconRefresh, IconTag } from '@tabler/icons-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { Event, EventContract } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
+import { useUrlTableState } from '../../hooks/useUrlTableState';
+import { useState } from 'react';
 
 interface EnrichedEvent extends Event {
   contractCount: number;
@@ -15,23 +17,25 @@ interface EnrichedEvent extends Event {
 
 function EventsList() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tagFilter = searchParams.get('tag') ?? '';
-
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
-  const [showResolved, setShowResolved] = useState(false);
-  const [categories, setCategories] = useState<string[]>([]);
   const [contractCounts, setContractCounts] = useState<Record<number, number>>({});
-  const [filterKey, setFilterKey] = useState(0);
-  const isFirstFilterRun = useRef(true);
+  const [categories, setCategories] = useState<string[]>([]);
+
+  const urlState = useUrlTableState({ defaultSort: { id: 'dateCreated', desc: true } });
+  const tag = urlState.getParam('tag');
+  const category = urlState.getParam('category');
+  const showResolved = urlState.getParam('resolved') === 'true';
+
+  const setTag = (value: string) => urlState.setParam('tag', value);
+  const setCategory = (value: string | null) => urlState.setParam('category', value ?? '');
+  const setShowResolved = (value: boolean) => urlState.setParam('resolved', value ? 'true' : '');
 
   const extraParams = useMemo(() => {
     const p: Record<string, string | number | boolean> = {};
-    if (categoryFilter) p.category = categoryFilter;
+    if (category) p.category = category;
     if (!showResolved) p.resolved = false;
-    if (tagFilter) p.tag = tagFilter;
+    if (tag) p.tag = tag;
     return p;
-  }, [categoryFilter, showResolved, tagFilter]);
+  }, [category, showResolved, tag]);
 
   const {
     data: rawEvents,
@@ -49,19 +53,15 @@ function EventsList() {
     countFn: registryApi.countEvents,
     defaultPageSize: 50,
     extraParams,
-    externalRefreshKey: filterKey,
+    controlledState: {
+      pagination: urlState.pagination,
+      sorting: urlState.sorting,
+      globalFilter: urlState.globalFilter,
+      setPagination: urlState.setPagination,
+      setSorting: urlState.setSorting,
+      setGlobalFilter: urlState.setGlobalFilter,
+    },
   });
-
-  // When filters change, reset to page 0 and trigger a re-fetch via filterKey.
-  // Skip on mount — the initial fetch is already handled by the hook.
-  useEffect(() => {
-    if (isFirstFilterRun.current) {
-      isFirstFilterRun.current = false;
-      return;
-    }
-    setPagination(prev => ({ ...prev, pageIndex: 0 }));
-    setFilterKey(k => k + 1);
-  }, [categoryFilter, showResolved, tagFilter]);
 
   useEffect(() => {
     registryApi.listEventContracts().then(ecs => {
@@ -84,11 +84,6 @@ function EventsList() {
     () => rawEvents.map(e => ({ ...e, contractCount: contractCounts[e.eventId] ?? 0 })),
     [rawEvents, contractCounts],
   );
-
-  const setTagFilter = (tag: string) => {
-    if (tag) setSearchParams({ tag });
-    else setSearchParams({});
-  };
 
   const columns = useMemo<MRT_ColumnDef<EnrichedEvent>[]>(() => [
     {
@@ -166,7 +161,6 @@ function EventsList() {
       navigateRowProps(navigate, `/predictions/events/${row.original.eventId}`)
     ),
     initialState: {
-      sorting: [{ id: 'dateCreated', desc: true }],
       density: 'xs',
     },
   });
@@ -184,8 +178,8 @@ function EventsList() {
           <Select
             placeholder="All Categories"
             data={categories}
-            value={categoryFilter}
-            onChange={setCategoryFilter}
+            value={category || null}
+            onChange={setCategory}
             clearable
             size="sm"
             style={{ width: 180 }}
@@ -193,9 +187,9 @@ function EventsList() {
           <Input
             placeholder="Filter by tag"
             leftSection={<IconTag size={14} />}
-            rightSection={tagFilter ? <CloseButton size="sm" onClick={() => setTagFilter('')} /> : undefined}
-            value={tagFilter}
-            onChange={e => setTagFilter(e.currentTarget.value)}
+            rightSection={tag ? <CloseButton size="sm" onClick={() => setTag('')} /> : undefined}
+            value={tag}
+            onChange={e => setTag(e.currentTarget.value)}
             size="sm"
             style={{ width: 160 }}
           />
@@ -206,16 +200,16 @@ function EventsList() {
           </Tooltip>
         </Group>
       </Group>
-      {tagFilter && (
+      {tag && (
         <Group mb="sm" gap="xs">
           <Badge
             size="sm"
             variant="light"
             color="green"
             leftSection={<IconTag size={10} />}
-            rightSection={<CloseButton size="xs" onClick={() => setTagFilter('')} />}
+            rightSection={<CloseButton size="xs" onClick={() => setTag('')} />}
           >
-            {tagFilter}
+            {tag}
           </Badge>
         </Group>
       )}

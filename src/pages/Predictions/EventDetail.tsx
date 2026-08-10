@@ -6,19 +6,22 @@ import {
   Badge,
   Breadcrumbs,
   Button,
+  Card,
   Container,
   Grid,
   Group,
   Loader,
   Paper,
+  SimpleGrid,
   Stack,
   Table,
   Text,
+  ThemeIcon,
   Title,
   Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconExternalLink, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
+import { IconExternalLink, IconPlayerPlay, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
@@ -52,7 +55,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <Group justify="space-between" py={4} style={{ borderBottom: '1px solid var(--mantine-color-dark-5)' }}>
       <Text size="sm" c="dimmed">{label}</Text>
-      <Text size="sm">{value}</Text>
+      <Text size="sm" component="div">{value}</Text>
     </Group>
   );
 }
@@ -401,6 +404,29 @@ function EventDetail() {
           )}
         </Paper>
       )}
+
+      <Paper withBorder p="md" mb="md">
+        <Title order={5} mb="sm">Tools</Title>
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
+          <Card
+            component={Link}
+            to={`/market-data/collectors?eventId=${event.eventId}&eventTitle=${encodeURIComponent(event.title)}`}
+            withBorder
+            padding="sm"
+            style={{ cursor: 'pointer', textDecoration: 'none' }}
+          >
+            <Group wrap="nowrap">
+              <ThemeIcon variant="light" color="green" size="lg" radius="md">
+                <IconPlayerPlay size={18} />
+              </ThemeIcon>
+              <div>
+                <Text size="sm" fw={500}>Launch Collector</Text>
+                <Text size="xs" c="dimmed">Collect market data for all {contracts.length} contracts</Text>
+              </div>
+            </Group>
+          </Card>
+        </SimpleGrid>
+      </Paper>
     </Container>
   );
 }

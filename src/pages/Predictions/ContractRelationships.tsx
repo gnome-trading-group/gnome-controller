@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   ActionIcon,
   Anchor,
@@ -21,6 +21,7 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { ContractRelationship, ContractRelationshipType } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
+import { useUrlTableState } from '../../hooks/useUrlTableState';
 import RelationshipGraph from './RelationshipGraph';
 import CreateRelationshipModal from './CreateRelationshipModal';
 
@@ -50,13 +51,18 @@ const METHOD_OPTIONS = [
 ];
 
 function ContractRelationships() {
-  const [view, setView] = useState<'table' | 'graph'>('table');
-  const [methodFilter, setMethodFilter] = useState<string | null>(null);
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
-  const [showResolved, setShowResolved] = useState(false);
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
-  const [filterKey, setFilterKey] = useState(0);
-  const isFirstFilterRun = useRef(true);
+
+  const urlState = useUrlTableState({ defaultSort: { id: 'confidence', desc: true } });
+  const methodFilter = urlState.getParam('method') || null;
+  const typeFilter = urlState.getParam('type') || null;
+  const showResolved = urlState.getParam('resolved') === 'true';
+  const view = (urlState.getParam('view') || 'table') as 'table' | 'graph';
+
+  const setMethodFilter = (v: string | null) => urlState.setParam('method', v ?? '');
+  const setTypeFilter = (v: string | null) => urlState.setParam('type', v ?? '');
+  const setShowResolved = (v: boolean) => urlState.setParam('resolved', v ? 'true' : '');
+  const setView = (v: string) => urlState.setParam('view', v === 'table' ? '' : v);
 
   const extraParams = useMemo(() => {
     const p: Record<string, string | number | boolean> = {};
@@ -80,17 +86,15 @@ function ContractRelationships() {
     countFn: registryApi.countContractRelationships,
     defaultPageSize: 50,
     extraParams,
-    externalRefreshKey: filterKey,
+    controlledState: {
+      pagination: urlState.pagination,
+      sorting: urlState.sorting,
+      globalFilter: urlState.globalFilter,
+      setPagination: urlState.setPagination,
+      setSorting: urlState.setSorting,
+      setGlobalFilter: urlState.setGlobalFilter,
+    },
   });
-
-  useEffect(() => {
-    if (isFirstFilterRun.current) {
-      isFirstFilterRun.current = false;
-      return;
-    }
-    setPagination(prev => ({ ...prev, pageIndex: 0 }));
-    setFilterKey(k => k + 1);
-  }, [methodFilter, typeFilter, showResolved]);
 
   const handleDelete = async (relationshipId: number) => {
     try {
@@ -195,7 +199,6 @@ function ContractRelationships() {
       withColumnBorders: true,
     },
     initialState: {
-      sorting: [{ id: 'confidence', desc: true }],
       density: 'xs',
     },
     renderRowActions: ({ row }: { row: MRT_Row<ContractRelationship> }) => (
@@ -248,7 +251,7 @@ function ContractRelationships() {
           </Tooltip>
           <SegmentedControl
             value={view}
-            onChange={v => setView(v as 'table' | 'graph')}
+            onChange={setView}
             size="sm"
             data={[
               { value: 'table', label: 'Table' },

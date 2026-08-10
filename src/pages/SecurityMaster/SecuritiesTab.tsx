@@ -19,6 +19,7 @@ import { Security, SecurityType } from '../../types';
 import { registryApi } from '../../utils/api';
 import { formatAssetClass, formatSecurityType } from '../../utils/security-master';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
+import { useUrlTableState } from '../../hooks/useUrlTableState';
 
 interface SecuritiesTabProps {
   onDelete: (type: 'security', id: number, name: string) => void;
@@ -35,6 +36,8 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
     description: '',
   });
 
+  const urlState = useUrlTableState();
+
   const {
     data: securities,
     total,
@@ -50,6 +53,14 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
     fetchFn: registryApi.listSecuritiesPaginated,
     countFn: registryApi.countSecurities,
     externalRefreshKey,
+    controlledState: {
+      pagination: urlState.pagination,
+      sorting: urlState.sorting,
+      globalFilter: urlState.globalFilter,
+      setPagination: urlState.setPagination,
+      setSorting: urlState.setSorting,
+      setGlobalFilter: urlState.setGlobalFilter,
+    },
   });
 
   const handleCreateSecurity = async () => {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   ActionIcon,
   Badge,
@@ -21,7 +21,9 @@ import { DenormalizedListing } from '../../types';
 import { registryApi } from '../../utils/api';
 import { formatSecurityType } from '../../utils/security-master';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
+import { useUrlTableState } from '../../hooks/useUrlTableState';
 import { useSecuritySearch } from '../../hooks/useAsyncSearch';
+import { useState } from 'react';
 
 interface ListingsTabProps {
   onDelete: (type: 'listing', id: number, name: string) => void;
@@ -42,6 +44,8 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
   const [securitySearch, setSecuritySearch] = useState('');
   const { options: securityOptions, isLoading: securitySearchLoading } = useSecuritySearch(securitySearch);
 
+  const urlState = useUrlTableState();
+
   const {
     data: listings,
     total,
@@ -57,6 +61,14 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
     fetchFn: registryApi.listListingsPaginated,
     countFn: registryApi.countListings,
     externalRefreshKey,
+    controlledState: {
+      pagination: urlState.pagination,
+      sorting: urlState.sorting,
+      globalFilter: urlState.globalFilter,
+      setPagination: urlState.setPagination,
+      setSorting: urlState.setSorting,
+      setGlobalFilter: urlState.setGlobalFilter,
+    },
   });
 
   const handleCreateListing = async () => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { navigateRowProps } from '../../../utils/navigation';
 import { marketDataApi, registryApi, ApiError } from '../../../utils/api';
 import { DenormalizedListing, EventContract, ExchangeEvent } from '../../../types';
@@ -53,6 +53,7 @@ function suggestSizing(count: number): { cpu: string; memory: string } {
 
 function Collectors() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { exchanges } = useGlobalState();
   const [collectors, setCollectors] = useState<Collector[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +82,7 @@ function Collectors() {
   const [exchangeEvents, setExchangeEvents] = useState<ExchangeEvent[]>([]);
   const [eventListings, setEventListings] = useState<DenormalizedListing[]>([]);
   const [loadingEventListings, setLoadingEventListings] = useState(false);
+  const [prefilledEvent, setPrefilledEvent] = useState<{ value: string; label: string } | null>(null);
 
   // Stop/redeploy modals
   const [stopModalOpen, setStopModalOpen] = useState(false);
@@ -156,6 +158,7 @@ function Collectors() {
       eventContracts.map(ec =>
         registryApi.listListingsPaginated({ securityId: ec.securityId, exchangeId, limit: 1, denormalize: true })
           .then((rows: DenormalizedListing[]) => rows[0] ?? null)
+          .catch(() => null)
       )
     ).then(results => {
       setEventListings(results.filter((l): l is DenormalizedListing => l !== null));
@@ -169,6 +172,31 @@ function Collectors() {
       .filter(e => ids.has(e.exchangeId))
       .map(e => ({ value: String(e.exchangeId), label: e.exchangeName }));
   }, [exchangeEvents, exchanges]);
+
+  const eventSelectData = useMemo(() => {
+    if (!prefilledEvent) return eventSearchOptions;
+    if (eventSearchOptions.some(o => o.value === prefilledEvent.value)) return eventSearchOptions;
+    return [prefilledEvent, ...eventSearchOptions];
+  }, [eventSearchOptions, prefilledEvent]);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const eventId = searchParams.get('eventId');
+    const eventTitle = searchParams.get('eventTitle');
+    if (eventId && eventTitle) {
+      setMode('event');
+      setSelectedEventId(eventId);
+      setPrefilledEvent({ value: eventId, label: eventTitle });
+      setCreateModalOpen(true);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (exchangeOptions.length === 1 && !selectedExchangeId) {
+      setSelectedExchangeId(exchangeOptions[0].value);
+    }
+  }, [exchangeOptions]);
 
   const listingMergedData = useMemo(() => [
     ...Object.entries(selectedListingItems)
@@ -203,6 +231,7 @@ function Collectors() {
     setEventContracts([]);
     setExchangeEvents([]);
     setEventListings([]);
+    setPrefilledEvent(null);
     setSizingUserOverridden(false);
     setCpu('256');
     setMemory('512');
@@ -460,7 +489,7 @@ function Collectors() {
               <Select
                 label="Event"
                 placeholder="Search events..."
-                data={eventSearchOptions}
+                data={eventSelectData}
                 searchable
                 searchValue={eventSearchValue}
                 onSearchChange={setEventSearchValue}
@@ -519,7 +548,7 @@ function Collectors() {
           </Group>
 
           {effectiveRegion && (
-            <Text size="sm" c="dimmed">
+            <Text size="sm" c="dimmed" component="div">
               Region: <Badge size="sm">{effectiveRegion}</Badge>
             </Text>
           )}

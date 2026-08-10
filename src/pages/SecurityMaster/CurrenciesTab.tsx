@@ -4,8 +4,11 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { Currency } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
+import { useUrlTableState } from '../../hooks/useUrlTableState';
 
 function CurrenciesTab() {
+  const urlState = useUrlTableState();
+
   const {
     data: currencies,
     total,
@@ -19,6 +22,14 @@ function CurrenciesTab() {
   } = useServerPaginatedTable<Currency>({
     fetchFn: registryApi.listCurrenciesPaginated,
     countFn: registryApi.countCurrencies,
+    controlledState: {
+      pagination: urlState.pagination,
+      sorting: urlState.sorting,
+      globalFilter: urlState.globalFilter,
+      setPagination: urlState.setPagination,
+      setSorting: urlState.setSorting,
+      setGlobalFilter: urlState.setGlobalFilter,
+    },
   });
 
   const columns = useMemo<MRT_ColumnDef<Currency>[]>(() => [
