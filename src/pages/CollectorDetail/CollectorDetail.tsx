@@ -48,9 +48,9 @@ interface TaskDetail {
   taskArn: string;
   lastStatus: string;
   healthStatus: string;
-  createdAt: number;
-  startedAt?: number;
-  stoppedAt?: number;
+  createdAt: string;
+  startedAt?: string;
+  stoppedAt?: string;
   cpu: string;
   memory: string;
 }
@@ -416,17 +416,17 @@ function CollectorDetail() {
                 <Group gap="md" mt="xs">
                   {task.createdAt && (
                     <Text size="xs" c="dimmed">
-                      Created: <ReactTimeAgo date={task.createdAt * 1000} timeStyle="round" />
+                      Created: <ReactTimeAgo date={new Date(task.createdAt)} timeStyle="round" />
                     </Text>
                   )}
                   {task.startedAt && (
                     <Text size="xs" c="dimmed">
-                      Started: <ReactTimeAgo date={task.startedAt * 1000} timeStyle="round" />
+                      Started: <ReactTimeAgo date={new Date(task.startedAt)} timeStyle="round" />
                     </Text>
                   )}
                   {task.stoppedAt && (
                     <Text size="xs" c="dimmed">
-                      Stopped: <ReactTimeAgo date={task.stoppedAt * 1000} timeStyle="round" />
+                      Stopped: <ReactTimeAgo date={new Date(task.stoppedAt)} timeStyle="round" />
                     </Text>
                   )}
                 </Group>
