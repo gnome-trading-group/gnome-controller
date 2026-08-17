@@ -40,6 +40,8 @@ const routes = [
       { label: 'Strategies', link: '/strategies' },
       { label: 'Sessions', link: '/sessions' },
       { label: 'Risk Policies', link: '/risk/policies' },
+      { label: 'Launch Rules', link: '/trading/launch-rules' },
+      { label: 'Launch History', link: '/trading/launch-history' },
     ],
   },
   { icon: IconTestPipe, label: 'Backtests', link: '/backtests' },

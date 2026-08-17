@@ -24,7 +24,7 @@ def create_response(status_code: int, body: Any) -> Dict[str, Any]:
     return {
         'statusCode': status_code,
         'headers': CORS_HEADERS,
-        'body': json.dumps(body, cls=DecimalEncoder)
+        'body': json.dumps(body, cls=DecimalEncoder, sort_keys=True)
     }
 
 def lambda_handler(func: Callable[[Dict[str, Any]], Dict[str, Any]]) -> Callable[[Dict[str, Any], Any], Dict[str, Any]]:

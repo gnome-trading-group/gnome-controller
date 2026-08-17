@@ -1,4 +1,5 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
+import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
 import { ContractRelationship, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, ExchangeEvent, Exchange, HedgeKeyword, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
@@ -20,6 +21,8 @@ const REGISTRY_API_URL = import.meta.env.VITE_REGISTRY_API_URL;
 const REGISTRY_API_KEY = import.meta.env.VITE_REGISTRY_API_KEY;
 const MARKET_DATA_API_URL = import.meta.env.VITE_MARKET_DATA_API_URL;
 const SERVICE_CONFIG_API_KEY = import.meta.env.VITE_SERVICE_CONFIG_API_KEY;
+const LAUNCHER_API_URL = import.meta.env.VITE_LAUNCHER_API_URL;
+const LAUNCHER_API_KEY = import.meta.env.VITE_LAUNCHER_API_KEY;
 
 export class ApiError extends Error {
   constructor(public statusCode: number, message: string) {
@@ -831,5 +834,53 @@ export const controllerApi = {
     sendApiRequest<ServiceConfigResponse>(`/config/${service}`, 'PUT', {
       apiUrl: CONTROLLER_API_URL,
       body: { config, version },
+    }),
+}
+
+export const launcherApi = {
+  getRuleTypes: () =>
+    sendApiRequest<RuleType[]>('/rule-types', 'GET', {
+      apiUrl: LAUNCHER_API_URL,
+      apiKey: LAUNCHER_API_KEY,
+    }),
+
+  listRules: () =>
+    sendApiRequest<LaunchRule[]>('/launch-rules', 'GET', {
+      apiUrl: LAUNCHER_API_URL,
+      apiKey: LAUNCHER_API_KEY,
+    }),
+  createRule: (body: Omit<LaunchRule, 'rule_id' | 'date_created' | 'date_modified'>) =>
+    sendApiRequest<LaunchRule>('/launch-rules', 'POST', {
+      apiUrl: LAUNCHER_API_URL,
+      apiKey: LAUNCHER_API_KEY,
+      body,
+    }),
+  updateRule: (ruleId: string, body: Partial<LaunchRule>) =>
+    sendApiRequest<LaunchRule>(`/launch-rules/${ruleId}`, 'PATCH', {
+      apiUrl: LAUNCHER_API_URL,
+      apiKey: LAUNCHER_API_KEY,
+      body,
+    }),
+  deleteRule: (ruleId: string) =>
+    sendApiRequest<{ deleted: string }>(`/launch-rules/${ruleId}`, 'DELETE', {
+      apiUrl: LAUNCHER_API_URL,
+      apiKey: LAUNCHER_API_KEY,
+    }),
+
+  listRequests: (params?: { status?: string; rule_type?: string; limit?: number }) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.status) queryParams.status = params.status;
+    if (params?.rule_type) queryParams.rule_type = params.rule_type;
+    if (params?.limit) queryParams.limit = params.limit;
+    return sendApiRequest<LaunchRequest[]>('/launch-requests', 'GET', {
+      apiUrl: LAUNCHER_API_URL,
+      apiKey: LAUNCHER_API_KEY,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  getRequest: (requestId: string) =>
+    sendApiRequest<LaunchRequest>(`/launch-requests/${requestId}`, 'GET', {
+      apiUrl: LAUNCHER_API_URL,
+      apiKey: LAUNCHER_API_KEY,
     }),
 }

@@ -17,6 +17,18 @@ import { IconAlertCircle, IconCheck, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { ApiError, controllerApi } from '../../utils/api';
 
+function sortKeys(obj: unknown): unknown {
+  if (Array.isArray(obj)) return obj.map(sortKeys);
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => [k, sortKeys(v)])
+    );
+  }
+  return obj;
+}
+
 const SERVICES = [
   { value: 'classifier', label: 'gnome-classifier' },
 ];
@@ -37,7 +49,7 @@ function ServiceConfig() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const isDirty = state !== null && draft !== JSON.stringify(state.config, null, 2);
+  const isDirty = state !== null && draft !== JSON.stringify(sortKeys(state.config), null, 2);
 
   const load = useCallback(async (svc: string) => {
     setLoading(true);
@@ -46,7 +58,7 @@ function ServiceConfig() {
     setDraft('');
     try {
       const res = await controllerApi.getServiceConfig(svc);
-      const pretty = JSON.stringify(res.config, null, 2);
+      const pretty = JSON.stringify(sortKeys(res.config), null, 2);
       setState({
         config: res.config,
         version: res.version,
@@ -84,7 +96,7 @@ function ServiceConfig() {
     setError(null);
     try {
       const res = await controllerApi.updateServiceConfig(service, parsed, state.version);
-      const pretty = JSON.stringify(res.config, null, 2);
+      const pretty = JSON.stringify(sortKeys(res.config), null, 2);
       setState({
         config: res.config,
         version: res.version,
@@ -163,7 +175,7 @@ function ServiceConfig() {
 
         <Group justify="flex-end">
           {isDirty && (
-            <Button variant="subtle" color="gray" onClick={() => state && setDraft(JSON.stringify(state.config, null, 2))}>
+            <Button variant="subtle" color="gray" onClick={() => state && setDraft(JSON.stringify(sortKeys(state.config), null, 2))}>
               Discard
             </Button>
           )}
