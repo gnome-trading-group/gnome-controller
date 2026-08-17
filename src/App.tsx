@@ -38,6 +38,7 @@ import Dashboard from './pages/Dashboard/Dashboard';
 import ServiceConfig from './pages/Tools/ServiceConfig';
 import LaunchRules from './pages/Launcher/LaunchRules';
 import LaunchHistory from './pages/Launcher/LaunchHistory';
+import ManualTrigger from './pages/Launcher/ManualTrigger';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -148,8 +149,9 @@ function AppContent() {
             <Route path="/predictions/hedge-keywords" element={<HedgeKeywords />} />
             <Route path="/sessions" element={<SessionsList />} />
             <Route path="/sessions/:sessionId" element={<SessionDetail />} />
-            <Route path="/trading/launch-rules" element={<LaunchRules />} />
-            <Route path="/trading/launch-history" element={<LaunchHistory />} />
+            <Route path="/launcher/launch-rules" element={<LaunchRules />} />
+            <Route path="/launcher/launch-history" element={<LaunchHistory />} />
+            <Route path="/launcher/manual-trigger" element={<ManualTrigger />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/logout" element={<Logout />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />

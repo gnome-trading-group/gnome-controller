@@ -883,4 +883,10 @@ export const launcherApi = {
       apiUrl: LAUNCHER_API_URL,
       apiKey: LAUNCHER_API_KEY,
     }),
+  submitTrigger: (body: { rule_type: string; data: Record<string, unknown> }) =>
+    sendApiRequest<{ message: string }>('/triggers', 'POST', {
+      apiUrl: LAUNCHER_API_URL,
+      apiKey: LAUNCHER_API_KEY,
+      body,
+    }),
 }

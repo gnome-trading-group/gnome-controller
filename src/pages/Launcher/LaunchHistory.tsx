@@ -133,7 +133,7 @@ function DetailDrawer({ request, onClose }: { request: LaunchRequest | null; onC
 
         {request.launch_error && (
           <Stack gap={4}>
-            <Text size="xs" c="dimmed" c="red">Launch Error</Text>
+            <Text size="xs" c="red">Launch Error</Text>
             <Code block c="red">{request.launch_error}</Code>
           </Stack>
         )}

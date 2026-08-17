@@ -1,4 +1,4 @@
-import { IconGauge, IconLockSquareRounded, IconNotes, IconTool, IconChartLine, IconTestPipe, IconFlask, IconScale } from "@tabler/icons-react";
+import { IconGauge, IconLockSquareRounded, IconNotes, IconTool, IconChartLine, IconTestPipe, IconFlask, IconScale, IconRocket } from "@tabler/icons-react";
 import { AppShell, Paper, Group, ScrollArea, Code, Title, UnstyledButton } from '@mantine/core';
 import { useLocation } from 'react-router-dom';
 import logo from '../../assets/logo.svg';
@@ -40,8 +40,15 @@ const routes = [
       { label: 'Strategies', link: '/strategies' },
       { label: 'Sessions', link: '/sessions' },
       { label: 'Risk Policies', link: '/risk/policies' },
-      { label: 'Launch Rules', link: '/trading/launch-rules' },
-      { label: 'Launch History', link: '/trading/launch-history' },
+    ],
+  },
+  {
+    label: 'Launcher',
+    icon: IconRocket,
+    links: [
+      { label: 'Launch Rules', link: '/launcher/launch-rules' },
+      { label: 'Launch History', link: '/launcher/launch-history' },
+      { label: 'Manual Trigger', link: '/launcher/manual-trigger' },
     ],
   },
   { icon: IconTestPipe, label: 'Backtests', link: '/backtests' },
