@@ -27,24 +27,19 @@ import CreateRelationshipModal from './CreateRelationshipModal';
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
-  COMPLEMENT: 'teal',
   IMPLIES: 'blue',
   MUTUALLY_EXCLUSIVE: 'orange',
-
   HEDGEABLE_WITH: 'violet',
 };
 
 const RELATIONSHIP_TYPE_OPTIONS = [
   { value: 'EQUIVALENT', label: 'Equivalent' },
-  { value: 'COMPLEMENT', label: 'Complement' },
   { value: 'IMPLIES', label: 'Implies' },
   { value: 'MUTUALLY_EXCLUSIVE', label: 'Mutually Exclusive' },
-
   { value: 'HEDGEABLE_WITH', label: 'Hedgeable With' },
 ];
 
 const METHOD_OPTIONS = [
-  { value: 'structural', label: 'Structural' },
   { value: 'embedding', label: 'Embedding' },
   { value: 'rule', label: 'Rule' },
   { value: 'manual', label: 'Manual' },

@@ -5,10 +5,8 @@ import { ContractRelationshipType } from '../../../types';
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
-  COMPLEMENT: 'teal',
   IMPLIES: 'blue',
   MUTUALLY_EXCLUSIVE: 'orange',
-
   HEDGEABLE_WITH: 'violet',
 };
 

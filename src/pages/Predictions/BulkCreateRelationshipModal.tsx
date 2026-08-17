@@ -21,7 +21,6 @@ import { useEventSearch } from '../../hooks/useAsyncSearch';
 
 const RELATIONSHIP_TYPE_OPTIONS: { value: ContractRelationshipType; label: string }[] = [
   { value: 'EQUIVALENT', label: 'Equivalent' },
-  { value: 'COMPLEMENT', label: 'Complement' },
   { value: 'IMPLIES', label: 'Implies' },
   { value: 'MUTUALLY_EXCLUSIVE', label: 'Mutually Exclusive' },
   { value: 'HEDGEABLE_WITH', label: 'Hedgeable With' },
@@ -29,7 +28,6 @@ const RELATIONSHIP_TYPE_OPTIONS: { value: ContractRelationshipType; label: strin
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
-  COMPLEMENT: 'teal',
   IMPLIES: 'blue',
   MUTUALLY_EXCLUSIVE: 'orange',
   HEDGEABLE_WITH: 'violet',

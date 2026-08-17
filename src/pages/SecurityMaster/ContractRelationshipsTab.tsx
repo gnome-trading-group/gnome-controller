@@ -8,10 +8,8 @@ import { registryApi } from '../../utils/api';
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
-  COMPLEMENT: 'teal',
   IMPLIES: 'blue',
   MUTUALLY_EXCLUSIVE: 'orange',
-
   HEDGEABLE_WITH: 'violet',
 };
 

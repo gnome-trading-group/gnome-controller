@@ -33,10 +33,8 @@ import BulkCreateRelationshipModal from './BulkCreateRelationshipModal';
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
-  COMPLEMENT: 'teal',
   IMPLIES: 'blue',
   MUTUALLY_EXCLUSIVE: 'orange',
-
   HEDGEABLE_WITH: 'violet',
 };
 
@@ -355,7 +353,15 @@ function EventDetail() {
       </Grid>
 
       <Paper withBorder p="md" mb="md">
-        <Title order={5} mb="sm">Contracts ({contracts.length})</Title>
+        <Group justify="space-between" mb="sm">
+          <Title order={5}>Contracts ({contracts.length})</Title>
+          {contracts.length === 2 && (
+            <Badge color="teal" variant="light" size="sm">Binary · Contracts are complements</Badge>
+          )}
+          {contracts.length > 2 && (
+            <Badge color="orange" variant="light" size="sm">Multi-Outcome · All mutually exclusive</Badge>
+          )}
+        </Group>
         <MantineReactTable table={contractTable} />
       </Paper>
 

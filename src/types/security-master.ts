@@ -29,10 +29,8 @@ export enum AssetClass {
 
 export type ContractRelationshipType =
   | 'EQUIVALENT'
-  | 'COMPLEMENT'
   | 'IMPLIES'
   | 'MUTUALLY_EXCLUSIVE'
-
   | 'HEDGEABLE_WITH';
 
 export interface Security {
