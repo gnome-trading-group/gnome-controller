@@ -137,3 +137,29 @@ export function useListingLabels(listingIds: number[]): Record<number, string> {
 
   return labels;
 }
+
+export function useListingDetails(listingIds: number[]): Record<number, DenormalizedListing> {
+  const [details, setDetails] = useState<Record<number, DenormalizedListing>>({});
+  const prevIds = useRef<string>('');
+
+  useEffect(() => {
+    if (listingIds.length === 0) return;
+    const key = [...listingIds].sort().join(',');
+    if (key === prevIds.current) return;
+    prevIds.current = key;
+
+    const unique = [...new Set(listingIds)];
+    Promise.all(unique.map(id =>
+      registryApi.listListingsPaginated({ listingId: id, limit: 1 })
+        .then((rows: DenormalizedListing[]) => rows[0])
+    )).then(results => {
+      const map: Record<number, DenormalizedListing> = {};
+      results.forEach(l => {
+        if (l) map[l.listingId] = l;
+      });
+      setDetails(map);
+    }).catch(() => {});
+  }, [listingIds.join(',')]);
+
+  return details;
+}

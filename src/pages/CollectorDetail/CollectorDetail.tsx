@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { useListingLabels } from '../../hooks/useAsyncSearch';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useListingDetails } from '../../hooks/useAsyncSearch';
+import { handleNavigateClick } from '../../utils/navigation';
 import {
   Container,
   Title,
@@ -21,6 +22,9 @@ import {
   Loader,
   Modal,
   Button,
+  Anchor,
+  Breadcrumbs,
+  Table,
 } from '@mantine/core';
 import { IconRefresh, IconExternalLink, IconPlayerStop, IconAB2 } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
@@ -37,6 +41,7 @@ interface Collector {
   taskArns: string[];
   cpu?: string;
   memory?: string;
+  region?: string;
 }
 
 interface TaskDetail {
@@ -64,9 +69,10 @@ interface LogEvent {
 
 function CollectorDetail() {
   const { listingId } = useParams<{ listingId: string }>();
+  const navigate = useNavigate();
   const [collector, setCollector] = useState<Collector | null>(null);
   const listingIds = collector?.listingIds ?? (listingId ? [Number(listingId)] : []);
-  const listingLabels = useListingLabels(listingIds);
+  const listingDetails = useListingDetails(listingIds);
   const [taskDetails, setTaskDetails] = useState<TaskDetail[]>([]);
   const [logs, setLogs] = useState<LogsResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -239,6 +245,10 @@ function CollectorDetail() {
 
   return (
     <Container size="xl" py="xl">
+      <Breadcrumbs mb="md">
+        <Anchor onClick={() => navigate('/market-data/collectors')} size="sm">Collectors</Anchor>
+        <Text size="sm">Collector {listingId}</Text>
+      </Breadcrumbs>
       <Group justify="space-between" mb="md">
         <Title order={2}>Collector {listingId}</Title>
         <Group>
@@ -296,14 +306,35 @@ function CollectorDetail() {
           <Card withBorder>
             <Title order={4} mb="md">Listings ({listingIds.length})</Title>
             {listingIds.length > 0 ? (
-              <Stack gap="xs">
-                {listingIds.map(id => (
-                  <Group key={id} justify="space-between">
-                    <Text size="sm" c="dimmed">{id}</Text>
-                    <Text size="sm">{listingLabels[id] ?? '...'}</Text>
-                  </Group>
-                ))}
-              </Stack>
+              <Table withRowBorders={false} verticalSpacing="xs">
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th><Text size="xs" c="dimmed">Symbol</Text></Table.Th>
+                    <Table.Th><Text size="xs" c="dimmed">Exchange</Text></Table.Th>
+                    <Table.Th><Text size="xs" c="dimmed">ID</Text></Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {listingIds.map(id => {
+                    const listing = listingDetails[id];
+                    return (
+                      <Table.Tr key={id}>
+                        <Table.Td>
+                          <Anchor size="sm" onClick={(e) => handleNavigateClick(e, navigate, `/security-master/listings/${id}`)}>
+                            {listing?.securitySymbol ?? '...'}
+                          </Anchor>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm">{listing?.exchangeName ?? '...'}</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm" c="dimmed">#{id}</Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
+                </Table.Tbody>
+              </Table>
             ) : (
               <Text c="dimmed">No listing information available</Text>
             )}
@@ -320,6 +351,12 @@ function CollectorDetail() {
                   {collector.status}
                 </Badge>
               </Group>
+              {collector.region && (
+                <Group justify="space-between">
+                  <Text fw={500}>Region:</Text>
+                  <Text>{collector.region}</Text>
+                </Group>
+              )}
               <Group justify="space-between">
                 <Text fw={500}>Last Status Change:</Text>
                 <Text>
@@ -376,6 +413,23 @@ function CollectorDetail() {
                 <Text size="xs" c="dimmed" mt="xs">
                   {task.taskArn.split('/').pop()}
                 </Text>
+                <Group gap="md" mt="xs">
+                  {task.createdAt && (
+                    <Text size="xs" c="dimmed">
+                      Created: <ReactTimeAgo date={task.createdAt * 1000} timeStyle="round" />
+                    </Text>
+                  )}
+                  {task.startedAt && (
+                    <Text size="xs" c="dimmed">
+                      Started: <ReactTimeAgo date={task.startedAt * 1000} timeStyle="round" />
+                    </Text>
+                  )}
+                  {task.stoppedAt && (
+                    <Text size="xs" c="dimmed">
+                      Stopped: <ReactTimeAgo date={task.stoppedAt * 1000} timeStyle="round" />
+                    </Text>
+                  )}
+                </Group>
               </Card>
             ))}
           </Stack>
