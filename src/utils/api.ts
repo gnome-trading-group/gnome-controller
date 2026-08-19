@@ -124,6 +124,11 @@ export const marketDataApi = {
       apiUrl: MARKET_DATA_API_URL,
       body: { listingId },
     }),
+  purgeCollector: (listingId: number) =>
+    sendApiRequest<{ message: string }>('/collectors/purge', 'DELETE', {
+      apiUrl: MARKET_DATA_API_URL,
+      body: { listingId },
+    }),
   redeployCollector: (listingId?: number) =>
     sendApiRequest<{ message: string }>('/collectors/redeploy', 'POST', {
       apiUrl: MARKET_DATA_API_URL,

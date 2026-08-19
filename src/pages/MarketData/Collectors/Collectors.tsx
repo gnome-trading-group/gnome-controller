@@ -20,7 +20,7 @@ import {
   MultiSelect,
   SegmentedControl,
 } from '@mantine/core';
-import { IconPlus, IconRefresh, IconPlayerStop, IconAB2 } from '@tabler/icons-react';
+import { IconPlus, IconRefresh, IconPlayerStop, IconAB2, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useGlobalState } from '../../../context/GlobalStateContext';
@@ -46,9 +46,10 @@ const MEMORY_OPTIONS_BY_CPU: Record<string, string[]> = {
 };
 
 function suggestSizing(count: number): { cpu: string; memory: string } {
-  if (count <= 5) return { cpu: '256', memory: '512' };
-  if (count <= 15) return { cpu: '256', memory: '1024' };
-  return { cpu: '256', memory: '2048' };
+  if (count <= 3) return { cpu: '256', memory: '512' };
+  if (count <= 6) return { cpu: '512', memory: '1024' };
+  if (count <= 12) return { cpu: '1024', memory: '2048' };
+  return { cpu: '2048', memory: '4096' };
 }
 
 function Collectors() {
@@ -90,6 +91,8 @@ function Collectors() {
   const [redeployModalOpen, setRedeployModalOpen] = useState(false);
   const [collectorToRedeploy, setCollectorToRedeploy] = useState<number | null>(null);
   const [redeployAllModalOpen, setRedeployAllModalOpen] = useState(false);
+  const [purgeModalOpen, setPurgeModalOpen] = useState(false);
+  const [collectorToPurge, setCollectorToPurge] = useState<number | null>(null);
 
   const activeListingIds: number[] = useMemo(() => {
     if (mode === 'event') return eventListings.map(l => l.listingId);
@@ -302,6 +305,19 @@ function Collectors() {
     }
   };
 
+  const handlePurgeCollector = async (listingId: number) => {
+    try {
+      setError(null);
+      await marketDataApi.purgeCollector(listingId);
+      await loadCollectors();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to delete collector');
+    } finally {
+      setPurgeModalOpen(false);
+      setCollectorToPurge(null);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'ACTIVE': return 'green';
@@ -377,36 +393,57 @@ function Collectors() {
     enableColumnActions: true,
     enableRowActions: true,
     positionActionsColumn: 'last',
-    renderRowActions: ({ row }) => (
-      row.original.status === 'ACTIVE' && (
-        <Group gap={4} justify="flex-start" wrap="nowrap">
-          <Tooltip label="Stop" position="bottom" withArrow openDelay={500}>
-            <ActionIcon
-              color="red"
-              onClick={(e) => {
-                e.stopPropagation();
-                setCollectorToStop(row.original.listingId);
-                setStopModalOpen(true);
-              }}
-            >
-              <IconPlayerStop size={16} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Redeploy" position="bottom" withArrow openDelay={500}>
-            <ActionIcon
-              color="blue"
-              onClick={(e) => {
-                e.stopPropagation();
-                setCollectorToRedeploy(row.original.listingId);
-                setRedeployModalOpen(true);
-              }}
-            >
-              <IconAB2 size={16} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
-      )
-    ),
+    renderRowActions: ({ row }) => {
+      if (row.original.status === 'ACTIVE') {
+        return (
+          <Group gap={4} justify="flex-start" wrap="nowrap">
+            <Tooltip label="Stop" position="bottom" withArrow openDelay={500}>
+              <ActionIcon
+                color="red"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCollectorToStop(row.original.listingId);
+                  setStopModalOpen(true);
+                }}
+              >
+                <IconPlayerStop size={16} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="Redeploy" position="bottom" withArrow openDelay={500}>
+              <ActionIcon
+                color="blue"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCollectorToRedeploy(row.original.listingId);
+                  setRedeployModalOpen(true);
+                }}
+              >
+                <IconAB2 size={16} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        );
+      }
+      if (row.original.status === 'INACTIVE') {
+        return (
+          <Group gap={4} justify="flex-start" wrap="nowrap">
+            <Tooltip label="Delete" position="bottom" withArrow openDelay={500}>
+              <ActionIcon
+                color="red"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCollectorToPurge(row.original.listingId);
+                  setPurgeModalOpen(true);
+                }}
+              >
+                <IconTrash size={16} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        );
+      }
+      return null;
+    },
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: true,
@@ -613,6 +650,27 @@ function Collectors() {
             </Button>
             <Button color="blue" onClick={() => { setRedeployAllModalOpen(false); handleRedeployCollector(); }}>
               Redeploy All
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={purgeModalOpen}
+        onClose={() => { setPurgeModalOpen(false); setCollectorToPurge(null); }}
+        title="Delete Collector Record"
+      >
+        <Stack>
+          <Text>Are you sure you want to permanently delete this collector record?</Text>
+          <Text size="sm" c="red" fw={500}>
+            This action cannot be undone. The collector metadata will be permanently removed from the database.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => { setPurgeModalOpen(false); setCollectorToPurge(null); }}>
+              Cancel
+            </Button>
+            <Button color="red" onClick={() => collectorToPurge && handlePurgeCollector(collectorToPurge)}>
+              Delete Permanently
             </Button>
           </Group>
         </Stack>

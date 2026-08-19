@@ -26,7 +26,7 @@ import {
   Breadcrumbs,
   Table,
 } from '@mantine/core';
-import { IconRefresh, IconExternalLink, IconPlayerStop, IconAB2 } from '@tabler/icons-react';
+import { IconRefresh, IconExternalLink, IconPlayerStop, IconAB2, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { marketDataApi } from '../../utils/api';
 
@@ -83,6 +83,7 @@ function CollectorDetail() {
   const [selectedTaskArn, setSelectedTaskArn] = useState<string>('');
   const [stopModalOpen, setStopModalOpen] = useState(false);
   const [redeployModalOpen, setRedeployModalOpen] = useState(false);
+  const [purgeModalOpen, setPurgeModalOpen] = useState(false);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -163,7 +164,7 @@ function CollectorDetail() {
 
   const handleRedeployCollector = async () => {
     if (!listingId) return;
-    
+
     try {
       setError(null);
       await marketDataApi.redeployCollector(Number(listingId));
@@ -176,6 +177,24 @@ function CollectorDetail() {
       }
     } finally {
       setRedeployModalOpen(false);
+    }
+  };
+
+  const handlePurgeCollector = async () => {
+    if (!listingId) return;
+
+    try {
+      setError(null);
+      await marketDataApi.purgeCollector(Number(listingId));
+      navigate('/market-data/collectors');
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to delete collector');
+      }
+    } finally {
+      setPurgeModalOpen(false);
     }
   };
 
@@ -266,9 +285,9 @@ function CollectorDetail() {
           {collector?.status === 'ACTIVE' && (
             <>
               <Tooltip label="Stop" position="bottom" withArrow openDelay={500}>
-                <ActionIcon 
-                  size="lg" 
-                  variant="filled" 
+                <ActionIcon
+                  size="lg"
+                  variant="filled"
                   color="red"
                   onClick={() => setStopModalOpen(true)}
                 >
@@ -276,9 +295,9 @@ function CollectorDetail() {
                 </ActionIcon>
               </Tooltip>
               <Tooltip label="Redeploy" position="bottom" withArrow openDelay={500}>
-                <ActionIcon 
-                  size="lg" 
-                  variant="filled" 
+                <ActionIcon
+                  size="lg"
+                  variant="filled"
                   color="blue"
                   onClick={() => setRedeployModalOpen(true)}
                 >
@@ -286,6 +305,18 @@ function CollectorDetail() {
                 </ActionIcon>
               </Tooltip>
             </>
+          )}
+          {collector?.status === 'INACTIVE' && (
+            <Tooltip label="Delete Record" position="bottom" withArrow openDelay={500}>
+              <ActionIcon
+                size="lg"
+                variant="filled"
+                color="red"
+                onClick={() => setPurgeModalOpen(true)}
+              >
+                <IconTrash size={20} />
+              </ActionIcon>
+            </Tooltip>
           )}
         </Group>
       </Group>
@@ -558,11 +589,33 @@ function CollectorDetail() {
             <Button variant="default" onClick={() => setRedeployModalOpen(false)}>
               Cancel
             </Button>
-            <Button 
-              color="blue" 
+            <Button
+              color="blue"
               onClick={handleRedeployCollector}
             >
               Redeploy Collector
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={purgeModalOpen}
+        onClose={() => setPurgeModalOpen(false)}
+        title="Delete Collector Record"
+      >
+        <Stack>
+          <Text>Are you sure you want to permanently delete this collector record?</Text>
+          <Text size="sm" c="red" fw={500}>
+            This action cannot be undone. The collector metadata will be permanently removed from the database.
+            You will need to create a new collector to resume data collection.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setPurgeModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button color="red" onClick={handlePurgeCollector}>
+              Delete Permanently
             </Button>
           </Group>
         </Stack>
