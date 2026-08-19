@@ -19,6 +19,8 @@ import {
   Select,
   MultiSelect,
   SegmentedControl,
+  Switch,
+  TextInput,
 } from '@mantine/core';
 import { IconPlus, IconRefresh, IconPlayerStop, IconPlayerPlay, IconAB2, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
@@ -57,6 +59,8 @@ function Collectors() {
   const [searchParams] = useSearchParams();
   const { exchanges } = useGlobalState();
   const [collectors, setCollectors] = useState<Collector[]>([]);
+  const [hideInactive, setHideInactive] = useState(true);
+  const [listingIdSearch, setListingIdSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -401,9 +405,20 @@ function Collectors() {
     },
   ];
 
+  const displayedCollectors = useMemo(() => {
+    let result = hideInactive ? collectors.filter(c => c.status !== 'INACTIVE') : collectors;
+    if (listingIdSearch.trim()) {
+      const search = listingIdSearch.trim();
+      result = result.filter(c =>
+        (c.listingIds ?? [c.listingId]).some(id => String(id).includes(search))
+      );
+    }
+    return result;
+  }, [collectors, hideInactive, listingIdSearch]);
+
   const table = useMantineReactTable({
     columns,
-    data: collectors,
+    data: displayedCollectors,
     enableColumnFilters: true,
     enableColumnActions: true,
     enableRowActions: true,
@@ -486,8 +501,19 @@ function Collectors() {
   return (
     <Container size="xl" py="xl">
       <Group justify="space-between" mb="md">
-        <Title order={2}>Active Collectors</Title>
+        <Title order={2}>Collectors</Title>
         <Group>
+          <TextInput
+            placeholder="Search listing ID..."
+            value={listingIdSearch}
+            onChange={e => setListingIdSearch(e.currentTarget.value)}
+            w={180}
+          />
+          <Switch
+            label="Hide Inactive"
+            checked={hideInactive}
+            onChange={e => setHideInactive(e.currentTarget.checked)}
+          />
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="green" onClick={() => loadCollectors(true)}>
               <IconRefresh size={20} />
