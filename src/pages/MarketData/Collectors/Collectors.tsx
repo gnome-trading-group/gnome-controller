@@ -20,7 +20,7 @@ import {
   MultiSelect,
   SegmentedControl,
 } from '@mantine/core';
-import { IconPlus, IconRefresh, IconPlayerStop, IconAB2, IconTrash } from '@tabler/icons-react';
+import { IconPlus, IconRefresh, IconPlayerStop, IconPlayerPlay, IconAB2, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useGlobalState } from '../../../context/GlobalStateContext';
@@ -93,6 +93,8 @@ function Collectors() {
   const [redeployAllModalOpen, setRedeployAllModalOpen] = useState(false);
   const [purgeModalOpen, setPurgeModalOpen] = useState(false);
   const [collectorToPurge, setCollectorToPurge] = useState<number | null>(null);
+  const [restartModalOpen, setRestartModalOpen] = useState(false);
+  const [collectorToRestart, setCollectorToRestart] = useState<Collector | null>(null);
 
   const activeListingIds: number[] = useMemo(() => {
     if (mode === 'event') return eventListings.map(l => l.listingId);
@@ -305,6 +307,19 @@ function Collectors() {
     }
   };
 
+  const handleRestartCollector = async (collector: Collector) => {
+    try {
+      setError(null);
+      await marketDataApi.createCollector(collector.listingIds, collector.region!, collector.cpu, collector.memory);
+      await loadCollectors();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to restart collector');
+    } finally {
+      setRestartModalOpen(false);
+      setCollectorToRestart(null);
+    }
+  };
+
   const handlePurgeCollector = async (listingId: number) => {
     try {
       setError(null);
@@ -427,6 +442,18 @@ function Collectors() {
       if (row.original.status === 'INACTIVE') {
         return (
           <Group gap={4} justify="flex-start" wrap="nowrap">
+            <Tooltip label="Restart" position="bottom" withArrow openDelay={500}>
+              <ActionIcon
+                color="green"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCollectorToRestart(row.original);
+                  setRestartModalOpen(true);
+                }}
+              >
+                <IconPlayerPlay size={16} />
+              </ActionIcon>
+            </Tooltip>
             <Tooltip label="Delete" position="bottom" withArrow openDelay={500}>
               <ActionIcon
                 color="red"
@@ -650,6 +677,27 @@ function Collectors() {
             </Button>
             <Button color="blue" onClick={() => { setRedeployAllModalOpen(false); handleRedeployCollector(); }}>
               Redeploy All
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={restartModalOpen}
+        onClose={() => { setRestartModalOpen(false); setCollectorToRestart(null); }}
+        title="Restart Collector"
+      >
+        <Stack>
+          <Text>Are you sure you want to restart this collector?</Text>
+          <Text size="sm" c="dimmed">
+            Listings: {collectorToRestart?.listingIds.join(', ')}
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => { setRestartModalOpen(false); setCollectorToRestart(null); }}>
+              Cancel
+            </Button>
+            <Button color="green" onClick={() => collectorToRestart && handleRestartCollector(collectorToRestart)}>
+              Restart
             </Button>
           </Group>
         </Stack>
