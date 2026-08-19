@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   Container,
+  CopyButton,
   Grid,
   Group,
   Loader,
@@ -21,11 +22,11 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconExternalLink, IconPlayerPlay, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
+import { IconCheck, IconCopy, IconExternalLink, IconPlayerPlay, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
-import { ContractRelationship, ContractRelationshipType, Event, EventContract, ExchangeEvent } from '../../types';
+import { ContractRelationship, ContractRelationshipType, DenormalizedListing, Event, EventContract, ExchangeEvent } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import RelationshipGraph from './RelationshipGraph';
@@ -70,6 +71,7 @@ function EventDetail() {
   const [exchangeEvents, setExchangeEvents] = useState<ExchangeEvent[]>([]);
   const [relationships, setRelationships] = useState<ContractRelationship[]>([]);
   const [loading, setLoading] = useState(true);
+  const [listingsBySecurityId, setListingsBySecurityId] = useState<Record<number, DenormalizedListing[]>>({});
   const [showGraph, setShowGraph] = useState(false);
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
 
@@ -82,11 +84,22 @@ function EventDetail() {
       registryApi.listEventContracts({ eventId: id }),
       registryApi.listExchangeEvents({ eventId: id }),
       registryApi.listContractRelationships({ eventId: id }),
-    ]).then(([evts, ecs, exEvts, rels]) => {
+    ]).then(async ([evts, ecs, exEvts, rels]) => {
       setEvent((evts as Event[])[0] ?? null);
       setExchangeEvents(exEvts as ExchangeEvent[]);
       setContracts(ecs as EventContract[]);
       setRelationships(rels as ContractRelationship[]);
+
+      const eventContracts = ecs as EventContract[];
+      const uniqueSecurityIds = [...new Set(eventContracts.map(c => c.securityId))];
+      const listingResults = await Promise.all(
+        uniqueSecurityIds.map(secId =>
+          registryApi.listListingsPaginated({ securityId: secId })
+            .then(listings => [secId, listings] as const)
+            .catch(() => [secId, []] as const)
+        )
+      );
+      setListingsBySecurityId(Object.fromEntries(listingResults));
     }).catch(console.error).finally(() => setLoading(false));
   }, [id]);
 
@@ -110,7 +123,21 @@ function EventDetail() {
     {
       accessorKey: 'eventContractId',
       header: 'Contract ID',
-      size: 100,
+      size: 130,
+      Cell: ({ row }) => (
+        <Group gap={6} wrap="nowrap">
+          <Text size="sm">{row.original.eventContractId}</Text>
+          <CopyButton value={String(row.original.eventContractId)} timeout={2000}>
+            {({ copied, copy }) => (
+              <Tooltip label={copied ? 'Copied!' : 'Copy contract ID'} withArrow position="right">
+                <ActionIcon size="sm" variant="subtle" color={copied ? 'teal' : 'gray'} onClick={copy} style={{ flexShrink: 0 }}>
+                  {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </CopyButton>
+        </Group>
+      ),
     },
     {
       accessorKey: 'dateCreated',
@@ -194,6 +221,47 @@ function EventDetail() {
     enableTopToolbar: false,
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 25 } },
+    renderDetailPanel: ({ row }: { row: MRT_Row<EnrichedContract> }) => {
+      const listings = listingsBySecurityId[row.original.securityId] ?? [];
+      if (listings.length === 0) {
+        return <Text size="sm" c="dimmed" p="md">No listings found for this security.</Text>;
+      }
+      return (
+        <Table striped highlightOnHover withColumnBorders fz="sm" style={{ maxWidth: 700 }}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Exchange</Table.Th>
+              <Table.Th>Symbol</Table.Th>
+              <Table.Th>Listing ID</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {listings.map(listing => (
+              <Table.Tr key={listing.listingId}>
+                <Table.Td>{listing.exchangeName}</Table.Td>
+                <Table.Td>{listing.exchangeSecuritySymbol}</Table.Td>
+                <Table.Td>
+                  <Group gap={6} wrap="nowrap">
+                    <Anchor component={Link} to={`/security-master/listings/${listing.listingId}`} size="sm">
+                      {listing.listingId}
+                    </Anchor>
+                    <CopyButton value={String(listing.listingId)} timeout={2000}>
+                      {({ copied, copy }) => (
+                        <Tooltip label={copied ? 'Copied!' : 'Copy listing ID'} withArrow position="right">
+                          <ActionIcon size="sm" variant="subtle" color={copied ? 'teal' : 'gray'} onClick={copy} style={{ flexShrink: 0 }}>
+                            {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+                          </ActionIcon>
+                        </Tooltip>
+                      )}
+                    </CopyButton>
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      );
+    },
   });
 
   const relTable = useMantineReactTable({
