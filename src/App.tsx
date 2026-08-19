@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { usePageTitle } from './hooks/usePageTitle';
 import { signInWithRedirect, signOut } from 'aws-amplify/auth';
 import { useAuthenticator, Authenticator } from '@aws-amplify/ui-react';
 import { Container, Button, Stack, AppShell, UnstyledButton, Paper, Transition } from '@mantine/core';
@@ -69,6 +70,11 @@ function Logout() {
   return null;
 }
 
+function PageTitle() {
+  usePageTitle();
+  return null;
+}
+
 function AppContent() {
   const { authStatus } = useAuthenticator();
   const [navbarOpened, { toggle: toggleNavbar }] = useDisclosure(true);
@@ -79,6 +85,7 @@ function AppContent() {
 
   return (
     <Router>
+      <PageTitle />
       <AppShell
         navbar={{
           width: 240,

@@ -11,6 +11,7 @@ import {
   ScrollArea,
   Select,
   Stack,
+  Switch,
   Table,
   Text,
   Title,
@@ -129,6 +130,7 @@ function BulkCreateRelationshipModal({
 
   const [relationshipType, setRelationshipType] = useState<ContractRelationshipType>('EQUIVALENT');
   const [confidence, setConfidence] = useState<number>(0.9);
+  const [bidirectional, setBidirectional] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,19 +160,23 @@ function BulkCreateRelationshipModal({
 
   const preview = useMemo(() => {
     if (!relationshipType || selectedA.length === 0 || selectedB.length === 0) return [];
-    return selectedA.flatMap(a =>
-      selectedB
-        .filter(b => b !== a)
-        .map(b => ({
-          securityIdA: a,
-          securityIdB: b,
-          symbolA: contractSymbol(a, currentContracts),
-          symbolB: contractSymbol(b, effectiveTargetContracts),
-          relationshipType,
-          confidence,
-        }))
-    );
-  }, [selectedA, selectedB, relationshipType, confidence, currentContracts, effectiveTargetContracts]);
+    const seen = new Set<string>();
+    const results: { securityIdA: number; securityIdB: number; symbolA: string; symbolB: string; relationshipType: ContractRelationshipType; confidence: number }[] = [];
+    for (const a of selectedA) {
+      for (const b of selectedB) {
+        if (a === b) continue;
+        if (!seen.has(`${a}-${b}`)) {
+          seen.add(`${a}-${b}`);
+          results.push({ securityIdA: a, securityIdB: b, symbolA: contractSymbol(a, currentContracts), symbolB: contractSymbol(b, effectiveTargetContracts), relationshipType, confidence });
+        }
+        if (bidirectional && !seen.has(`${b}-${a}`)) {
+          seen.add(`${b}-${a}`);
+          results.push({ securityIdA: b, securityIdB: a, symbolA: contractSymbol(b, effectiveTargetContracts), symbolB: contractSymbol(a, currentContracts), relationshipType, confidence });
+        }
+      }
+    }
+    return results;
+  }, [selectedA, selectedB, relationshipType, confidence, bidirectional, currentContracts, effectiveTargetContracts]);
 
   const handleClose = () => {
     setSelectedA([]);
@@ -180,6 +186,7 @@ function BulkCreateRelationshipModal({
     setSelectedB([]);
     setRelationshipType('EQUIVALENT');
     setConfidence(0.9);
+    setBidirectional(false);
     setError(null);
     onClose();
   };
@@ -263,11 +270,17 @@ function BulkCreateRelationshipModal({
             value={confidence}
             onChange={v => setConfidence(typeof v === 'number' ? v : 0.9)}
           />
+          <Switch
+            label="Both directions (A→B and B→A)"
+            checked={bidirectional}
+            onChange={e => setBidirectional(e.currentTarget.checked)}
+            mt="xl"
+          />
         </Group>
 
         <Stack gap="xs">
           <Text size="sm" c="dimmed">
-            {selectedA.length} × {selectedB.length} = <strong>{preview.length}</strong> relationships to create
+            {selectedA.length} × {selectedB.length}{bidirectional ? ' × 2' : ''} = <strong>{preview.length}</strong> relationships to create
           </Text>
           {preview.length > 0 && (
             <ScrollArea.Autosize mah={200}>
