@@ -41,7 +41,7 @@ import {
   Legend,
 } from 'recharts';
 import { ContractRelationship, ContractRelationshipType, DenormalizedListing, Event, EventContract, ExchangeEvent } from '../../types';
-import { BboDataPoint, BboTimelineResponse } from '../../types/bbo-timeline';
+import { BboDataPoint } from '../../types/bbo-timeline';
 import { marketDataApi, registryApi } from '../../utils/api';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import RelationshipGraph from './RelationshipGraph';
