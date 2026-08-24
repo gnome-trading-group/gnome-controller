@@ -22,7 +22,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { DateTimePicker } from '@mantine/dates';
+import { DateTimePicker, DatesProvider } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { IconCheck, IconChartLine, IconCopy, IconExternalLink, IconPlayerPlay, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
@@ -615,24 +615,26 @@ function EventDetail() {
         </Group>
 
         <Group mb="md" align="flex-end">
-          <DateTimePicker
-            label="From"
-            value={timelineStart}
-            onChange={setTimelineStart}
-            maxDate={timelineEnd ?? undefined}
-            valueFormat="YYYY-MM-DD HH:mm"
-            size="sm"
-            style={{ width: 220 }}
-          />
-          <DateTimePicker
-            label="To"
-            value={timelineEnd}
-            onChange={setTimelineEnd}
-            minDate={timelineStart ?? undefined}
-            valueFormat="YYYY-MM-DD HH:mm"
-            size="sm"
-            style={{ width: 220 }}
-          />
+          <DatesProvider settings={{ timezone: 'UTC', weekendDays: [] }}>
+            <DateTimePicker
+              label="From (UTC)"
+              value={timelineStart}
+              onChange={setTimelineStart}
+              maxDate={timelineEnd ?? undefined}
+              valueFormat="YYYY-MM-DD HH:mm"
+              size="sm"
+              style={{ width: 220 }}
+            />
+            <DateTimePicker
+              label="To (UTC)"
+              value={timelineEnd}
+              onChange={setTimelineEnd}
+              minDate={timelineStart ?? undefined}
+              valueFormat="YYYY-MM-DD HH:mm"
+              size="sm"
+              style={{ width: 220 }}
+            />
+          </DatesProvider>
           <Button
             leftSection={<IconChartLine size={16} />}
             onClick={handleLoadTimeline}
