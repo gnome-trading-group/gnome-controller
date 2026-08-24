@@ -4,12 +4,12 @@ import {
   Badge,
   Button,
   Container,
+  Divider,
   Group,
   Modal,
   Select,
   Stack,
   Text,
-  Textarea,
   TextInput,
   Title,
   Tooltip,
@@ -20,6 +20,7 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { useNavigate } from 'react-router-dom';
 import { Strategy, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
+import SimulationConfigForm, { defaultSimulationState, simulationStateToConfig, SimulationState } from '../../components/SimulationConfigForm';
 
 const STATUS_LABELS: Record<number, string> = {
   [StrategyStatus.INACTIVE]: 'Inactive',
@@ -44,8 +45,15 @@ function Strategies() {
     name: '',
     description: '',
     status: StrategyStatus.INACTIVE,
-    parameters: '',
+    mode: 'paper',
+    strategyType: 'java',
+    strategyClass: '',
+    listings: '',
+    region: '',
+    researchCommit: '',
+    args: [] as { key: string; value: string }[],
   });
+  const [createSim, setCreateSim] = useState<SimulationState>(defaultSimulationState());
   const [createError, setCreateError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -63,10 +71,20 @@ function Strategies() {
   const handleCreate = async () => {
     setCreateError(null);
     try {
-      let parameters: Record<string, unknown> | undefined;
-      if (createForm.parameters.trim()) {
-        parameters = JSON.parse(createForm.parameters);
+      const args: Record<string, string> = {};
+      for (const { key, value } of createForm.args) {
+        if (key.trim()) args[key.trim()] = value;
       }
+      const parameters: Record<string, unknown> = {
+        mode: createForm.mode,
+        strategy_type: createForm.strategyType,
+        strategy_class: createForm.strategyClass,
+        listings: createForm.listings,
+      };
+      if (createForm.region.trim()) parameters.region = createForm.region.trim();
+      if (createForm.researchCommit.trim()) parameters.research_commit = createForm.researchCommit.trim();
+      if (Object.keys(args).length > 0) parameters.args = args;
+      if (createForm.mode === 'paper') parameters.simulation = simulationStateToConfig(createSim);
       await registryApi.createStrategy({
         name: createForm.name,
         description: createForm.description || undefined,
@@ -74,7 +92,8 @@ function Strategies() {
         parameters,
       });
       setCreateModalOpen(false);
-      setCreateForm({ name: '', description: '', status: StrategyStatus.INACTIVE, parameters: '' });
+      setCreateForm({ name: '', description: '', status: StrategyStatus.INACTIVE, mode: 'paper', strategyType: 'java', strategyClass: '', listings: '', region: '', researchCommit: '', args: [] });
+      setCreateSim(defaultSimulationState());
       refresh();
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Failed to create strategy');
@@ -210,33 +229,44 @@ function Strategies() {
 
       <MantineReactTable table={table} />
 
-      <Modal opened={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Create Strategy" size="md">
+      <Modal opened={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Create Strategy" size="lg">
         <Stack>
-          <TextInput
-            label="Name"
-            value={createForm.name}
-            onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
-            required
-          />
-          <TextInput
-            label="Description"
-            value={createForm.description}
-            onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))}
-          />
-          <Select
-            label="Status"
-            value={createForm.status.toString()}
-            data={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))}
-            onChange={(v) => setCreateForm((f) => ({ ...f, status: parseInt(v ?? '0') }))}
-          />
-          <Textarea
-            label="Parameters (JSON)"
-            placeholder='{"key": "value"}'
-            value={createForm.parameters}
-            onChange={(e) => setCreateForm((f) => ({ ...f, parameters: e.target.value }))}
-            autosize
-            minRows={3}
-          />
+          <TextInput label="Name" value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} required />
+          <TextInput label="Description" value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} />
+          <Select label="Status" value={createForm.status.toString()} data={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))} onChange={(v) => setCreateForm((f) => ({ ...f, status: parseInt(v ?? '0') }))} />
+
+          <Divider />
+          <Title order={6} c="dimmed">Default Config</Title>
+          <Group grow>
+            <Select label="Mode" value={createForm.mode} data={[{ value: 'paper', label: 'Paper' }, { value: 'live', label: 'Live' }]} onChange={(v) => setCreateForm((f) => ({ ...f, mode: v ?? 'paper' }))} />
+            <Select label="Strategy Type" value={createForm.strategyType} data={[{ value: 'java', label: 'Java' }, { value: 'python', label: 'Python' }]} onChange={(v) => setCreateForm((f) => ({ ...f, strategyType: v ?? 'java' }))} />
+          </Group>
+          <TextInput label="Strategy Class" placeholder="com.example.MyStrategy" value={createForm.strategyClass} onChange={(e) => setCreateForm((f) => ({ ...f, strategyClass: e.target.value }))} />
+          <TextInput label="Listings" placeholder="1,2,3" value={createForm.listings} onChange={(e) => setCreateForm((f) => ({ ...f, listings: e.target.value }))} />
+          <Group grow>
+            <TextInput label="Region (optional)" placeholder="us-east-1" value={createForm.region} onChange={(e) => setCreateForm((f) => ({ ...f, region: e.target.value }))} />
+            <TextInput label="Research Commit (optional)" placeholder="main" value={createForm.researchCommit} onChange={(e) => setCreateForm((f) => ({ ...f, researchCommit: e.target.value }))} />
+          </Group>
+
+          <Divider />
+          <Group justify="space-between">
+            <Title order={6} c="dimmed">Strategy Args</Title>
+            <ActionIcon size="sm" variant="subtle" color="blue" onClick={() => setCreateForm((f) => ({ ...f, args: [...f.args, { key: '', value: '' }] }))}>
+              <IconPlus size={14} />
+            </ActionIcon>
+          </Group>
+          {createForm.args.map((row, i) => (
+            <Group key={i} gap="xs" align="flex-end">
+              <TextInput placeholder="key" value={row.key} onChange={(e) => setCreateForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, key: e.currentTarget.value } : r) }))} style={{ flex: 1 }} />
+              <TextInput placeholder="value" value={row.value} onChange={(e) => setCreateForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: e.currentTarget.value } : r) }))} style={{ flex: 1 }} />
+              <ActionIcon variant="subtle" color="red" onClick={() => setCreateForm((f) => ({ ...f, args: f.args.filter((_, j) => j !== i) }))}>
+                <IconTrash size={14} />
+              </ActionIcon>
+            </Group>
+          ))}
+
+          {createForm.mode === 'paper' && <SimulationConfigForm sim={createSim} onChange={setCreateSim} />}
+
           {createError && <Text c="red" size="sm">{createError}</Text>}
           <Group justify="flex-end">
             <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
