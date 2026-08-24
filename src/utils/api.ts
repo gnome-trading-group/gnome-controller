@@ -8,6 +8,7 @@ import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCove
 import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsListParams, TransformJobsSearchParams } from '../types/transform-jobs';
 import { GapsListResponse, GapsListParams, GapsByListingParams, GapsUpdateRequest, GapsUpdateResponse } from '../types/gaps';
 import { QualityIssuesListResponse, QualityIssuesListParams, QualityIssuesByListingParams, QualityIssuesUpdateRequest, QualityIssuesUpdateResponse, QualityBackfillRequest, QualityBackfillResponse, ListingStatisticsResponse, ListingStatisticsHistoryResponse, MinuteInvestigationResponse } from '../types/quality-issues';
+import { BboTimelineResponse } from '../types/bbo-timeline';
 
 export interface ServiceConfigResponse {
   config: Record<string, unknown>;
@@ -247,6 +248,15 @@ export const marketDataApi = {
       queryParams: {
         timestamp,
         ...(windowMinutes !== undefined ? { windowMinutes } : {}),
+      },
+    }),
+  getBboTimeline: (listingId: number, startTimestamp: number, endTimestamp: number, maxPoints?: number) =>
+    sendApiRequest<BboTimelineResponse>(`/bbo/timeline/${listingId}`, 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+      queryParams: {
+        startTimestamp,
+        endTimestamp,
+        ...(maxPoints !== undefined ? { maxPoints } : {}),
       },
     }),
 };

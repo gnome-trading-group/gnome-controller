@@ -12,6 +12,7 @@ import {
   Grid,
   Group,
   Loader,
+  Notification,
   Paper,
   SimpleGrid,
   Stack,
@@ -21,13 +22,27 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
+import { DatePickerInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCheck, IconCopy, IconExternalLink, IconPlayerPlay, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
+import { IconCheck, IconChartLine, IconCopy, IconExternalLink, IconPlayerPlay, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
+import {
+  ComposedChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  ReferenceArea,
+  Legend,
+} from 'recharts';
 import { ContractRelationship, ContractRelationshipType, DenormalizedListing, Event, EventContract, ExchangeEvent } from '../../types';
-import { registryApi } from '../../utils/api';
+import { BboDataPoint, BboTimelineResponse } from '../../types/bbo-timeline';
+import { marketDataApi, registryApi } from '../../utils/api';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import RelationshipGraph from './RelationshipGraph';
 import BulkCreateRelationshipModal from './BulkCreateRelationshipModal';
@@ -38,6 +53,17 @@ const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   MUTUALLY_EXCLUSIVE: 'orange',
   HEDGEABLE_WITH: 'violet',
 };
+
+const CHART_COLORS = ['#4c6ef5', '#f76707', '#2f9e44', '#ae3ec9', '#e03131', '#1098ad', '#f59f00', '#74c0fc'];
+
+function formatUtcFull(epochSeconds: number): string {
+  return new Date(epochSeconds * 1000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, 'Z');
+}
+
+function formatUtcShort(epochSeconds: number): string {
+  const d = new Date(epochSeconds * 1000);
+  return `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)}`;
+}
 
 function getExchangeSearchUrl(exchangeName: string, query: string): string | null {
   switch (exchangeName.toLowerCase()) {
@@ -74,6 +100,19 @@ function EventDetail() {
   const [listingsBySecurityId, setListingsBySecurityId] = useState<Record<number, DenormalizedListing[]>>({});
   const [showGraph, setShowGraph] = useState(false);
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
+
+  // Price timeline state
+  const yesterday = new Date(Date.now() - 86_400_000);
+  const today = new Date();
+  const [timelineStart, setTimelineStart] = useState<Date | null>(yesterday);
+  const [timelineEnd, setTimelineEnd] = useState<Date | null>(today);
+  const [timelineData, setTimelineData] = useState<Record<number, BboDataPoint[]>>({});
+  const [timelineLabels, setTimelineLabels] = useState<Record<number, string>>({});
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
+  const [boundsStart, setBoundsStart] = useState<number | null>(null);
+  const [boundsEnd, setBoundsEnd] = useState<number | null>(null);
+  const [activeBound, setActiveBound] = useState<'start' | 'end'>('start');
 
   useEffect(() => {
     if (!id) return;
@@ -163,6 +202,77 @@ function EventDetail() {
       .then(rels => setRelationships(rels as ContractRelationship[]))
       .catch(console.error);
   }, [id]);
+
+  const handleLoadTimeline = useCallback(async () => {
+    if (!timelineStart || !timelineEnd) return;
+    const startTs = Math.floor(timelineStart.getTime() / 1000);
+    const endTs = Math.floor(timelineEnd.getTime() / 1000);
+    if (endTs <= startTs) {
+      setTimelineError('End date must be after start date.');
+      return;
+    }
+
+    const allListings = Object.values(listingsBySecurityId).flat();
+    if (allListings.length === 0) {
+      setTimelineError('No listings found for this event.');
+      return;
+    }
+
+    setTimelineLoading(true);
+    setTimelineError(null);
+    setTimelineData({});
+    setBoundsStart(null);
+    setBoundsEnd(null);
+
+    try {
+      const results = await Promise.allSettled(
+        allListings.map(l => marketDataApi.getBboTimeline(l.listingId, startTs, endTs))
+      );
+      const data: Record<number, BboDataPoint[]> = {};
+      const labels: Record<number, string> = {};
+      results.forEach((result, idx) => {
+        const listing = allListings[idx];
+        if (result.status === 'fulfilled' && result.value.dataPoints.length > 0) {
+          data[listing.listingId] = result.value.dataPoints;
+          labels[listing.listingId] = `${listing.exchangeSecuritySymbol ?? listing.listingId} (${listing.exchangeName})`;
+        }
+      });
+      if (Object.keys(data).length === 0) {
+        setTimelineError('No BBO data found for any listing in this date range.');
+      }
+      setTimelineData(data);
+      setTimelineLabels(labels);
+    } catch (err) {
+      setTimelineError(err instanceof Error ? err.message : 'Failed to load timeline data.');
+    } finally {
+      setTimelineLoading(false);
+    }
+  }, [timelineStart, timelineEnd, listingsBySecurityId]);
+
+  const mergedChartData = useMemo(() => {
+    const tsMap = new Map<number, Record<string, number>>();
+    for (const [listingId, points] of Object.entries(timelineData)) {
+      for (const p of points) {
+        if (!tsMap.has(p.timestamp)) tsMap.set(p.timestamp, {});
+        tsMap.get(p.timestamp)![listingId] = p.midPrice;
+      }
+    }
+    return Array.from(tsMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([ts, values]) => ({ ts, ...values }));
+  }, [timelineData]);
+
+  const handleChartClick = useCallback((chartData: any) => {
+    if (!chartData || chartData.activeLabel === undefined) return;
+    const ts = Number(chartData.activeLabel);
+    if (activeBound === 'start') {
+      setBoundsStart(ts);
+      setActiveBound('end');
+    } else {
+      setBoundsEnd(ts);
+      setActiveBound('start');
+    }
+  }, [activeBound]);
 
   const relColumns = useMemo<MRT_ColumnDef<ContractRelationship>[]>(() => [
     {
@@ -478,6 +588,223 @@ function EventDetail() {
           )}
         </Paper>
       )}
+
+      <Paper withBorder p="md" mb="md">
+        <Group justify="space-between" mb="sm">
+          <Title order={5}>Price Timeline</Title>
+          {Object.keys(timelineData).length > 0 && (
+            <Text size="xs" c="dimmed">
+              Click chart to set{' '}
+              <Text span c={activeBound === 'start' ? 'green' : 'red'} fw={600}>{activeBound}</Text>
+              {' '}bound
+            </Text>
+          )}
+        </Group>
+
+        <Group mb="md" align="flex-end">
+          <DatePickerInput
+            label="From"
+            value={timelineStart}
+            onChange={setTimelineStart}
+            maxDate={timelineEnd ?? undefined}
+            size="sm"
+            style={{ width: 160 }}
+          />
+          <DatePickerInput
+            label="To"
+            value={timelineEnd}
+            onChange={setTimelineEnd}
+            minDate={timelineStart ?? undefined}
+            size="sm"
+            style={{ width: 160 }}
+          />
+          <Button
+            leftSection={<IconChartLine size={16} />}
+            onClick={handleLoadTimeline}
+            loading={timelineLoading}
+            size="sm"
+          >
+            Load BBO
+          </Button>
+          {Object.keys(timelineData).length > 0 && (
+            <Button
+              variant="subtle"
+              size="sm"
+              color="gray"
+              onClick={() => { setBoundsStart(null); setBoundsEnd(null); setActiveBound('start'); }}
+            >
+              Clear Bounds
+            </Button>
+          )}
+        </Group>
+
+        {timelineError && (
+          <Notification color="red" onClose={() => setTimelineError(null)} mb="sm">
+            {timelineError}
+          </Notification>
+        )}
+
+        {Object.keys(timelineData).length > 0 && (
+          <>
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={mergedChartData} onClick={handleChartClick} style={{ cursor: 'crosshair' }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis
+                  dataKey="ts"
+                  tickFormatter={formatUtcShort}
+                  tick={{ fontSize: 10, fill: '#aaa' }}
+                  interval="preserveStartEnd"
+                  type="number"
+                  domain={['dataMin', 'dataMax']}
+                  scale="time"
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: '#aaa' }}
+                  tickFormatter={(v: number) => v.toFixed(3)}
+                  domain={['auto', 'auto']}
+                  width={55}
+                />
+                <RechartsTooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    return (
+                      <div style={{ background: '#1a1a1a', border: '1px solid #444', borderRadius: 4, padding: '6px 10px', fontSize: 12 }}>
+                        <div style={{ color: '#aaa', marginBottom: 4 }}>{formatUtcFull(Number(label))}</div>
+                        {payload.map((entry: any) => (
+                          <div key={entry.dataKey} style={{ color: entry.color }}>
+                            {timelineLabels[entry.dataKey] ?? entry.dataKey}: {Number(entry.value).toFixed(4)}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }}
+                />
+                <Legend
+                  formatter={(value) => timelineLabels[Number(value)] ?? value}
+                  wrapperStyle={{ fontSize: 12, color: '#aaa' }}
+                />
+                {Object.keys(timelineData).map((listingId, idx) => (
+                  <Line
+                    key={listingId}
+                    type="monotone"
+                    dataKey={listingId}
+                    stroke={CHART_COLORS[idx % CHART_COLORS.length]}
+                    dot={false}
+                    strokeWidth={1.5}
+                    connectNulls={false}
+                    isAnimationActive={false}
+                  />
+                ))}
+                {boundsStart !== null && (
+                  <ReferenceLine
+                    x={boundsStart}
+                    stroke="#2f9e44"
+                    strokeWidth={2}
+                    strokeDasharray="5 3"
+                    label={{ value: 'Start', position: 'top', fill: '#2f9e44', fontSize: 11 }}
+                  />
+                )}
+                {boundsEnd !== null && (
+                  <ReferenceLine
+                    x={boundsEnd}
+                    stroke="#e03131"
+                    strokeWidth={2}
+                    strokeDasharray="5 3"
+                    label={{ value: 'End', position: 'top', fill: '#e03131', fontSize: 11 }}
+                  />
+                )}
+                {boundsStart !== null && boundsEnd !== null && (
+                  <ReferenceArea
+                    x1={Math.min(boundsStart, boundsEnd)}
+                    x2={Math.max(boundsStart, boundsEnd)}
+                    fill="white"
+                    fillOpacity={0.05}
+                  />
+                )}
+              </ComposedChart>
+            </ResponsiveContainer>
+
+            <Group mt="md" gap="xl">
+              <Stack gap={4}>
+                <Text size="xs" c="dimmed">Start</Text>
+                <Group gap={6}>
+                  <Text size="sm" ff="monospace">
+                    {boundsStart !== null ? formatUtcFull(boundsStart) : '—'}
+                  </Text>
+                  {boundsStart !== null && (
+                    <>
+                      <CopyButton value={String(boundsStart)} timeout={2000}>
+                        {({ copied, copy }) => (
+                          <Tooltip label={copied ? 'Copied!' : 'Copy epoch seconds'} withArrow position="right">
+                            <ActionIcon size="sm" variant="subtle" color={copied ? 'teal' : 'gray'} onClick={copy}>
+                              {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
+                      </CopyButton>
+                      <CopyButton value={formatUtcFull(boundsStart)} timeout={2000}>
+                        {({ copied, copy }) => (
+                          <Tooltip label={copied ? 'Copied!' : 'Copy UTC string'} withArrow position="right">
+                            <ActionIcon size="sm" variant="subtle" color={copied ? 'teal' : 'blue'} onClick={copy}>
+                              {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
+                      </CopyButton>
+                    </>
+                  )}
+                </Group>
+              </Stack>
+
+              <Stack gap={4}>
+                <Text size="xs" c="dimmed">End</Text>
+                <Group gap={6}>
+                  <Text size="sm" ff="monospace">
+                    {boundsEnd !== null ? formatUtcFull(boundsEnd) : '—'}
+                  </Text>
+                  {boundsEnd !== null && (
+                    <>
+                      <CopyButton value={String(boundsEnd)} timeout={2000}>
+                        {({ copied, copy }) => (
+                          <Tooltip label={copied ? 'Copied!' : 'Copy epoch seconds'} withArrow position="right">
+                            <ActionIcon size="sm" variant="subtle" color={copied ? 'teal' : 'gray'} onClick={copy}>
+                              {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
+                      </CopyButton>
+                      <CopyButton value={formatUtcFull(boundsEnd)} timeout={2000}>
+                        {({ copied, copy }) => (
+                          <Tooltip label={copied ? 'Copied!' : 'Copy UTC string'} withArrow position="right">
+                            <ActionIcon size="sm" variant="subtle" color={copied ? 'teal' : 'blue'} onClick={copy}>
+                              {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
+                      </CopyButton>
+                    </>
+                  )}
+                </Group>
+              </Stack>
+
+              {boundsStart !== null && boundsEnd !== null && (
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">Duration</Text>
+                  <Text size="sm">
+                    {(() => {
+                      const secs = Math.abs(boundsEnd - boundsStart);
+                      const h = Math.floor(secs / 3600);
+                      const m = Math.floor((secs % 3600) / 60);
+                      const s = secs % 60;
+                      return h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+                    })()}
+                  </Text>
+                </Stack>
+              )}
+            </Group>
+          </>
+        )}
+      </Paper>
 
       <Paper withBorder p="md" mb="md">
         <Title order={5} mb="sm">Tools</Title>

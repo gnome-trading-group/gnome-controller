@@ -489,7 +489,7 @@ function Collectors() {
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: true,
-    initialState: { density: 'xs' },
+    initialState: { density: 'xs', sorting: [{ id: 'lastStatusChange', desc: true }] },
     state: { isLoading: loading },
     mantineTableBodyRowProps: ({ row }) => (
       navigateRowProps(navigate, `/market-data/collectors/${row.original.listingId}`)
