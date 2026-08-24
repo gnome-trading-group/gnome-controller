@@ -22,7 +22,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { DatePickerInput } from '@mantine/dates';
+import { DateTimePicker } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { IconCheck, IconChartLine, IconCopy, IconExternalLink, IconPlayerPlay, IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
@@ -251,15 +251,28 @@ function EventDetail() {
 
   const mergedChartData = useMemo(() => {
     const tsMap = new Map<number, Record<string, number>>();
+    const listingIds = Object.keys(timelineData);
     for (const [listingId, points] of Object.entries(timelineData)) {
       for (const p of points) {
         if (!tsMap.has(p.timestamp)) tsMap.set(p.timestamp, {});
         tsMap.get(p.timestamp)![listingId] = p.midPrice;
       }
     }
-    return Array.from(tsMap.entries())
+    const sorted = Array.from(tsMap.entries())
       .sort(([a], [b]) => a - b)
-      .map(([ts, values]) => ({ ts, ...values }));
+      .map(([ts, values]) => ({ ts, ...values } as Record<string, number>));
+
+    const last: Record<string, number> = {};
+    for (const row of sorted) {
+      for (const id of listingIds) {
+        if (id in row) {
+          last[id] = row[id];
+        } else if (id in last) {
+          row[id] = last[id];
+        }
+      }
+    }
+    return sorted;
   }, [timelineData]);
 
   const handleChartClick = useCallback((chartData: any) => {
@@ -602,21 +615,23 @@ function EventDetail() {
         </Group>
 
         <Group mb="md" align="flex-end">
-          <DatePickerInput
+          <DateTimePicker
             label="From"
             value={timelineStart}
             onChange={setTimelineStart}
             maxDate={timelineEnd ?? undefined}
+            valueFormat="YYYY-MM-DD HH:mm"
             size="sm"
-            style={{ width: 160 }}
+            style={{ width: 220 }}
           />
-          <DatePickerInput
+          <DateTimePicker
             label="To"
             value={timelineEnd}
             onChange={setTimelineEnd}
             minDate={timelineStart ?? undefined}
+            valueFormat="YYYY-MM-DD HH:mm"
             size="sm"
-            style={{ width: 160 }}
+            style={{ width: 220 }}
           />
           <Button
             leftSection={<IconChartLine size={16} />}
