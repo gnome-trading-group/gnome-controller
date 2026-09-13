@@ -99,7 +99,9 @@ function ResearchDetail() {
   const metricKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const iter of iterations) {
-      Object.keys(iter.metrics ?? {}).forEach((k) => keys.add(k));
+      for (const [k, v] of Object.entries(iter.metrics ?? {})) {
+        if (typeof v === 'number' || typeof v === 'string') keys.add(k);
+      }
     }
     const priority = ['finalPnl', 'sharpe', 'sortino', 'fillCount'];
     const sorted = priority.filter((k) => keys.has(k));
@@ -134,7 +136,7 @@ function ResearchDetail() {
       size: 100,
       Cell: ({ row }: { row: MRT_Row<ResearchIteration> }) => {
         const v = row.original.metrics?.[key];
-        if (v == null) return <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>;
+        if (v == null || typeof v === 'object') return <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>;
         const isPositive = v >= 0;
         return (
           <span style={{ color: (key === 'finalPnl' || key === 'sharpe') ? (isPositive ? 'var(--mantine-color-green-6)' : 'var(--mantine-color-red-6)') : 'inherit' }}>
