@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Accordion,
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Card,
@@ -54,15 +55,19 @@ function ResearchDetail() {
   const { sessionName } = useParams<{ sessionName: string }>();
   const [session, setSession] = useState<ResearchSession | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [newNote, setNewNote] = useState('');
   const [submittingNote, setSubmittingNote] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!sessionName) return;
     setLoading(true);
+    setError(null);
     try {
       const result = await controllerApi.getResearchSession(sessionName);
       setSession(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load session');
     } finally {
       setLoading(false);
     }
@@ -77,6 +82,8 @@ function ResearchDetail() {
       await controllerApi.addResearchNote(sessionName, newNote.trim());
       setNewNote('');
       await refresh();
+    } catch (e) {
+      console.error('Failed to add note:', e);
     } finally {
       setSubmittingNote(false);
     }
@@ -199,6 +206,14 @@ function ResearchDetail() {
     ),
   });
 
+  if (error && !loading) {
+    return (
+      <Container size="xl" py="xl">
+        <Alert color="red" title="Error loading session">{error}</Alert>
+      </Container>
+    );
+  }
+
   if (!session && !loading) return null;
 
   return (
@@ -228,7 +243,7 @@ function ResearchDetail() {
               ))}
             </Group>
             <Text size="sm" c="dimmed">
-              {session.owner} · <ReactTimeAgo date={new Date(session.updatedAt)} timeStyle="round" />
+              {session.owner}{session.updatedAt && <> · <ReactTimeAgo date={new Date(session.updatedAt)} timeStyle="round" /></>}
             </Text>
           </Group>
           {session.description && (
@@ -296,7 +311,7 @@ function ResearchDetail() {
               <Group justify="space-between" mb={4}>
                 <Text size="xs" fw={600}>{note.author}</Text>
                 <Text size="xs" c="dimmed">
-                  <ReactTimeAgo date={new Date(note.timestamp)} timeStyle="round" />
+                  {note.timestamp ? <ReactTimeAgo date={new Date(note.timestamp)} timeStyle="round" /> : '—'}
                 </Text>
               </Group>
               <Text component="pre" size="sm" style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>
