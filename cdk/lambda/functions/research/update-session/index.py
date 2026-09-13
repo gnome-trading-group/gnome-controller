@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -37,11 +38,11 @@ def handler(event: dict, context) -> dict:
     try:
         session_name = event["pathParameters"]["sessionName"]
     except (KeyError, TypeError):
-        body = json.loads(event.get("body") or "{}") if isinstance(event.get("body"), str) else event
+        body = json.loads(event.get("body") or "{}", parse_float=Decimal) if isinstance(event.get("body"), str) else event
         session_name = body.get("session_name")
 
     try:
-        body = json.loads(event.get("body") or "{}")
+        body = json.loads(event.get("body") or "{}", parse_float=Decimal)
     except Exception:
         body = event
 

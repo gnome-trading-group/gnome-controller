@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import boto3
 from botocore.exceptions import ClientError
@@ -29,7 +30,7 @@ def _caller(event: dict) -> str:
 
 def handler(event: dict, context) -> dict:
     try:
-        body = json.loads(event.get("body") or "{}")
+        body = json.loads(event.get("body") or "{}", parse_float=Decimal)
     except Exception:
         body = event
 
