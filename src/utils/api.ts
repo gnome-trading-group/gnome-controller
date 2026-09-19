@@ -36,6 +36,7 @@ interface ApiConfig {
   apiUrl: string;
   apiKey?: string;
   convertToCamelCase?: boolean;
+  preserveKeys?: Set<string>;
   queryParams?: Record<string, string | number | boolean>;
   body?: any;
 }
@@ -44,20 +45,20 @@ function toCamelCase(str: string): string {
   return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
 }
 
-function convertObjectToCamelCase(obj: any): any {
+function convertObjectToCamelCase(obj: any, preserveKeys?: Set<string>): any {
   if (Array.isArray(obj)) {
-    return obj.map(convertObjectToCamelCase);
+    return obj.map(item => convertObjectToCamelCase(item, preserveKeys));
   }
-  
+
   if (obj !== null && typeof obj === 'object') {
     return Object.fromEntries(
-      Object.entries(obj).map(([key, value]) => [
-        toCamelCase(key),
-        convertObjectToCamelCase(value)
-      ])
+      Object.entries(obj).map(([key, value]) => {
+        const camelKey = toCamelCase(key);
+        return [camelKey, preserveKeys?.has(camelKey) ? value : convertObjectToCamelCase(value, preserveKeys)];
+      })
     );
   }
-  
+
   return obj;
 }
 
@@ -98,7 +99,7 @@ export async function sendApiRequest<T>(
 
     const data = await response.json();
     if (response.ok) {
-      return (config.convertToCamelCase ? convertObjectToCamelCase(data) : data) as T;
+      return (config.convertToCamelCase ? convertObjectToCamelCase(data, config.preserveKeys) : data) as T;
     } else {
       const error = typeof data.body === 'string' ? data.body : data.body?.error || 'An error occurred';
       throw new ApiError(response.status, error);
@@ -343,6 +344,7 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
+      preserveKeys: new Set(['args', 'config']),
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
   },
@@ -351,6 +353,7 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
+      preserveKeys: new Set(['args', 'config']),
       body: strategy,
     }),
   updateStrategy: (strategyId: number, strategy: Partial<Strategy>) =>
@@ -383,6 +386,7 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
+      preserveKeys: new Set(['args', 'config']),
       queryParams,
     });
   },
@@ -408,14 +412,16 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
+      preserveKeys: new Set(['args', 'config']),
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
   },
   createSession: (request: CreateStrategySessionRequest) =>
-    sendApiRequest<StrategySession>('/strategy-sessions', 'POST', {
+    sendApiRequest<StrategySession>('/strategy-sessions/launch', 'POST', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
+      preserveKeys: new Set(['args', 'config']),
       body: request,
     }),
   stopSession: (sessionId: string) =>
@@ -423,6 +429,7 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
+      preserveKeys: new Set(['args', 'config']),
       body: { sessionId },
     }),
   listCurrencies: () =>
