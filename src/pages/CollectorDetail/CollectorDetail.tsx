@@ -10,14 +10,10 @@ import {
   Badge,
   Group,
   Stack,
-  Tabs,
-  ScrollArea,
   ActionIcon,
   Tooltip,
   Grid,
   Notification,
-  Code,
-  Divider,
   Center,
   Loader,
   Modal,
@@ -26,7 +22,8 @@ import {
   Breadcrumbs,
   Table,
 } from '@mantine/core';
-import { IconRefresh, IconExternalLink, IconPlayerStop, IconAB2, IconTrash } from '@tabler/icons-react';
+import { IconRefresh, IconPlayerStop, IconAB2, IconTrash } from '@tabler/icons-react';
+import { ContainerLogs } from '../../components/ContainerLogs';
 import ReactTimeAgo from 'react-time-ago';
 import { marketDataApi } from '../../utils/api';
 
@@ -80,7 +77,6 @@ function CollectorDetail() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [initialLogsLoad, setInitialLogsLoad] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTaskArn, setSelectedTaskArn] = useState<string>('');
   const [stopModalOpen, setStopModalOpen] = useState(false);
   const [redeployModalOpen, setRedeployModalOpen] = useState(false);
   const [purgeModalOpen, setPurgeModalOpen] = useState(false);
@@ -202,15 +198,6 @@ function CollectorDetail() {
     loadCollector();
   }, [listingId]);
 
-
-  useEffect(() => {
-    // Set the first task as selected when taskDetails change
-    if (taskDetails.length > 0 && !selectedTaskArn) {
-      setSelectedTaskArn(taskDetails[0].taskArn);
-    } else if (taskDetails.length === 0) {
-      setSelectedTaskArn('');
-    }
-  }, [taskDetails]);
 
   useEffect(() => {
     // Load logs for all tasks when component mounts or listingId changes
@@ -469,93 +456,12 @@ function CollectorDetail() {
         )}
       </Card>
 
-      <Card withBorder mt="md">
-        <Group justify="space-between" mb="md">
-          <Title order={4}>Container Logs</Title>
-          <Group>
-            {selectedTaskArn && logs.find(log => log.taskArn === selectedTaskArn)?.consoleUrl && (
-              <Tooltip label="View in AWS Console" position="bottom" withArrow>
-                <ActionIcon 
-                  component="a"
-                  href={logs.find(log => log.taskArn === selectedTaskArn)?.consoleUrl}
-                  target="_blank"
-                  variant="light"
-                >
-                  <IconExternalLink size={16} />
-                </ActionIcon>
-              </Tooltip>
-            )}
-            <Tooltip label="Refresh Logs" position="bottom" withArrow>
-              <ActionIcon 
-                onClick={() => loadLogs()}
-                loading={logsLoading}
-                disabled={!selectedTaskArn}
-              >
-                <IconRefresh size={16} />
-              </ActionIcon>
-            </Tooltip>
-          </Group>
-        </Group>
-
-        {taskDetails.length > 0 ? (
-          <Tabs value={selectedTaskArn} onChange={(value) => setSelectedTaskArn(value || '')}>
-            <Tabs.List>
-              {taskDetails.map((task, index) => (
-                <Tabs.Tab key={task.taskArn} value={task.taskArn}>
-                  Task {index + 1}
-                </Tabs.Tab>
-              ))}
-            </Tabs.List>
-
-            {taskDetails.map((task) => (
-              <Tabs.Panel key={task.taskArn} value={task.taskArn} pt="md">
-                <ScrollArea h={400}>
-                  {logsLoading && initialLogsLoad ? (
-                    <Center h={350}>
-                      <Stack align="center" gap="md">
-                        <Loader size="lg" color="blue" />
-                        <Stack align="center" gap="xs">
-                          <Text fw={500} c="dimmed">
-                            Loading Logs
-                          </Text>
-                          <Text size="sm" c="dimmed">
-                            Task {taskDetails.findIndex(t => t.taskArn === task.taskArn) + 1}
-                          </Text>
-                        </Stack>
-                      </Stack>
-                    </Center>
-                  ) : logs.find(log => log.taskArn === task.taskArn)?.logs?.length || 0 > 0 ? (
-                    <Stack gap="xs">
-                      {logs.find(log => log.taskArn === task.taskArn)?.logs.map((logEvent, index) => (
-                        <div key={index}>
-                          <Group gap="xs" align="flex-start">
-                            <Text size="xs" c="dimmed" style={{ minWidth: '140px' }}>
-                              {new Date(logEvent.timestamp).toLocaleTimeString()}
-                            </Text>
-                            <Code block style={{ flex: 1, fontSize: '12px' }}>
-                              {logEvent.message}
-                            </Code>
-                          </Group>
-                          {index < (logs.find(log => log.taskArn === task.taskArn)?.logs.length || 0) - 1 && <Divider size="xs" />}
-                        </div>
-                      ))}
-                    </Stack>
-                  ) : (
-                    <Center h={350}>
-                      <Stack align="center" gap="xs">
-                        <Text size="xl">📝</Text>
-                        <Text c="dimmed">No recent logs available for this task</Text>
-                      </Stack>
-                    </Center>
-                  )}
-                </ScrollArea>
-              </Tabs.Panel>
-            ))}
-          </Tabs>
-        ) : (
-          <Text c="dimmed">No running tasks - logs unavailable</Text>
-        )}
-      </Card>
+      <ContainerLogs
+        logs={logs}
+        loading={logsLoading}
+        initialLoad={initialLogsLoad}
+        onRefresh={loadLogs}
+      />
 
       <Modal
         opened={stopModalOpen}

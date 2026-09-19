@@ -22,6 +22,7 @@ import ReactTimeAgo from 'react-time-ago';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { StrategySession, StrategySessionStatus } from '../../types';
 import { registryApi } from '../../utils/api';
+import { ContainerLogs, TaskLogs } from '../../components/ContainerLogs';
 
 const STATUS_COLORS: Record<string, string> = {
   [StrategySessionStatus.SUBMITTED]: 'blue',
@@ -78,6 +79,9 @@ function SessionDetail() {
   const [loading, setLoading] = useState(false);
   const [stopOpen, setStopOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [sessionLogs, setSessionLogs] = useState<TaskLogs[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [initialLogsLoad, setInitialLogsLoad] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!sessionId) return;
@@ -98,6 +102,27 @@ function SessionDetail() {
   }, [sessionId]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const loadLogs = useCallback(async (showLoading = true) => {
+    if (!sessionId || !session?.taskArn) return;
+    try {
+      if (showLoading) setLogsLoading(true);
+      const response = await registryApi.getSessionLogs(sessionId);
+      setSessionLogs(response.logs);
+    } catch (err) {
+      console.error('Failed to load logs:', err);
+    } finally {
+      if (showLoading) setLogsLoading(false);
+      setInitialLogsLoad(false);
+    }
+  }, [sessionId, session?.taskArn]);
+
+  useEffect(() => {
+    if (!session?.taskArn) return;
+    loadLogs();
+    const interval = setInterval(() => loadLogs(false), 5000);
+    return () => clearInterval(interval);
+  }, [session?.taskArn, loadLogs]);
 
   const handleStop = async () => {
     if (!session) return;
@@ -231,6 +256,15 @@ function SessionDetail() {
                 </Stack>
               </Card>
             </>
+          )}
+
+          {session.taskArn && (
+            <ContainerLogs
+              logs={sessionLogs}
+              loading={logsLoading}
+              initialLoad={initialLogsLoad}
+              onRefresh={loadLogs}
+            />
           )}
         </>
       )}

@@ -432,6 +432,14 @@ export const registryApi = {
       preserveKeys: new Set(['args', 'config']),
       body: { sessionId },
     }),
+  getSessionLogs: (sessionId: string) =>
+    sendApiRequest<{ logs: Array<{ taskArn: string; logs: Array<{ timestamp: number; message: string }>; consoleUrl: string }> }>(
+      '/strategy-sessions/logs', 'GET', {
+        apiUrl: REGISTRY_API_URL,
+        apiKey: REGISTRY_API_KEY,
+        queryParams: { sessionId },
+      }
+    ),
   listCurrencies: () =>
     sendApiRequest<Currency[]>('/currencies', 'GET', {
       apiUrl: REGISTRY_API_URL,
