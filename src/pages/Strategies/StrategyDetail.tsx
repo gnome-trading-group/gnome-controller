@@ -17,7 +17,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconArrowLeft, IconPlayerStop, IconPlus, IconRefresh, IconReload, IconTrash } from '@tabler/icons-react';
+import { IconAB2, IconArrowLeft, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -298,7 +298,7 @@ function StrategyDetail() {
           disabled={isStoppable(row.original)}
           onClick={e => { e.stopPropagation(); handleRelaunchSession(row.original); }}
         >
-          <IconReload size={16} />
+          <IconAB2 size={16} />
         </ActionIcon>
         <ActionIcon
           variant="subtle"

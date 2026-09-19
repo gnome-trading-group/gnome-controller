@@ -12,7 +12,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconEye, IconPlayerStop, IconPlus, IconRefresh, IconReload } from '@tabler/icons-react';
+import { IconAB2, IconEye, IconPlayerStop, IconPlus, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
@@ -216,7 +216,7 @@ function SessionsList() {
           disabled={isStoppable(row.original)}
           onClick={e => { e.stopPropagation(); handleRelaunch(row.original); }}
         >
-          <IconReload size={16} />
+          <IconAB2 size={16} />
         </ActionIcon>
         <ActionIcon
           variant="subtle"

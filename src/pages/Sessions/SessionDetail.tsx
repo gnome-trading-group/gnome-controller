@@ -17,7 +17,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconArrowLeft, IconPlayerStop, IconRefresh, IconReload } from '@tabler/icons-react';
+import { IconAB2, IconArrowLeft, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { StrategySession, StrategySessionStatus } from '../../types';
@@ -185,7 +185,7 @@ function SessionDetail() {
         {isRelaunchable && (
           <Tooltip label="Relaunch Session" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="green" loading={relaunching} onClick={handleRelaunch}>
-              <IconReload size={20} />
+              <IconAB2 size={20} />
             </ActionIcon>
           </Tooltip>
         )}
