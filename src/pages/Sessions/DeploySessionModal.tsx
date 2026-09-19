@@ -123,10 +123,10 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
     const p = strategy.parameters as Record<string, unknown> | undefined;
     if (!p) return;
     if (p.mode) setMode(String(p.mode));
-    if (p.strategy_type) setStrategyType(String(p.strategy_type));
-    if (p.strategy_class) setStrategyClass(String(p.strategy_class));
+    if (p.strategyType) setStrategyType(String(p.strategyType));
+    if (p.strategyClass) setStrategyClass(String(p.strategyClass));
     if (p.region) setRegion(String(p.region));
-    if (p.research_commit) setResearchCommit(String(p.research_commit));
+    if (p.researchCommit) setResearchCommit(String(p.researchCommit));
     if (p.args && typeof p.args === 'object') {
       const entries = Object.entries(p.args as Record<string, unknown>);
       setParams(entries.map(([k, v]) => ({ key: k, value: String(v) })));

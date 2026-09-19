@@ -14,17 +14,19 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconEdit, IconEye, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconEdit, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
-import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row, type MRT_TableInstance } from 'mantine-react-table';
+import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
 import { Strategy, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
+import { navigateRowProps } from '../../utils/navigation';
 import {
   defaultSimulationState,
   ListingProfileRow,
   ProfilesEditor,
   ProfilesState,
+  simulationProfilesFromConfig,
   simulationProfilesToConfig,
 } from '../../components/SimulationConfigForm';
 
@@ -40,14 +42,8 @@ const STATUS_COLORS: Record<number, string> = {
   [StrategyStatus.PAUSED]: 'yellow',
 };
 
-function Strategies() {
-  const navigate = useNavigate();
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Strategy | null>(null);
-  const [createForm, setCreateForm] = useState({
+function defaultForm() {
+  return {
     name: '',
     description: '',
     status: StrategyStatus.INACTIVE,
@@ -58,10 +54,31 @@ function Strategies() {
     region: '',
     researchCommit: '',
     args: [] as { key: string; value: string }[],
-  });
-  const [createProfiles, setCreateProfiles] = useState<ProfilesState>({ default: defaultSimulationState() });
-  const [createListings, setCreateListings] = useState<ListingProfileRow[]>([{ listingId: '', profile: 'default' }]);
-  const [createError, setCreateError] = useState<string | null>(null);
+  };
+}
+
+function defaultProfiles(): ProfilesState {
+  return { default: defaultSimulationState() };
+}
+
+function defaultListings(): ListingProfileRow[] {
+  return [{ listingId: '', profile: 'default' }];
+}
+
+function Strategies() {
+  const navigate = useNavigate();
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Strategy | null>(null);
+  const [form, setForm] = useState(defaultForm());
+  const [profiles, setProfiles] = useState<ProfilesState>(defaultProfiles());
+  const [listings, setListings] = useState<ListingProfileRow[]>(defaultListings());
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Strategy | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -75,36 +92,88 @@ function Strategies() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const handleCreate = async () => {
-    setCreateError(null);
+  const openCreate = () => {
+    setEditTarget(null);
+    setForm(defaultForm());
+    setProfiles(defaultProfiles());
+    setListings(defaultListings());
+    setFormError(null);
+    setModalOpen(true);
+  };
+
+  const openEdit = useCallback((strategy: Strategy) => {
+    const p = strategy.parameters as Record<string, unknown> | undefined ?? {};
+    const args = p.args && typeof p.args === 'object'
+      ? Object.entries(p.args as Record<string, unknown>).map(([key, value]) => ({ key, value: String(value) }))
+      : [];
+
+    setForm({
+      name: strategy.name ?? '',
+      description: strategy.description ?? '',
+      status: strategy.status,
+      mode: p.mode ? String(p.mode) : 'paper',
+      strategyType: p.strategyType ? String(p.strategyType) : 'java',
+      strategyClass: p.strategyClass ? String(p.strategyClass) : '',
+      listings: p.listings ? String(p.listings) : '',
+      region: p.region ? String(p.region) : '',
+      researchCommit: p.researchCommit ? String(p.researchCommit) : '',
+      args,
+    });
+
+    if (p.simulation && typeof p.simulation === 'object') {
+      const { profiles: loadedProfiles, listings: loadedListings } = simulationProfilesFromConfig(
+        p.simulation as Record<string, string>
+      );
+      setProfiles(Object.keys(loadedProfiles).length > 0 ? loadedProfiles : defaultProfiles());
+      setListings(loadedListings.length > 0 ? loadedListings : defaultListings());
+    } else {
+      setProfiles(defaultProfiles());
+      setListings(defaultListings());
+    }
+
+    setEditTarget(strategy);
+    setFormError(null);
+    setModalOpen(true);
+  }, []);
+
+  const handleSubmit = async () => {
+    setFormError(null);
     try {
       const args: Record<string, string> = {};
-      for (const { key, value } of createForm.args) {
+      for (const { key, value } of form.args) {
         if (key.trim()) args[key.trim()] = value;
       }
       const parameters: Record<string, unknown> = {
-        mode: createForm.mode,
-        strategy_type: createForm.strategyType,
-        strategy_class: createForm.strategyClass,
+        mode: form.mode,
+        strategy_type: form.strategyType,
+        strategy_class: form.strategyClass,
       };
-      if (createForm.mode === 'live') parameters.listings = createForm.listings;
-      if (createForm.region.trim()) parameters.region = createForm.region.trim();
-      if (createForm.researchCommit.trim()) parameters.research_commit = createForm.researchCommit.trim();
+      if (form.mode === 'live') parameters.listings = form.listings;
+      if (form.region.trim()) parameters.region = form.region.trim();
+      if (form.researchCommit.trim()) parameters.research_commit = form.researchCommit.trim();
       if (Object.keys(args).length > 0) parameters.args = args;
-      if (createForm.mode === 'paper') parameters.simulation = simulationProfilesToConfig(createProfiles, createListings);
-      await registryApi.createStrategy({
-        name: createForm.name,
-        description: createForm.description || undefined,
-        status: createForm.status,
-        parameters,
-      });
-      setCreateModalOpen(false);
-      setCreateForm({ name: '', description: '', status: StrategyStatus.INACTIVE, mode: 'paper', strategyType: 'java', strategyClass: '', listings: '', region: '', researchCommit: '', args: [] });
-      setCreateProfiles({ default: defaultSimulationState() });
-      setCreateListings([{ listingId: '', profile: 'default' }]);
+      if (form.mode === 'paper') parameters.simulation = simulationProfilesToConfig(profiles, listings);
+
+      if (editTarget) {
+        await registryApi.updateStrategy(editTarget.strategyId, {
+          name: form.name,
+          description: form.description || undefined,
+          status: form.status,
+          parameters,
+        });
+      } else {
+        await registryApi.createStrategy({
+          name: form.name,
+          description: form.description || undefined,
+          status: form.status,
+          parameters,
+        });
+      }
+
+      setModalOpen(false);
       refresh();
     } catch (e) {
-      setCreateError(e instanceof Error ? e.message : 'Failed to create strategy');
+      setFormError(e instanceof Error ? e.message : `Failed to ${editTarget ? 'update' : 'create'} strategy`);
     }
   };
 
@@ -125,56 +194,32 @@ function Strategies() {
       accessorKey: 'strategyId',
       header: 'ID',
       enableSorting: true,
-      enableEditing: false,
       size: 60,
     },
     {
       accessorKey: 'name',
       header: 'Name',
       enableSorting: true,
-      enableEditing: true,
-      Edit: ({ cell, row }) => (
-        <TextInput
-          defaultValue={cell.getValue<string>()}
-          onChange={(e) => { row.original.name = e.target.value; }}
-        />
-      ),
     },
     {
       accessorKey: 'status',
       header: 'Status',
       enableSorting: true,
-      enableEditing: true,
       Cell: ({ row }: { row: MRT_Row<Strategy> }) => (
         <Badge color={STATUS_COLORS[row.original.status]} variant="light">
           {STATUS_LABELS[row.original.status] ?? row.original.status}
         </Badge>
-      ),
-      Edit: ({ cell, row }) => (
-        <Select
-          defaultValue={cell.getValue<number>().toString()}
-          data={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))}
-          onChange={(value) => { row.original.status = parseInt(value ?? '0'); }}
-        />
       ),
     },
     {
       accessorKey: 'description',
       header: 'Description',
       enableSorting: false,
-      enableEditing: true,
-      Edit: ({ cell, row }) => (
-        <TextInput
-          defaultValue={cell.getValue<string>()}
-          onChange={(e) => { row.original.description = e.target.value; }}
-        />
-      ),
     },
     {
       accessorKey: 'dateCreated',
       header: 'Created',
       enableSorting: true,
-      enableEditing: false,
       Cell: ({ row }: { row: MRT_Row<Strategy> }) =>
         row.original.dateCreated
           ? <ReactTimeAgo date={new Date(row.original.dateCreated)} timeStyle="round" />
@@ -192,25 +237,16 @@ function Strategies() {
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: true,
-    enableEditing: true,
-    editDisplayMode: 'row' as const,
     positionActionsColumn: 'last' as const,
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
+    mantineTableBodyRowProps: ({ row }) => navigateRowProps(navigate, `/strategies/${row.original.strategyId}`),
     initialState: { sorting: [{ id: 'strategyId', desc: false }], density: 'xs' },
-    onEditingRowSave: async ({ row, table: t }: { row: MRT_Row<Strategy>; table: MRT_TableInstance<Strategy> }) => {
-      await registryApi.updateStrategy(row.original.strategyId, row.original);
-      t.setEditingRow(null);
-      refresh();
-    },
-    renderRowActions: ({ row, table: t }: { row: MRT_Row<Strategy>; table: MRT_TableInstance<Strategy> }) => (
+    renderRowActions: ({ row }: { row: MRT_Row<Strategy> }) => (
       <Group gap={4} justify="center" wrap="nowrap">
-        <ActionIcon variant="subtle" color="teal" onClick={() => navigate(`/strategies/${row.original.strategyId}`)}>
-          <IconEye size={16} />
-        </ActionIcon>
-        <ActionIcon variant="subtle" color="blue" onClick={() => t.setEditingRow(row)}>
+        <ActionIcon variant="subtle" color="blue" onClick={(e) => { e.stopPropagation(); openEdit(row.original); }}>
           <IconEdit size={16} />
         </ActionIcon>
-        <ActionIcon variant="subtle" color="red" onClick={() => { setDeleteTarget(row.original); setDeleteModalOpen(true); }}>
+        <ActionIcon variant="subtle" color="red" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row.original); setDeleteModalOpen(true); }}>
           <IconTrash size={16} />
         </ActionIcon>
       </Group>
@@ -228,7 +264,7 @@ function Strategies() {
             </ActionIcon>
           </Tooltip>
           <Tooltip label="Create Strategy" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setCreateModalOpen(true)}>
+            <ActionIcon size="lg" variant="filled" color="blue" onClick={openCreate}>
               <IconPlus size={20} />
             </ActionIcon>
           </Tooltip>
@@ -237,57 +273,57 @@ function Strategies() {
 
       <MantineReactTable table={table} />
 
-      <Modal opened={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Create Strategy" size="lg">
+      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={editTarget ? 'Edit Strategy' : 'Create Strategy'} size="lg">
         <Stack>
-          <TextInput label="Name" value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} required />
-          <TextInput label="Description" value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} />
-          <Select label="Status" value={createForm.status.toString()} data={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))} onChange={(v) => setCreateForm((f) => ({ ...f, status: parseInt(v ?? '0') }))} />
+          <TextInput label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
+          <TextInput label="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+          <Select label="Status" value={form.status.toString()} data={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))} onChange={(v) => setForm((f) => ({ ...f, status: parseInt(v ?? '0') }))} />
 
           <Divider />
           <Title order={6} c="dimmed">Default Config</Title>
           <Group grow>
-            <Select label="Mode" value={createForm.mode} data={[{ value: 'paper', label: 'Paper' }, { value: 'live', label: 'Live' }]} onChange={(v) => setCreateForm((f) => ({ ...f, mode: v ?? 'paper' }))} />
-            <Select label="Strategy Type" value={createForm.strategyType} data={[{ value: 'java', label: 'Java' }, { value: 'python', label: 'Python' }]} onChange={(v) => setCreateForm((f) => ({ ...f, strategyType: v ?? 'java' }))} />
+            <Select label="Mode" value={form.mode} data={[{ value: 'paper', label: 'Paper' }, { value: 'live', label: 'Live' }]} onChange={(v) => setForm((f) => ({ ...f, mode: v ?? 'paper' }))} />
+            <Select label="Strategy Type" value={form.strategyType} data={[{ value: 'java', label: 'Java' }, { value: 'python', label: 'Python' }]} onChange={(v) => setForm((f) => ({ ...f, strategyType: v ?? 'java' }))} />
           </Group>
-          <TextInput label="Strategy Class" placeholder="com.example.MyStrategy" value={createForm.strategyClass} onChange={(e) => setCreateForm((f) => ({ ...f, strategyClass: e.target.value }))} />
-          {createForm.mode === 'live' && (
-            <TextInput label="Listings" placeholder="1,2,3" value={createForm.listings} onChange={(e) => setCreateForm((f) => ({ ...f, listings: e.target.value }))} />
+          <TextInput label="Strategy Class" placeholder="com.example.MyStrategy or module:ClassName" value={form.strategyClass} onChange={(e) => setForm((f) => ({ ...f, strategyClass: e.target.value }))} />
+          {form.mode === 'live' && (
+            <TextInput label="Listings" placeholder="1,2,3" value={form.listings} onChange={(e) => setForm((f) => ({ ...f, listings: e.target.value }))} />
           )}
           <Group grow>
-            <TextInput label="Region (optional)" placeholder="us-east-1" value={createForm.region} onChange={(e) => setCreateForm((f) => ({ ...f, region: e.target.value }))} />
-            <TextInput label="Research Commit (optional)" placeholder="main" value={createForm.researchCommit} onChange={(e) => setCreateForm((f) => ({ ...f, researchCommit: e.target.value }))} />
+            <TextInput label="Region (optional)" placeholder="us-east-1" value={form.region} onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))} />
+            <TextInput label="Research Commit (optional)" placeholder="main" value={form.researchCommit} onChange={(e) => setForm((f) => ({ ...f, researchCommit: e.target.value }))} />
           </Group>
 
           <Divider />
           <Group justify="space-between">
             <Title order={6} c="dimmed">Strategy Args</Title>
-            <ActionIcon size="sm" variant="subtle" color="blue" onClick={() => setCreateForm((f) => ({ ...f, args: [...f.args, { key: '', value: '' }] }))}>
+            <ActionIcon size="sm" variant="subtle" color="blue" onClick={() => setForm((f) => ({ ...f, args: [...f.args, { key: '', value: '' }] }))}>
               <IconPlus size={14} />
             </ActionIcon>
           </Group>
-          {createForm.args.map((row, i) => (
+          {form.args.map((row, i) => (
             <Group key={i} gap="xs" align="flex-end">
-              <TextInput placeholder="key" value={row.key} onChange={(e) => setCreateForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, key: e.currentTarget.value } : r) }))} style={{ flex: 1 }} />
-              <TextInput placeholder="value" value={row.value} onChange={(e) => setCreateForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: e.currentTarget.value } : r) }))} style={{ flex: 1 }} />
-              <ActionIcon variant="subtle" color="red" onClick={() => setCreateForm((f) => ({ ...f, args: f.args.filter((_, j) => j !== i) }))}>
+              <TextInput placeholder="key" value={row.key} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, key: v } : r) })); }} style={{ flex: 1 }} />
+              <TextInput placeholder="value" value={row.value} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: v } : r) })); }} style={{ flex: 1 }} />
+              <ActionIcon variant="subtle" color="red" onClick={() => setForm((f) => ({ ...f, args: f.args.filter((_, j) => j !== i) }))}>
                 <IconTrash size={14} />
               </ActionIcon>
             </Group>
           ))}
 
-          {createForm.mode === 'paper' && (
+          {form.mode === 'paper' && (
             <ProfilesEditor
-              profiles={createProfiles}
-              listings={createListings}
-              onProfilesChange={setCreateProfiles}
-              onListingsChange={setCreateListings}
+              profiles={profiles}
+              listings={listings}
+              onProfilesChange={setProfiles}
+              onListingsChange={setListings}
             />
           )}
 
-          {createError && <Text c="red" size="sm">{createError}</Text>}
+          {formError && <Text c="red" size="sm">{formError}</Text>}
           <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreate}>Create</Button>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSubmit}>{editTarget ? 'Save' : 'Create'}</Button>
           </Group>
         </Stack>
       </Modal>
