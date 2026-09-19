@@ -1,4 +1,5 @@
-import { Divider, Group, NumberInput, Select, Stack, Title } from '@mantine/core';
+import { ActionIcon, Accordion, Button, Divider, Group, NumberInput, Select, Stack, Text, TextInput, Title } from '@mantine/core';
+import { IconPlus, IconTrash } from '@tabler/icons-react';
 
 export interface SimulationState {
   feeModel: 'static' | 'parametric';
@@ -129,6 +130,183 @@ export function simulationStateFromConfig(sim: Record<string, string>): Simulati
     s.cancelAheadProbability = Number(sim['queue.cancel.ahead.probability'] ?? 0.5);
   }
   return s;
+}
+
+export interface ListingProfileRow {
+  listingId: string;
+  profile: string;
+}
+
+export type ProfilesState = Record<string, SimulationState>;
+
+export function simulationProfilesToConfig(
+  profiles: ProfilesState,
+  listings: ListingProfileRow[],
+): Record<string, string> {
+  const cfg: Record<string, string> = {};
+  for (const [name, sim] of Object.entries(profiles)) {
+    const simCfg = simulationStateToConfig(sim);
+    for (const [k, v] of Object.entries(simCfg)) {
+      cfg[`simulation.profiles.${name}.${k}`] = v;
+    }
+  }
+  for (const { listingId, profile } of listings) {
+    if (listingId.trim() && profile) {
+      cfg[`simulation.listing.${listingId.trim()}.profile`] = profile;
+    }
+  }
+  return cfg;
+}
+
+export function simulationProfilesFromConfig(config: Record<string, string>): {
+  profiles: ProfilesState;
+  listings: ListingProfileRow[];
+} {
+  const profileKeys: Record<string, Record<string, string>> = {};
+  const listingMap: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(config)) {
+    const profileMatch = key.match(/^simulation\.profiles\.([^.]+)\.(.*)/);
+    if (profileMatch) {
+      const name = profileMatch[1];
+      const subKey = profileMatch[2];
+      if (!profileKeys[name]) profileKeys[name] = {};
+      profileKeys[name][subKey] = value;
+    }
+    const listingMatch = key.match(/^simulation\.listing\.(\d+)\.profile$/);
+    if (listingMatch) {
+      listingMap[listingMatch[1]] = value;
+    }
+  }
+
+  const profiles: ProfilesState = {};
+  for (const [name, simKeys] of Object.entries(profileKeys)) {
+    profiles[name] = simulationStateFromConfig(simKeys);
+  }
+
+  const listings: ListingProfileRow[] = Object.entries(listingMap).map(([listingId, profile]) => ({
+    listingId,
+    profile,
+  }));
+
+  return { profiles, listings };
+}
+
+export interface ProfilesEditorProps {
+  profiles: ProfilesState;
+  listings: ListingProfileRow[];
+  onProfilesChange: (p: ProfilesState) => void;
+  onListingsChange: (l: ListingProfileRow[]) => void;
+}
+
+export function ProfilesEditor({ profiles, listings, onProfilesChange, onListingsChange }: ProfilesEditorProps) {
+  const profileNames = Object.keys(profiles);
+
+  const addProfile = () => {
+    const base = 'profile';
+    let name = base;
+    let i = 1;
+    while (profiles[name] !== undefined) name = `${base}${i++}`;
+    onProfilesChange({ ...profiles, [name]: defaultSimulationState() });
+  };
+
+  const removeProfile = (name: string) => {
+    const next = { ...profiles };
+    delete next[name];
+    onProfilesChange(next);
+  };
+
+  const renameProfile = (oldName: string, newName: string) => {
+    if (!newName.trim() || newName === oldName) return;
+    const next: ProfilesState = {};
+    for (const [k, v] of Object.entries(profiles)) {
+      next[k === oldName ? newName.trim() : k] = v;
+    }
+    onProfilesChange(next);
+    onListingsChange(listings.map(l => l.profile === oldName ? { ...l, profile: newName.trim() } : l));
+  };
+
+  const addListing = () => {
+    onListingsChange([...listings, { listingId: '', profile: profileNames[0] ?? '' }]);
+  };
+
+  const removeListing = (i: number) => {
+    onListingsChange(listings.filter((_, j) => j !== i));
+  };
+
+  const updateListing = (i: number, patch: Partial<ListingProfileRow>) => {
+    onListingsChange(listings.map((l, j) => j === i ? { ...l, ...patch } : l));
+  };
+
+  return (
+    <Stack gap="sm">
+      <Group justify="space-between">
+        <Title order={6} c="dimmed">Profiles</Title>
+        <Button size="xs" variant="subtle" leftSection={<IconPlus size={12} />} onClick={addProfile}>Add Profile</Button>
+      </Group>
+
+      <Accordion variant="separated">
+        {profileNames.map(name => (
+          <Accordion.Item key={name} value={name}>
+            <Accordion.Control>
+              <Group gap="xs">
+                <TextInput
+                  size="xs"
+                  defaultValue={name}
+                  onBlur={e => renameProfile(name, e.currentTarget.value)}
+                  onClick={e => e.stopPropagation()}
+                  style={{ flex: 1 }}
+                />
+                <ActionIcon
+                  size="sm"
+                  color="red"
+                  variant="subtle"
+                  onClick={e => { e.stopPropagation(); removeProfile(name); }}
+                >
+                  <IconTrash size={12} />
+                </ActionIcon>
+              </Group>
+            </Accordion.Control>
+            <Accordion.Panel>
+              <SimulationConfigForm
+                sim={profiles[name]}
+                onChange={sim => onProfilesChange({ ...profiles, [name]: sim })}
+              />
+            </Accordion.Panel>
+          </Accordion.Item>
+        ))}
+      </Accordion>
+
+      <Divider />
+      <Group justify="space-between">
+        <Title order={6} c="dimmed">Listings</Title>
+        <ActionIcon size="sm" variant="subtle" color="blue" onClick={addListing}>
+          <IconPlus size={14} />
+        </ActionIcon>
+      </Group>
+      {listings.length === 0 && <Text size="sm" c="dimmed">Add at least one listing.</Text>}
+      {listings.map((row, i) => (
+        <Group key={i} gap="xs" align="flex-end">
+          <TextInput
+            placeholder="Listing ID"
+            value={row.listingId}
+            onChange={e => updateListing(i, { listingId: e.currentTarget.value })}
+            style={{ flex: 1 }}
+          />
+          <Select
+            placeholder="Profile"
+            data={profileNames}
+            value={row.profile}
+            onChange={v => updateListing(i, { profile: v ?? '' })}
+            style={{ flex: 1 }}
+          />
+          <ActionIcon variant="subtle" color="red" onClick={() => removeListing(i)}>
+            <IconTrash size={14} />
+          </ActionIcon>
+        </Group>
+      ))}
+    </Stack>
+  );
 }
 
 const FEE_MODEL_OPTIONS = [

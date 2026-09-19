@@ -20,7 +20,13 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { useNavigate } from 'react-router-dom';
 import { Strategy, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
-import SimulationConfigForm, { defaultSimulationState, simulationStateToConfig, SimulationState } from '../../components/SimulationConfigForm';
+import {
+  defaultSimulationState,
+  ListingProfileRow,
+  ProfilesEditor,
+  ProfilesState,
+  simulationProfilesToConfig,
+} from '../../components/SimulationConfigForm';
 
 const STATUS_LABELS: Record<number, string> = {
   [StrategyStatus.INACTIVE]: 'Inactive',
@@ -53,7 +59,8 @@ function Strategies() {
     researchCommit: '',
     args: [] as { key: string; value: string }[],
   });
-  const [createSim, setCreateSim] = useState<SimulationState>(defaultSimulationState());
+  const [createProfiles, setCreateProfiles] = useState<ProfilesState>({ default: defaultSimulationState() });
+  const [createListings, setCreateListings] = useState<ListingProfileRow[]>([{ listingId: '', profile: 'default' }]);
   const [createError, setCreateError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -79,12 +86,12 @@ function Strategies() {
         mode: createForm.mode,
         strategy_type: createForm.strategyType,
         strategy_class: createForm.strategyClass,
-        listings: createForm.listings,
       };
+      if (createForm.mode === 'live') parameters.listings = createForm.listings;
       if (createForm.region.trim()) parameters.region = createForm.region.trim();
       if (createForm.researchCommit.trim()) parameters.research_commit = createForm.researchCommit.trim();
       if (Object.keys(args).length > 0) parameters.args = args;
-      if (createForm.mode === 'paper') parameters.simulation = simulationStateToConfig(createSim);
+      if (createForm.mode === 'paper') parameters.simulation = simulationProfilesToConfig(createProfiles, createListings);
       await registryApi.createStrategy({
         name: createForm.name,
         description: createForm.description || undefined,
@@ -93,7 +100,8 @@ function Strategies() {
       });
       setCreateModalOpen(false);
       setCreateForm({ name: '', description: '', status: StrategyStatus.INACTIVE, mode: 'paper', strategyType: 'java', strategyClass: '', listings: '', region: '', researchCommit: '', args: [] });
-      setCreateSim(defaultSimulationState());
+      setCreateProfiles({ default: defaultSimulationState() });
+      setCreateListings([{ listingId: '', profile: 'default' }]);
       refresh();
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Failed to create strategy');
@@ -242,7 +250,9 @@ function Strategies() {
             <Select label="Strategy Type" value={createForm.strategyType} data={[{ value: 'java', label: 'Java' }, { value: 'python', label: 'Python' }]} onChange={(v) => setCreateForm((f) => ({ ...f, strategyType: v ?? 'java' }))} />
           </Group>
           <TextInput label="Strategy Class" placeholder="com.example.MyStrategy" value={createForm.strategyClass} onChange={(e) => setCreateForm((f) => ({ ...f, strategyClass: e.target.value }))} />
-          <TextInput label="Listings" placeholder="1,2,3" value={createForm.listings} onChange={(e) => setCreateForm((f) => ({ ...f, listings: e.target.value }))} />
+          {createForm.mode === 'live' && (
+            <TextInput label="Listings" placeholder="1,2,3" value={createForm.listings} onChange={(e) => setCreateForm((f) => ({ ...f, listings: e.target.value }))} />
+          )}
           <Group grow>
             <TextInput label="Region (optional)" placeholder="us-east-1" value={createForm.region} onChange={(e) => setCreateForm((f) => ({ ...f, region: e.target.value }))} />
             <TextInput label="Research Commit (optional)" placeholder="main" value={createForm.researchCommit} onChange={(e) => setCreateForm((f) => ({ ...f, researchCommit: e.target.value }))} />
@@ -265,7 +275,14 @@ function Strategies() {
             </Group>
           ))}
 
-          {createForm.mode === 'paper' && <SimulationConfigForm sim={createSim} onChange={setCreateSim} />}
+          {createForm.mode === 'paper' && (
+            <ProfilesEditor
+              profiles={createProfiles}
+              listings={createListings}
+              onProfilesChange={setCreateProfiles}
+              onListingsChange={setCreateListings}
+            />
+          )}
 
           {createError && <Text c="red" size="sm">{createError}</Text>}
           <Group justify="flex-end">

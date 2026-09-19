@@ -14,11 +14,13 @@ import {
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { Strategy } from '../../types';
 import { registryApi } from '../../utils/api';
-import SimulationConfigForm, {
+import {
   defaultSimulationState,
-  simulationStateFromConfig,
-  simulationStateToConfig,
-  SimulationState,
+  ListingProfileRow,
+  ProfilesEditor,
+  ProfilesState,
+  simulationProfilesFromConfig,
+  simulationProfilesToConfig,
 } from '../../components/SimulationConfigForm';
 
 interface ParamRow {
@@ -48,16 +50,21 @@ function flattenToSessionConfig(
   mode: string,
   strategyType: string | null,
   strategyClass: string,
-  listings: string,
+  listings: ListingProfileRow[],
+  liveListings: string,
   researchCommit: string,
   region: string,
   params: ParamRow[],
-  sim: SimulationState,
+  profiles: ProfilesState,
 ): Record<string, string> {
+  const listingsStr = mode === 'paper'
+    ? listings.map(l => l.listingId.trim()).filter(Boolean).join(',')
+    : liveListings.trim();
+
   const config: Record<string, string> = {
     'strategy.id': strategyId,
     mode,
-    listings: listings.trim(),
+    listings: listingsStr,
   };
   if (strategyType) {
     config['strategy.type'] = strategyType;
@@ -69,12 +76,20 @@ function flattenToSessionConfig(
     if (key.trim()) config[`strategy.args.${key.trim()}`] = value;
   }
   if (mode === 'paper') {
-    const simCfg = simulationStateToConfig(sim);
+    const simCfg = simulationProfilesToConfig(profiles, listings);
     for (const [k, v] of Object.entries(simCfg)) {
-      config[`simulation.${k}`] = v;
+      config[k] = v;
     }
   }
   return config;
+}
+
+function defaultProfiles(): ProfilesState {
+  return { default: defaultSimulationState() };
+}
+
+function defaultListings(): ListingProfileRow[] {
+  return [{ listingId: '', profile: 'default' }];
 }
 
 function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId }: DeploySessionModalProps) {
@@ -83,13 +98,14 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
     preselectedStrategyId !== undefined ? String(preselectedStrategyId) : null
   );
   const [mode, setMode] = useState<string>('paper');
-  const [listings, setListings] = useState('');
+  const [profiles, setProfiles] = useState<ProfilesState>(defaultProfiles());
+  const [listings, setListings] = useState<ListingProfileRow[]>(defaultListings());
+  const [liveListings, setLiveListings] = useState('');
   const [researchCommit, setResearchCommit] = useState('');
   const [region, setRegion] = useState('');
   const [strategyType, setStrategyType] = useState<string | null>(null);
   const [strategyClass, setStrategyClass] = useState('');
   const [params, setParams] = useState<ParamRow[]>([]);
-  const [sim, setSim] = useState<SimulationState>(defaultSimulationState());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,7 +125,6 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
     if (p.mode) setMode(String(p.mode));
     if (p.strategy_type) setStrategyType(String(p.strategy_type));
     if (p.strategy_class) setStrategyClass(String(p.strategy_class));
-    if (p.listings) setListings(String(p.listings));
     if (p.region) setRegion(String(p.region));
     if (p.research_commit) setResearchCommit(String(p.research_commit));
     if (p.args && typeof p.args === 'object') {
@@ -117,7 +132,16 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
       setParams(entries.map(([k, v]) => ({ key: k, value: String(v) })));
     }
     if (p.simulation && typeof p.simulation === 'object') {
-      setSim(simulationStateFromConfig(p.simulation as Record<string, string>));
+      const { profiles: loadedProfiles, listings: loadedListings } = simulationProfilesFromConfig(
+        p.simulation as Record<string, string>
+      );
+      if (Object.keys(loadedProfiles).length > 0) {
+        setProfiles(loadedProfiles);
+        setListings(loadedListings.length > 0 ? loadedListings : defaultListings());
+      }
+    }
+    if (p.listings && typeof p.listings === 'string' && String(p.mode) === 'live') {
+      setLiveListings(String(p.listings));
     }
   }, []);
 
@@ -142,13 +166,14 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
   const resetForm = () => {
     setStrategyId(preselectedStrategyId !== undefined ? String(preselectedStrategyId) : null);
     setMode('paper');
-    setListings('');
+    setProfiles(defaultProfiles());
+    setListings(defaultListings());
+    setLiveListings('');
     setResearchCommit('');
     setRegion('');
     setStrategyType(null);
     setStrategyClass('');
     setParams([]);
-    setSim(defaultSimulationState());
     setError(null);
   };
 
@@ -157,9 +182,20 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
   const handleSubmit = async () => {
     setError(null);
     if (!strategyId) { setError('Strategy is required'); return; }
-    if (!listings.trim()) { setError('Listings are required'); return; }
 
-    const config = flattenToSessionConfig(strategyId, mode, strategyType, strategyClass, listings, researchCommit, region, params, sim);
+    if (mode === 'paper') {
+      if (listings.length === 0) { setError('At least one listing is required'); return; }
+      if (listings.some(l => !l.listingId.trim())) { setError('All listing IDs must be filled in'); return; }
+      if (listings.some(l => !l.profile)) { setError('All listings must have a profile assigned'); return; }
+      if (Object.keys(profiles).length === 0) { setError('At least one profile must be defined'); return; }
+    } else {
+      if (!liveListings.trim()) { setError('Listings are required'); return; }
+    }
+
+    const config = flattenToSessionConfig(
+      strategyId, mode, strategyType, strategyClass,
+      listings, liveListings, researchCommit, region, params, profiles,
+    );
 
     setSubmitting(true);
     try {
@@ -183,7 +219,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
   const strategyOptions = strategies.map(s => ({ value: String(s.strategyId), label: s.name }));
 
   return (
-    <Modal opened={opened} onClose={handleClose} title="Deploy Strategy Session" size="lg">
+    <Modal opened={opened} onClose={handleClose} title="Deploy Strategy Session" size="xl">
       <Stack gap="sm">
         <Title order={6} c="dimmed">Core</Title>
         <Select
@@ -196,7 +232,6 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
           searchable
         />
         <Select label="Mode" data={MODE_OPTIONS} value={mode} onChange={v => setMode(v ?? 'paper')} required />
-        <TextInput label="Listings" placeholder="e.g. 1,2,3" value={listings} onChange={e => setListings(e.currentTarget.value)} required />
         <TextInput label="Research Commit" placeholder="git SHA or branch (optional)" value={researchCommit} onChange={e => setResearchCommit(e.currentTarget.value)} />
         <TextInput label="Region Override" placeholder="e.g. us-east-1 (optional)" value={region} onChange={e => setRegion(e.currentTarget.value)} />
 
@@ -222,7 +257,24 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
           </Group>
         ))}
 
-        {mode === 'paper' && <SimulationConfigForm sim={sim} onChange={setSim} />}
+        {mode === 'live' && (
+          <>
+            <Divider />
+            <TextInput label="Listings" placeholder="e.g. 1,2,3" value={liveListings} onChange={e => setLiveListings(e.currentTarget.value)} required />
+          </>
+        )}
+
+        {mode === 'paper' && (
+          <>
+            <Divider />
+            <ProfilesEditor
+              profiles={profiles}
+              listings={listings}
+              onProfilesChange={setProfiles}
+              onListingsChange={setListings}
+            />
+          </>
+        )}
 
         {error && <Text c="red" size="sm">{error}</Text>}
         <Group justify="flex-end">
