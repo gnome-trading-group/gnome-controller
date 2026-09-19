@@ -10,7 +10,7 @@ import boto3
 import yaml
 from utils import create_response
 
-from sweep import expand_sweep, get_param_value, sweep_params
+from sweep import expand_scenarios_and_sweeps, get_param_value, scenario_names, sweep_params
 
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
 S3_BUCKET = os.environ["S3_BUCKET"]
@@ -70,21 +70,23 @@ def handler(event: dict, context) -> dict:
     except yaml.YAMLError as e:
         return create_response(400, {"error": f"invalid YAML: {e}"})
 
-    configs = expand_sweep(config)
-    job_count = len(configs)
+    jobs = expand_scenarios_and_sweeps(config)
+    job_count = len(jobs)
     run_id = _run_id()
     now = _now_iso()
     strategy = config.get("strategy", {}).get("class_name", "unknown")
+    scenarios = scenario_names(config)
+    params = sweep_params(config)
 
     # Upload original config to S3
     _put_s3_yaml(run_id, "config.yaml", config)
 
     # Upload per-job configs to S3
-    for i, cfg in enumerate(configs):
+    for i, (_, cfg) in enumerate(jobs):
         _put_s3_yaml(run_id, f"jobs/{i}/config.yaml", cfg)
 
     # Write META record to DynamoDB
-    _table.put_item(Item={
+    meta_item: dict = {
         "run_id": run_id,
         "sk": "META",
         "status": "SUBMITTED",
@@ -97,15 +99,18 @@ def handler(event: dict, context) -> dict:
         "config_yaml": config_yaml,
         "sweep_params": {
             k: [json.dumps(v, sort_keys=True) if isinstance(v, dict) else str(v) for v in vals]
-            for k, vals in sweep_params(config).items()
+            for k, vals in params.items()
         },
         "research_commit": research_commit,
         "ttl": _ttl(),
-    })
+    }
+    if scenarios:
+        meta_item["scenarios"] = scenarios
+    _table.put_item(Item=meta_item)
 
     # Submit individual Batch jobs and write JOB# records
     batch_job_ids = []
-    for i, cfg in enumerate(configs):
+    for i, (scenario_name, cfg) in enumerate(jobs):
         resp = _batch.submit_job(
             jobName=f"backtest-{run_id}-{i}",
             jobQueue=BATCH_JOB_QUEUE,
@@ -123,19 +128,19 @@ def handler(event: dict, context) -> dict:
         job_id = resp["jobId"]
         batch_job_ids.append(job_id)
 
-        _table.put_item(Item={
+        job_item: dict = {
             "run_id": run_id,
             "sk": f"JOB#{i:04d}",
             "status": "SUBMITTED",
             "submitted_at": now,
             "array_index": i,
             "batch_job_id": job_id,
-            "config_params": {
-                k: get_param_value(cfg, k)
-                for k in sweep_params(config)
-            },
+            "config_params": {k: get_param_value(cfg, k) for k in params},
             "ttl": _ttl(),
-        })
+        }
+        if scenario_name:
+            job_item["scenario"] = scenario_name
+        _table.put_item(Item=job_item)
 
     return create_response(200, {
         "run_id": run_id,

@@ -16,6 +16,7 @@ export interface BacktestJob {
   status: JobStatus;
   submittedAt: string;
   configParams: Record<string, string>;
+  scenario?: string;
   finalPnl?: number;
   sharpe?: number;
   summary?: Record<string, number | string>;
@@ -36,6 +37,7 @@ export interface BacktestRun {
   completedCount: number;
   failedCount: number;
   sweepParams?: Record<string, string[]>;
+  scenarios?: string[];
   researchCommit?: string;
   configYaml?: string;
   jobs?: BacktestJob[];

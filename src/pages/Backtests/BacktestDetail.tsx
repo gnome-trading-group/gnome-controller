@@ -125,14 +125,32 @@ function BacktestDetail() {
 
   const jobs = run?.jobs ?? [];
 
+  const hasScenarios = (run?.scenarios?.length ?? 0) > 0;
+
+  const scenarioColors = useMemo(() => {
+    const palette = ['#1971c2', '#0ca678', '#e8590c', '#9c36b5', '#c92a2a', '#2f9e44', '#f08c00', '#1098ad'];
+    const colors: Record<string, string> = {};
+    (run?.scenarios ?? []).forEach((name, i) => {
+      colors[name] = palette[i % palette.length];
+    });
+    return colors;
+  }, [run?.scenarios]);
+
   const chartData = useMemo(() =>
     jobs
       .filter((j) => j.finalPnl !== undefined)
-      .map((j) => ({
-        label: Object.values(j.configParams ?? {}).join(', ') || `job ${j.arrayIndex}`,
-        pnl: j.finalPnl ?? 0,
-        positive: (j.finalPnl ?? 0) >= 0,
-      })),
+      .map((j) => {
+        const paramLabel = Object.values(j.configParams ?? {}).join(', ');
+        const label = j.scenario
+          ? (paramLabel ? `${j.scenario} / ${paramLabel}` : j.scenario)
+          : (paramLabel || `job ${j.arrayIndex}`);
+        return {
+          label,
+          pnl: j.finalPnl ?? 0,
+          positive: (j.finalPnl ?? 0) >= 0,
+          scenario: j.scenario ?? '',
+        };
+      }),
     [jobs],
   );
 
@@ -181,6 +199,17 @@ function BacktestDetail() {
         </Badge>
       ),
     },
+    ...(hasScenarios ? [{
+      accessorKey: 'scenario' as const,
+      header: 'Scenario',
+      size: 120,
+      Cell: ({ row }: { row: MRT_Row<BacktestJob> }) => {
+        const name = row.original.scenario ?? '';
+        return name
+          ? <Badge variant="light" size="sm" color="blue">{name}</Badge>
+          : <Text c="dimmed" size="sm">—</Text>;
+      },
+    }] : []),
     {
       id: 'warnings',
       header: '',
@@ -262,7 +291,7 @@ function BacktestDetail() {
           ? <Anchor href={row.original.logUrl} target="_blank" size="sm">Open</Anchor>
           : <Text c="dimmed" size="sm">—</Text>,
     },
-  ], [metricColumns]);
+  ], [metricColumns, hasScenarios]);
 
   useEffect(() => {
     if (!visibilityInitialized && summaryKeys.length > 0) {
@@ -344,6 +373,16 @@ function BacktestDetail() {
               </InfoRow>
             </Stack>
           </SimpleGrid>
+          {run.scenarios && run.scenarios.length > 0 && (
+            <Group gap="xs" mt="xs" wrap="nowrap">
+              <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>Scenarios</Text>
+              <Group gap={4}>
+                {run.scenarios.map((name) => (
+                  <Badge key={name} variant="light" size="sm" color="blue">{name}</Badge>
+                ))}
+              </Group>
+            </Group>
+          )}
           {run.sweepParams && Object.keys(run.sweepParams).length > 0 && (
             <Stack gap={4} mt="xs">
               {Object.entries(run.sweepParams).map(([param, values]) => (
@@ -416,7 +455,15 @@ function BacktestDetail() {
               />
               <Bar dataKey="pnl" radius={[3, 3, 0, 0]}>
                 {chartData.map((entry, i) => (
-                  <Cell key={i} fill={entry.positive ? '#2f9e44' : '#c92a2a'} />
+                  <Cell
+                    key={i}
+                    fill={
+                      hasScenarios && entry.scenario
+                        ? scenarioColors[entry.scenario] ?? '#1971c2'
+                        : entry.positive ? '#2f9e44' : '#c92a2a'
+                    }
+                    opacity={entry.positive ? 1 : 0.65}
+                  />
                 ))}
               </Bar>
             </BarChart>
