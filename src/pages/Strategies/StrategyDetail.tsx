@@ -17,7 +17,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconArrowLeft, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconArrowLeft, IconPlayerStop, IconPlus, IconRefresh, IconReload, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -144,6 +144,22 @@ function StrategyDetail() {
 
   const isStoppable = (s: StrategySession) =>
     s.status === StrategySessionStatus.SUBMITTED || s.status === StrategySessionStatus.RUNNING;
+
+  const handleRelaunchSession = async (session: StrategySession) => {
+    try {
+      const result = await registryApi.createSession({
+        sessionId: crypto.randomUUID(),
+        strategyId: session.strategyId,
+        mode: session.mode,
+        config: session.config,
+        researchCommit: session.researchCommit ?? undefined,
+        region: session.config['region'] ?? undefined,
+      });
+      navigate(`/sessions/${result.sessionId}`);
+    } catch (e) {
+      console.error('Failed to relaunch session:', e);
+    }
+  };
 
   const sessionColumns = useMemo<MRT_ColumnDef<StrategySession>[]>(() => [
     {
@@ -275,14 +291,24 @@ function StrategyDetail() {
       navigateRowProps(navigate, `/sessions/${row.original.sessionId}`)
     ),
     renderRowActions: ({ row }: { row: MRT_Row<StrategySession> }) => (
-      <ActionIcon
-        variant="subtle"
-        color="red"
-        disabled={!isStoppable(row.original)}
-        onClick={e => { e.stopPropagation(); setStopTarget(row.original); }}
-      >
-        <IconPlayerStop size={16} />
-      </ActionIcon>
+      <Group gap={4} justify="center" wrap="nowrap">
+        <ActionIcon
+          variant="subtle"
+          color="green"
+          disabled={isStoppable(row.original)}
+          onClick={e => { e.stopPropagation(); handleRelaunchSession(row.original); }}
+        >
+          <IconReload size={16} />
+        </ActionIcon>
+        <ActionIcon
+          variant="subtle"
+          color="red"
+          disabled={!isStoppable(row.original)}
+          onClick={e => { e.stopPropagation(); setStopTarget(row.original); }}
+        >
+          <IconPlayerStop size={16} />
+        </ActionIcon>
+      </Group>
     ),
   });
 

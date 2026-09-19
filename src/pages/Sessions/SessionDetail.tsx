@@ -17,7 +17,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconArrowLeft, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
+import { IconArrowLeft, IconPlayerStop, IconRefresh, IconReload } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { StrategySession, StrategySessionStatus } from '../../types';
@@ -79,6 +79,7 @@ function SessionDetail() {
   const [loading, setLoading] = useState(false);
   const [stopOpen, setStopOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [relaunching, setRelaunching] = useState(false);
   const [sessionLogs, setSessionLogs] = useState<TaskLogs[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [initialLogsLoad, setInitialLogsLoad] = useState(true);
@@ -139,6 +140,27 @@ function SessionDetail() {
   };
 
   const isStoppable = session?.status === StrategySessionStatus.SUBMITTED || session?.status === StrategySessionStatus.RUNNING;
+  const isRelaunchable = session?.status === StrategySessionStatus.STOPPED || session?.status === StrategySessionStatus.FAILED;
+
+  const handleRelaunch = async () => {
+    if (!session) return;
+    setRelaunching(true);
+    try {
+      const result = await registryApi.createSession({
+        sessionId: crypto.randomUUID(),
+        strategyId: session.strategyId,
+        mode: session.mode,
+        config: session.config,
+        researchCommit: session.researchCommit ?? undefined,
+        region: session.config['region'] ?? undefined,
+      });
+      navigate(`/sessions/${result.sessionId}`);
+    } catch (e) {
+      console.error('Failed to relaunch session:', e);
+    } finally {
+      setRelaunching(false);
+    }
+  };
   const grouped = session ? groupConfig(session.config) : null;
 
   return (
@@ -160,6 +182,13 @@ function SessionDetail() {
             <IconRefresh size={20} />
           </ActionIcon>
         </Tooltip>
+        {isRelaunchable && (
+          <Tooltip label="Relaunch Session" withArrow openDelay={500}>
+            <ActionIcon size="lg" variant="filled" color="green" loading={relaunching} onClick={handleRelaunch}>
+              <IconReload size={20} />
+            </ActionIcon>
+          </Tooltip>
+        )}
         {isStoppable && (
           <Tooltip label="Stop Session" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="red" onClick={() => setStopOpen(true)}>

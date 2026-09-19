@@ -12,7 +12,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconEye, IconPlayerStop, IconPlus, IconRefresh } from '@tabler/icons-react';
+import { IconEye, IconPlayerStop, IconPlus, IconRefresh, IconReload } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
@@ -92,6 +92,22 @@ function SessionsList() {
         setGlobalFilter: urlState.setGlobalFilter,
       },
     });
+
+  const handleRelaunch = async (session: StrategySession) => {
+    try {
+      const result = await registryApi.createSession({
+        sessionId: crypto.randomUUID(),
+        strategyId: session.strategyId,
+        mode: session.mode,
+        config: session.config,
+        researchCommit: session.researchCommit ?? undefined,
+        region: session.config['region'] ?? undefined,
+      });
+      navigate(`/sessions/${result.sessionId}`);
+    } catch (e) {
+      console.error('Failed to relaunch session:', e);
+    }
+  };
 
   const handleStop = async () => {
     if (!stopTarget) return;
@@ -193,6 +209,14 @@ function SessionsList() {
       <Group gap={4} justify="center" wrap="nowrap">
         <ActionIcon variant="subtle" color="teal" onClick={e => { e.stopPropagation(); handleNavigateClick(e, navigate, `/sessions/${row.original.sessionId}`); }}>
           <IconEye size={16} />
+        </ActionIcon>
+        <ActionIcon
+          variant="subtle"
+          color="green"
+          disabled={isStoppable(row.original)}
+          onClick={e => { e.stopPropagation(); handleRelaunch(row.original); }}
+        >
+          <IconReload size={16} />
         </ActionIcon>
         <ActionIcon
           variant="subtle"
