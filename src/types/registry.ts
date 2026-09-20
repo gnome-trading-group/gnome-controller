@@ -25,6 +25,8 @@ export interface PnlSnapshot {
   leavesBuyQty: number;
   leavesSellQty: number;
   snapshotTime: string;
+  sessionId?: string;
+  mode?: string;
 }
 
 export const RISK_POLICY_TYPES = [

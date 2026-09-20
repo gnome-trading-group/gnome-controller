@@ -8,6 +8,7 @@ import {
   Group,
   Modal,
   NumberInput,
+  SegmentedControl,
   Select,
   Space,
   Stack,
@@ -57,6 +58,7 @@ function StrategyDetail() {
 
   const [strategy, setStrategy] = useState<Strategy | null>(null);
   const [pnlRows, setPnlRows] = useState<PnlSnapshot[]>([]);
+  const [pnlMode, setPnlMode] = useState<string>('All');
   const [policies, setPolicies] = useState<RiskPolicy[]>([]);
   const [sessions, setSessions] = useState<StrategySession[]>([]);
   const [loading, setLoading] = useState(false);
@@ -80,7 +82,7 @@ function StrategyDetail() {
     try {
       const [allStrategies, pnl, allPolicies, sessionList] = await Promise.all([
         registryApi.listStrategies({ strategyId: id }),
-        registryApi.listPnlLatest(id),
+        registryApi.listPnlLatest(id, pnlMode === 'All' ? 'ALL' : undefined),
         registryApi.listRiskPolicies(),
         registryApi.listSessions({ strategyId: id }),
       ]);
@@ -91,7 +93,7 @@ function StrategyDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, pnlMode]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -223,6 +225,14 @@ function StrategyDetail() {
 
   const pnlColumns = useMemo<MRT_ColumnDef<PnlSnapshot>[]>(() => [
     { accessorKey: 'listingId', header: 'Listing ID', enableSorting: true, size: 80 },
+    {
+      accessorKey: 'mode',
+      header: 'Mode',
+      size: 80,
+      Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => row.original.mode
+        ? <Badge color={MODE_COLORS[row.original.mode.toLowerCase()] ?? 'gray'} variant="light" size="xs">{row.original.mode}</Badge>
+        : <Text size="xs" c="dimmed">—</Text>,
+    },
     { accessorKey: 'netQuantity', header: 'Net Qty', enableSorting: true },
     { accessorKey: 'avgEntryPrice', header: 'Avg Entry', enableSorting: true },
     { accessorKey: 'realizedPnl', header: 'Realized PnL', enableSorting: true },
@@ -361,7 +371,15 @@ function StrategyDetail() {
         </Tooltip>
       </Group>
 
-      <Title order={4} mb="xs">PnL Snapshot (latest per listing)</Title>
+      <Group justify="space-between" mb="xs">
+        <Title order={4}>PnL Snapshot (latest per listing)</Title>
+        <SegmentedControl
+          size="xs"
+          value={pnlMode}
+          onChange={setPnlMode}
+          data={['All', 'Live']}
+        />
+      </Group>
       <MantineReactTable table={pnlTable} />
 
       <Space h="xl" />

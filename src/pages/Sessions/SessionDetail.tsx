@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import {
   Accordion,
   ActionIcon,
@@ -11,6 +11,7 @@ import {
   Group,
   Modal,
   SimpleGrid,
+  Space,
   Stack,
   Table,
   Text,
@@ -19,8 +20,9 @@ import {
 } from '@mantine/core';
 import { IconAB2, IconArrowLeft, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
+import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { StrategySession, StrategySessionStatus, ConfigValue } from '../../types';
+import { PnlSnapshot, StrategySession, StrategySessionStatus, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
 import { ContainerLogs, TaskLogs } from '../../components/ContainerLogs';
 
@@ -89,6 +91,7 @@ function SessionDetail() {
   const [stopping, setStopping] = useState(false);
   const [relaunchOpen, setRelaunchOpen] = useState(false);
   const [relaunching, setRelaunching] = useState(false);
+  const [pnlRows, setPnlRows] = useState<PnlSnapshot[]>([]);
   const [sessionLogs, setSessionLogs] = useState<TaskLogs[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [initialLogsLoad, setInitialLogsLoad] = useState(true);
@@ -97,9 +100,13 @@ function SessionDetail() {
     if (!sessionId) return;
     setLoading(true);
     try {
-      const sessions = await registryApi.listSessions({ sessionId });
+      const [sessions, pnl] = await Promise.all([
+        registryApi.listSessions({ sessionId }),
+        registryApi.listPnlLatest(undefined, undefined, sessionId),
+      ]);
       const s = sessions[0] ?? null;
       setSession(s);
+      setPnlRows(pnl);
       if (s) {
         registryApi.listStrategies().then(list => {
           const match = list.find((st: { strategyId: number; name: string }) => st.strategyId === s.strategyId);
@@ -173,6 +180,40 @@ function SessionDetail() {
   };
   const grouped = session ? groupConfig(session.config) : null;
 
+  const pnlColumns = useMemo<MRT_ColumnDef<PnlSnapshot>[]>(() => [
+    { accessorKey: 'listingId', header: 'Listing ID', enableSorting: true, size: 80 },
+    { accessorKey: 'netQuantity', header: 'Net Qty', enableSorting: true },
+    { accessorKey: 'avgEntryPrice', header: 'Avg Entry', enableSorting: true },
+    { accessorKey: 'realizedPnl', header: 'Realized PnL', enableSorting: true },
+    { accessorKey: 'totalFees', header: 'Fees', enableSorting: true },
+    { accessorKey: 'leavesBuyQty', header: 'Leaves Buy', enableSorting: true },
+    { accessorKey: 'leavesSellQty', header: 'Leaves Sell', enableSorting: true },
+    {
+      accessorKey: 'snapshotTime',
+      header: 'Snapshot Time',
+      enableSorting: true,
+      Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) =>
+        row.original.snapshotTime
+          ? <ReactTimeAgo date={new Date(row.original.snapshotTime)} timeStyle="round" />
+          : '—',
+    },
+  ], []);
+
+  const pnlTable = useMantineReactTable({
+    columns: pnlColumns,
+    data: pnlRows,
+    state: { isLoading: loading },
+    enableEditing: false,
+    enableRowActions: false,
+    enableColumnFilters: false,
+    enableSorting: true,
+    enablePagination: false,
+    enableBottomToolbar: false,
+    enableTopToolbar: false,
+    initialState: { density: 'xs' },
+    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
+  });
+
   return (
     <Container size="xl" py="xl">
       <Group mb="md">
@@ -238,6 +279,11 @@ function SessionDetail() {
                 : '—'
             } />
           </SimpleGrid>
+
+          <Title order={4} mb="xs">PnL Snapshot (latest per listing)</Title>
+          <MantineReactTable table={pnlTable} />
+
+          <Space h="xl" />
 
           {session.failureReason && (
             <Alert color="red" title="Failure Reason" mb="md">

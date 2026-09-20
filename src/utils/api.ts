@@ -589,13 +589,18 @@ export const registryApi = {
       convertToCamelCase: true,
       body: { listingId },
     }),
-  listPnlLatest: (strategyId?: number) =>
-    sendApiRequest<PnlSnapshot[]>('/pnl/latest', 'GET', {
+  listPnlLatest: (strategyId?: number, mode?: string, sessionId?: string) => {
+    const qp: Record<string, string | number | boolean> = {};
+    if (strategyId !== undefined) qp.strategyId = strategyId;
+    if (mode !== undefined) qp.mode = mode;
+    if (sessionId !== undefined) qp.sessionId = sessionId;
+    return sendApiRequest<PnlSnapshot[]>('/pnl/latest', 'GET', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
-      queryParams: strategyId !== undefined ? { strategyId } : undefined,
-    }),
+      queryParams: Object.keys(qp).length ? qp : undefined,
+    });
+  },
   listRiskPolicies: () =>
     sendApiRequest<RiskPolicy[]>('/risk/policies', 'GET', {
       apiUrl: REGISTRY_API_URL,
