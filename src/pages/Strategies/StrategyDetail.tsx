@@ -18,7 +18,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconAB2, IconArrowLeft, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconAB2, IconArrowLeft, IconEdit, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -26,6 +26,7 @@ import { navigateRowProps } from '../../utils/navigation';
 import { PnlSnapshot, RiskPolicy, RISK_POLICY_TYPES, Strategy, StrategySession, StrategySessionStatus, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
 import DeploySessionModal from '../Sessions/DeploySessionModal';
+import StrategyFormModal from './StrategyFormModal';
 
 const SESSION_STATUS_COLORS: Record<string, string> = {
   [StrategySessionStatus.SUBMITTED]: 'blue',
@@ -63,9 +64,9 @@ function StrategyDetail() {
   const [sessions, setSessions] = useState<StrategySession[]>([]);
   const [loading, setLoading] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [stopTarget, setStopTarget] = useState<StrategySession | null>(null);
-  const [relaunchTarget, setRelaunchTarget] = useState<StrategySession | null>(null);
-  const [relaunching, setRelaunching] = useState(false);
+  const [relaunchSession, setRelaunchSession] = useState<StrategySession | null>(null);
   const [stopping, setStopping] = useState(false);
   const [createPolicyOpen, setCreatePolicyOpen] = useState(false);
   const [deletePolicyTarget, setDeletePolicyTarget] = useState<RiskPolicy | null>(null);
@@ -148,27 +149,6 @@ function StrategyDetail() {
 
   const isStoppable = (s: StrategySession) =>
     s.status === StrategySessionStatus.SUBMITTED || s.status === StrategySessionStatus.RUNNING;
-
-  const handleRelaunchSession = async () => {
-    if (!relaunchTarget) return;
-    setRelaunching(true);
-    try {
-      const result = await registryApi.createSession({
-        sessionId: crypto.randomUUID(),
-        strategyId: relaunchTarget.strategyId,
-        mode: relaunchTarget.mode,
-        config: relaunchTarget.config,
-        researchCommit: relaunchTarget.researchCommit ?? undefined,
-        region: relaunchTarget.config['region'] != null ? String(relaunchTarget.config['region']) : undefined,
-      });
-      setRelaunchTarget(null);
-      navigate(`/sessions/${result.sessionId}`);
-    } catch (e) {
-      console.error('Failed to relaunch session:', e);
-    } finally {
-      setRelaunching(false);
-    }
-  };
 
   const sessionColumns = useMemo<MRT_ColumnDef<StrategySession>[]>(() => [
     {
@@ -313,7 +293,7 @@ function StrategyDetail() {
           variant="subtle"
           color="green"
           disabled={isStoppable(row.original)}
-          onClick={e => { e.stopPropagation(); setRelaunchTarget(row.original); }}
+          onClick={e => { e.stopPropagation(); setRelaunchSession(row.original); }}
         >
           <IconAB2 size={16} />
         </ActionIcon>
@@ -352,23 +332,32 @@ function StrategyDetail() {
 
   return (
     <Container size="xl" py="xl">
-      <Group mb="md">
-        <ActionIcon variant="subtle" onClick={() => navigate('/strategies')}>
-          <IconArrowLeft size={20} />
-        </ActionIcon>
-        <Title order={2}>
-          {strategy ? strategy.name : `Strategy ${id}`}
-        </Title>
-        {strategy && (
-          <Badge color={STATUS_COLORS[strategy.status]} variant="light" size="lg">
-            {STATUS_LABELS[strategy.status] ?? strategy.status}
-          </Badge>
-        )}
-        <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-          <ActionIcon size="lg" variant="filled" color="green" onClick={refresh}>
-            <IconRefresh size={20} />
+      <Group justify="space-between" mb="md">
+        <Group>
+          <ActionIcon variant="subtle" onClick={() => navigate('/strategies')}>
+            <IconArrowLeft size={20} />
           </ActionIcon>
-        </Tooltip>
+          <Title order={2}>
+            {strategy ? strategy.name : `Strategy ${id}`}
+          </Title>
+          {strategy && (
+            <Badge color={STATUS_COLORS[strategy.status]} variant="light" size="lg">
+              {STATUS_LABELS[strategy.status] ?? strategy.status}
+            </Badge>
+          )}
+        </Group>
+        <Group>
+          <Tooltip label="Edit Strategy" position="bottom" withArrow openDelay={500}>
+            <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setEditOpen(true)}>
+              <IconEdit size={20} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
+            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh}>
+              <IconRefresh size={20} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
       </Group>
 
       <Group justify="space-between" mb="xs">
@@ -403,10 +392,18 @@ function StrategyDetail() {
       <MantineReactTable table={policyTable} />
 
       <DeploySessionModal
-        opened={deployOpen}
-        onClose={() => setDeployOpen(false)}
-        onCreated={() => { setDeployOpen(false); refresh(); }}
+        opened={deployOpen || !!relaunchSession}
+        onClose={() => { setDeployOpen(false); setRelaunchSession(null); }}
+        onCreated={() => { setDeployOpen(false); setRelaunchSession(null); refresh(); }}
         preselectedStrategyId={id}
+        initialSession={relaunchSession}
+      />
+
+      <StrategyFormModal
+        opened={editOpen}
+        onClose={() => setEditOpen(false)}
+        onSaved={() => { setEditOpen(false); refresh(); }}
+        strategy={strategy}
       />
 
       <Modal opened={!!stopTarget} onClose={() => setStopTarget(null)} title="Stop Session" size="sm">
@@ -415,16 +412,6 @@ function StrategyDetail() {
           <Group justify="flex-end">
             <Button variant="outline" onClick={() => setStopTarget(null)}>Cancel</Button>
             <Button color="red" loading={stopping} onClick={handleStopSession}>Stop</Button>
-          </Group>
-        </Stack>
-      </Modal>
-
-      <Modal opened={!!relaunchTarget} onClose={() => setRelaunchTarget(null)} title="Relaunch Session" size="sm">
-        <Stack>
-          <Text>Relaunch session <Text span fw={500} style={{ fontFamily: 'monospace' }}>{relaunchTarget?.sessionId.slice(0, 8)}…</Text> with the same config?</Text>
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setRelaunchTarget(null)}>Cancel</Button>
-            <Button color="green" loading={relaunching} onClick={handleRelaunchSession}>Relaunch</Button>
           </Group>
         </Stack>
       </Modal>

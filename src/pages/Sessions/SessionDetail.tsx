@@ -25,6 +25,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { PnlSnapshot, StrategySession, StrategySessionStatus, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
 import { ContainerLogs, TaskLogs } from '../../components/ContainerLogs';
+import DeploySessionModal from './DeploySessionModal';
 
 const STATUS_COLORS: Record<string, string> = {
   [StrategySessionStatus.SUBMITTED]: 'blue',
@@ -90,7 +91,6 @@ function SessionDetail() {
   const [stopOpen, setStopOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [relaunchOpen, setRelaunchOpen] = useState(false);
-  const [relaunching, setRelaunching] = useState(false);
   const [pnlRows, setPnlRows] = useState<PnlSnapshot[]>([]);
   const [sessionLogs, setSessionLogs] = useState<TaskLogs[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -158,26 +158,6 @@ function SessionDetail() {
   const isStoppable = session?.status === StrategySessionStatus.SUBMITTED || session?.status === StrategySessionStatus.RUNNING;
   const isRelaunchable = session?.status === StrategySessionStatus.STOPPED || session?.status === StrategySessionStatus.FAILED;
 
-  const handleRelaunch = async () => {
-    if (!session) return;
-    setRelaunching(true);
-    try {
-      const result = await registryApi.createSession({
-        sessionId: crypto.randomUUID(),
-        strategyId: session.strategyId,
-        mode: session.mode,
-        config: session.config,
-        researchCommit: session.researchCommit ?? undefined,
-        region: session.config['region'] != null ? String(session.config['region']) : undefined,
-      });
-      setRelaunchOpen(false);
-      navigate(`/sessions/${result.sessionId}`);
-    } catch (e) {
-      console.error('Failed to relaunch session:', e);
-    } finally {
-      setRelaunching(false);
-    }
-  };
   const grouped = session ? groupConfig(session.config) : null;
 
   const pnlColumns = useMemo<MRT_ColumnDef<PnlSnapshot>[]>(() => [
@@ -354,15 +334,13 @@ function SessionDetail() {
         </>
       )}
 
-      <Modal opened={relaunchOpen} onClose={() => setRelaunchOpen(false)} title="Relaunch Session" size="sm">
-        <Stack>
-          <Text>Relaunch session <Text span fw={500} style={{ fontFamily: 'monospace' }}>{sessionId?.slice(0, 8)}…</Text> with the same config?</Text>
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setRelaunchOpen(false)}>Cancel</Button>
-            <Button color="green" loading={relaunching} onClick={handleRelaunch}>Relaunch</Button>
-          </Group>
-        </Stack>
-      </Modal>
+      <DeploySessionModal
+        opened={relaunchOpen}
+        onClose={() => setRelaunchOpen(false)}
+        onCreated={() => { setRelaunchOpen(false); refresh(); }}
+        initialSession={relaunchOpen ? session : null}
+        preselectedStrategyId={session?.strategyId}
+      />
 
       <Modal opened={stopOpen} onClose={() => setStopOpen(false)} title="Stop Session" size="sm">
         <Stack>

@@ -16,7 +16,7 @@ import {
   Title,
 } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
-import { Strategy, ConfigValue } from '../../types';
+import { Strategy, ConfigValue, StrategySession } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
 import { CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestStrategySizing } from '../../utils/sizing';
@@ -40,6 +40,7 @@ interface DeploySessionModalProps {
   onClose: () => void;
   onCreated: () => void;
   preselectedStrategyId?: number;
+  initialSession?: StrategySession | null;
 }
 
 const MODE_OPTIONS = [
@@ -102,7 +103,7 @@ function defaultListings(): ListingProfileRow[] {
   return [{ listingId: '', profile: 'default' }];
 }
 
-function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId }: DeploySessionModalProps) {
+function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId, initialSession }: DeploySessionModalProps) {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [strategyId, setStrategyId] = useState<string | null>(
     preselectedStrategyId !== undefined ? String(preselectedStrategyId) : null
@@ -190,6 +191,47 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
     if (p.memory) { setMemory(Number(p.memory)); }
   }, []);
 
+  const loadFromSession = useCallback((session: StrategySession) => {
+    const config = session.config;
+    setStrategyId(String(session.strategyId));
+    setMode(session.mode);
+    if (config['strategy.type']) setStrategyType(String(config['strategy.type']));
+    else setStrategyType(null);
+    if (config['strategy.class']) setStrategyClass(String(config['strategy.class']));
+    else setStrategyClass('');
+    setResearchCommit(config['research_commit'] ? String(config['research_commit']) : '');
+    setRegion(config['region'] ? String(config['region']) : '');
+
+    const parsedParams: ParamRow[] = [];
+    for (const [key, value] of Object.entries(config)) {
+      if (!key.startsWith('strategy.args.')) continue;
+      const argKey = key.substring('strategy.args.'.length);
+      if (typeof value === 'number') parsedParams.push({ key: argKey, value, type: 'number' });
+      else if (typeof value === 'boolean') parsedParams.push({ key: argKey, value, type: 'boolean' });
+      else if (typeof value === 'object' && value !== null) parsedParams.push({ key: argKey, value: JSON.stringify(value, null, 2), type: 'json' });
+      else parsedParams.push({ key: argKey, value: String(value), type: 'string' });
+    }
+    setParams(parsedParams);
+
+    if (session.mode === 'live') {
+      const rawListings = config['listings'];
+      if (Array.isArray(rawListings)) {
+        setSelectedLiveListingIds((rawListings as number[]).map(String));
+      }
+      setProfiles(defaultProfiles());
+      setListings(defaultListings());
+    } else {
+      const simConfig: Record<string, ConfigValue> = {};
+      for (const [k, v] of Object.entries(config)) {
+        if (k.startsWith('simulation.')) simConfig[k] = v;
+      }
+      const { profiles: loadedProfiles, listings: loadedListings } = simulationProfilesFromConfig(simConfig);
+      setProfiles(Object.keys(loadedProfiles).length > 0 ? loadedProfiles : defaultProfiles());
+      setListings(loadedListings.length > 0 ? loadedListings : defaultListings());
+      setSelectedLiveListingIds([]);
+    }
+  }, []);
+
   const handleStrategyChange = useCallback((value: string | null) => {
     setStrategyId(value);
     if (!value) {
@@ -202,11 +244,17 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
   }, [strategies, loadStrategyDefaults]);
 
   useEffect(() => {
+    if (initialSession) return;
     if (preselectedStrategyId !== undefined) {
       const strategy = strategies.find(s => s.strategyId === preselectedStrategyId);
       if (strategy) loadStrategyDefaults(strategy);
     }
-  }, [strategies, preselectedStrategyId, loadStrategyDefaults]);
+  }, [strategies, preselectedStrategyId, loadStrategyDefaults, initialSession]);
+
+  useEffect(() => {
+    if (!opened || !initialSession) return;
+    loadFromSession(initialSession);
+  }, [opened, initialSession]);
 
   useEffect(() => {
     if (sizingUserOverridden) return;
@@ -283,7 +331,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
   const strategyOptions = strategies.map(s => ({ value: String(s.strategyId), label: s.name }));
 
   return (
-    <Modal opened={opened} onClose={handleClose} title="Deploy Strategy Session" size="xl">
+    <Modal opened={opened} onClose={handleClose} title={initialSession ? 'Relaunch Session' : 'Deploy Strategy Session'} size="xl">
       <Stack gap="sm">
         <Title order={6} c="dimmed">Core</Title>
         <Select
@@ -292,7 +340,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
           value={strategyId}
           onChange={handleStrategyChange}
           required
-          disabled={preselectedStrategyId !== undefined}
+          disabled={preselectedStrategyId !== undefined || !!initialSession}
           searchable
         />
         <Select label="Mode" data={MODE_OPTIONS} value={mode} onChange={v => setMode(v ?? 'paper')} required />
@@ -393,7 +441,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
         {error && <Text c="red" size="sm">{error}</Text>}
         <Group justify="flex-end">
           <Button variant="outline" onClick={handleClose}>Cancel</Button>
-          <Button color="green" loading={submitting} onClick={handleSubmit}>Deploy</Button>
+          <Button color="green" loading={submitting} onClick={handleSubmit}>{initialSession ? 'Relaunch' : 'Deploy'}</Button>
         </Group>
       </Stack>
     </Modal>
