@@ -425,7 +425,7 @@ export const registryApi = {
       body: request,
     }),
   stopSession: (sessionId: string) =>
-    sendApiRequest<StrategySession>('/strategy-sessions', 'DELETE', {
+    sendApiRequest<StrategySession>('/strategy-sessions/stop', 'POST', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
