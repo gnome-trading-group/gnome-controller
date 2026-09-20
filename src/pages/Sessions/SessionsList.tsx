@@ -190,6 +190,11 @@ function SessionsList() {
     },
   ], [strategyMap]);
 
+  useEffect(() => {
+    const interval = setInterval(refresh, 5000);
+    return () => clearInterval(interval);
+  }, [refresh]);
+
   const isStoppable = (s: StrategySession) =>
     s.status === StrategySessionStatus.SUBMITTED || s.status === StrategySessionStatus.RUNNING;
 

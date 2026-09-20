@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ActionIcon,
   Button,
@@ -6,6 +6,7 @@ import {
   Group,
   JsonInput,
   Modal,
+  MultiSelect,
   NumberInput,
   Select,
   Stack,
@@ -17,6 +18,7 @@ import {
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { Strategy, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
+import { useListingSearch } from '../../hooks/useAsyncSearch';
 import {
   defaultSimulationState,
   ListingProfileRow,
@@ -55,20 +57,20 @@ function flattenToSessionConfig(
   strategyType: string | null,
   strategyClass: string,
   listings: ListingProfileRow[],
-  liveListings: string,
+  selectedLiveListingIds: string[],
   researchCommit: string,
   region: string,
   params: ParamRow[],
   profiles: ProfilesState,
 ): Record<string, ConfigValue> {
-  const listingsStr = mode === 'paper'
-    ? listings.map(l => l.listingId.trim()).filter(Boolean).join(',')
-    : liveListings.trim();
+  const listingsArr: number[] = mode === 'paper'
+    ? listings.map(l => parseInt(l.listingId.trim(), 10)).filter(n => !isNaN(n))
+    : selectedLiveListingIds.map(Number);
 
   const config: Record<string, ConfigValue> = {
     'strategy.id': strategyId,
     mode,
-    listings: listingsStr,
+    listings: listingsArr,
   };
   if (strategyType) {
     config['strategy.type'] = strategyType;
@@ -106,7 +108,10 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
   const [mode, setMode] = useState<string>('paper');
   const [profiles, setProfiles] = useState<ProfilesState>(defaultProfiles());
   const [listings, setListings] = useState<ListingProfileRow[]>(defaultListings());
-  const [liveListings, setLiveListings] = useState('');
+  const [selectedLiveListingIds, setSelectedLiveListingIds] = useState<string[]>([]);
+  const [selectedLiveListingItems, setSelectedLiveListingItems] = useState<Record<string, string>>({});
+  const [liveListingSearchValue, setLiveListingSearchValue] = useState('');
+  const { options: liveListingSearchOptions, isLoading: liveListingSearchLoading } = useListingSearch(liveListingSearchValue);
   const [researchCommit, setResearchCommit] = useState('');
   const [region, setRegion] = useState('');
   const [strategyType, setStrategyType] = useState<string | null>(null);
@@ -114,6 +119,28 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
   const [params, setParams] = useState<ParamRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const liveListingMergedData = useMemo(() => [
+    ...Object.entries(selectedLiveListingItems)
+      .filter(([id]) => !liveListingSearchOptions.some(o => o.value === id))
+      .map(([id, label]) => ({ value: id, label })),
+    ...liveListingSearchOptions,
+  ], [selectedLiveListingItems, liveListingSearchOptions]);
+
+  const handleLiveListingChange = useCallback((values: string[]) => {
+    setSelectedLiveListingIds(values);
+    const updated = { ...selectedLiveListingItems };
+    for (const v of values) {
+      if (!updated[v]) {
+        const opt = liveListingSearchOptions.find(o => o.value === v);
+        if (opt) updated[v] = opt.label;
+      }
+    }
+    for (const key of Object.keys(updated)) {
+      if (!values.includes(key)) delete updated[key];
+    }
+    setSelectedLiveListingItems(updated);
+  }, [selectedLiveListingItems, liveListingSearchOptions]);
 
   useEffect(() => {
     registryApi.listStrategies().then(setStrategies).catch(() => {});
@@ -151,8 +178,8 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
         setListings(loadedListings.length > 0 ? loadedListings : defaultListings());
       }
     }
-    if (p.listings && typeof p.listings === 'string' && String(p.mode) === 'live') {
-      setLiveListings(String(p.listings));
+    if (p.listings && Array.isArray(p.listings) && String(p.mode) === 'live') {
+      setSelectedLiveListingIds((p.listings as number[]).map(String));
     }
   }, []);
 
@@ -179,7 +206,9 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
     setMode('paper');
     setProfiles(defaultProfiles());
     setListings(defaultListings());
-    setLiveListings('');
+    setSelectedLiveListingIds([]);
+    setSelectedLiveListingItems({});
+    setLiveListingSearchValue('');
     setResearchCommit('');
     setRegion('');
     setStrategyType(null);
@@ -200,12 +229,12 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
       if (listings.some(l => !l.profile)) { setError('All listings must have a profile assigned'); return; }
       if (Object.keys(profiles).length === 0) { setError('At least one profile must be defined'); return; }
     } else {
-      if (!liveListings.trim()) { setError('Listings are required'); return; }
+      if (selectedLiveListingIds.length === 0) { setError('Listings are required'); return; }
     }
 
     const config = flattenToSessionConfig(
       strategyId, mode, strategyType, strategyClass,
-      listings, liveListings, researchCommit, region, params, profiles,
+      listings, selectedLiveListingIds, researchCommit, region, params, profiles,
     );
 
     setSubmitting(true);
@@ -288,7 +317,18 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
         {mode === 'live' && (
           <>
             <Divider />
-            <TextInput label="Listings" placeholder="e.g. 1,2,3" value={liveListings} onChange={e => setLiveListings(e.currentTarget.value)} required />
+            <MultiSelect
+              label="Listings"
+              placeholder="Search listings..."
+              data={liveListingMergedData}
+              value={selectedLiveListingIds}
+              onChange={handleLiveListingChange}
+              searchable
+              searchValue={liveListingSearchValue}
+              onSearchChange={setLiveListingSearchValue}
+              nothingFoundMessage={liveListingSearchLoading ? 'Loading...' : 'No listings found'}
+              required
+            />
           </>
         )}
 

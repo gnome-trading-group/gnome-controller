@@ -163,6 +163,7 @@ function SessionDetail() {
         researchCommit: session.researchCommit ?? undefined,
         region: session.config['region'] != null ? String(session.config['region']) : undefined,
       });
+      setRelaunchOpen(false);
       navigate(`/sessions/${result.sessionId}`);
     } catch (e) {
       console.error('Failed to relaunch session:', e);

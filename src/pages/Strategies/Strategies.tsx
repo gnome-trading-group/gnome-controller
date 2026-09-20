@@ -8,6 +8,7 @@ import {
   Group,
   JsonInput,
   Modal,
+  MultiSelect,
   NumberInput,
   Select,
   Stack,
@@ -23,6 +24,7 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { useNavigate } from 'react-router-dom';
 import { Strategy, StrategyStatus, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
+import { useListingSearch } from '../../hooks/useAsyncSearch';
 import { navigateRowProps } from '../../utils/navigation';
 import {
   defaultSimulationState,
@@ -53,7 +55,6 @@ function defaultForm() {
     mode: 'paper',
     strategyType: 'java',
     strategyClass: '',
-    listings: '',
     region: '',
     researchCommit: '',
     args: [] as { key: string; value: string | number | boolean; type: 'string' | 'number' | 'boolean' | 'json' }[],
@@ -78,7 +79,33 @@ function Strategies() {
   const [form, setForm] = useState(defaultForm());
   const [profiles, setProfiles] = useState<ProfilesState>(defaultProfiles());
   const [listings, setListings] = useState<ListingProfileRow[]>(defaultListings());
+  const [liveListingIds, setLiveListingIds] = useState<string[]>([]);
+  const [liveListingItems, setLiveListingItems] = useState<Record<string, string>>({});
+  const [liveListingSearchValue, setLiveListingSearchValue] = useState('');
+  const { options: liveListingSearchOptions, isLoading: liveListingSearchLoading } = useListingSearch(liveListingSearchValue);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const liveListingMergedData = useMemo(() => [
+    ...Object.entries(liveListingItems)
+      .filter(([id]) => !liveListingSearchOptions.some(o => o.value === id))
+      .map(([id, label]) => ({ value: id, label })),
+    ...liveListingSearchOptions,
+  ], [liveListingItems, liveListingSearchOptions]);
+
+  const handleLiveListingChange = useCallback((values: string[]) => {
+    setLiveListingIds(values);
+    const updated = { ...liveListingItems };
+    for (const v of values) {
+      if (!updated[v]) {
+        const opt = liveListingSearchOptions.find(o => o.value === v);
+        if (opt) updated[v] = opt.label;
+      }
+    }
+    for (const key of Object.keys(updated)) {
+      if (!values.includes(key)) delete updated[key];
+    }
+    setLiveListingItems(updated);
+  }, [liveListingItems, liveListingSearchOptions]);
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Strategy | null>(null);
@@ -100,6 +127,9 @@ function Strategies() {
     setForm(defaultForm());
     setProfiles(defaultProfiles());
     setListings(defaultListings());
+    setLiveListingIds([]);
+    setLiveListingItems({});
+    setLiveListingSearchValue('');
     setFormError(null);
     setModalOpen(true);
   };
@@ -122,11 +152,17 @@ function Strategies() {
       mode: p.mode ? String(p.mode) : 'paper',
       strategyType: p.strategyType ? String(p.strategyType) : 'java',
       strategyClass: p.strategyClass ? String(p.strategyClass) : '',
-      listings: p.listings ? String(p.listings) : '',
       region: p.region ? String(p.region) : '',
       researchCommit: p.researchCommit ? String(p.researchCommit) : '',
       args,
     });
+    if (Array.isArray(p.listings)) {
+      setLiveListingIds((p.listings as number[]).map(String));
+    } else {
+      setLiveListingIds([]);
+    }
+    setLiveListingItems({});
+    setLiveListingSearchValue('');
 
     if (p.simulation && typeof p.simulation === 'object') {
       const { profiles: loadedProfiles, listings: loadedListings } = simulationProfilesFromConfig(
@@ -158,7 +194,7 @@ function Strategies() {
         strategy_type: form.strategyType,
         strategy_class: form.strategyClass,
       };
-      if (form.mode === 'live') parameters.listings = form.listings;
+      if (form.mode === 'live') parameters.listings = liveListingIds.map(Number);
       if (form.region.trim()) parameters.region = form.region.trim();
       if (form.researchCommit.trim()) parameters.research_commit = form.researchCommit.trim();
       if (Object.keys(args).length > 0) parameters.args = args;
@@ -297,7 +333,17 @@ function Strategies() {
           </Group>
           <TextInput label="Strategy Class" placeholder="com.example.MyStrategy or module:ClassName" value={form.strategyClass} onChange={(e) => setForm((f) => ({ ...f, strategyClass: e.target.value }))} />
           {form.mode === 'live' && (
-            <TextInput label="Listings" placeholder="1,2,3" value={form.listings} onChange={(e) => setForm((f) => ({ ...f, listings: e.target.value }))} />
+            <MultiSelect
+              label="Listings"
+              placeholder="Search listings..."
+              data={liveListingMergedData}
+              value={liveListingIds}
+              onChange={handleLiveListingChange}
+              searchable
+              searchValue={liveListingSearchValue}
+              onSearchChange={setLiveListingSearchValue}
+              nothingFoundMessage={liveListingSearchLoading ? 'Loading...' : 'No listings found'}
+            />
           )}
           <Group grow>
             <TextInput label="Region (optional)" placeholder="us-east-1" value={form.region} onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))} />

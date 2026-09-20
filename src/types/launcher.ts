@@ -42,7 +42,7 @@ export interface ResolvedStrategyConfig {
   strategy_type: string;
   strategy_class: string;
   mode: string;
-  listings: string;
+  listings: number[];
   research_commit?: string;
   region?: string;
   strategy_args: Record<string, ConfigValue>;

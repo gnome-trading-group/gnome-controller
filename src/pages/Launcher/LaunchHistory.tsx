@@ -89,7 +89,7 @@ function DetailDrawer({ request, onClose }: { request: LaunchRequest | null; onC
               </Group>
               <Group gap="xs">
                 <Text size="xs" c="dimmed">Listings:</Text>
-                <Text size="xs" ff="monospace">{cfg.listings}</Text>
+                <Text size="xs" ff="monospace">{cfg.listings.join(', ')}</Text>
               </Group>
               {cfg.research_commit && (
                 <Group gap="xs">
