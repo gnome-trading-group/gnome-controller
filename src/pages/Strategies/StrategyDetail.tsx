@@ -21,7 +21,7 @@ import {
 import { IconAB2, IconArrowLeft, IconEdit, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
 import { PnlSnapshot, RiskPolicy, RISK_POLICY_TYPES, Strategy, StrategySession, StrategySessionStatus, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
@@ -208,7 +208,17 @@ function StrategyDetail() {
   ], []);
 
   const pnlColumns = useMemo<MRT_ColumnDef<PnlSnapshot>[]>(() => [
-    { accessorKey: 'listingId', header: 'Listing ID', enableSorting: true, size: 80 },
+    {
+      accessorKey: 'listingId',
+      header: 'Listing ID',
+      enableSorting: true,
+      size: 80,
+      Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => (
+        <Text component={Link} to={`/security-master/listings/${row.original.listingId}`} size="sm" c="blue" style={{ textDecoration: 'none' }}>
+          {row.original.listingId}
+        </Text>
+      ),
+    },
     {
       accessorKey: 'mode',
       header: 'Mode',

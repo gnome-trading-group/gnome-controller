@@ -78,7 +78,7 @@ function SessionsList() {
     return p;
   }, [statusFilter, strategyFilter]);
 
-  const { data, total, isLoading, pagination, sorting, globalFilter, setPagination, setSorting, setGlobalFilter, refresh } =
+  const { data, total, isLoading, pagination, sorting, globalFilter, setPagination, setSorting, setGlobalFilter, refresh, silentRefresh } =
     useServerPaginatedTable<StrategySession>({
       fetchFn: registryApi.listSessionsPaginated,
       countFn: registryApi.countSessions,
@@ -169,9 +169,9 @@ function SessionsList() {
   ], [strategyMap]);
 
   useEffect(() => {
-    const interval = setInterval(refresh, 5000);
+    const interval = setInterval(silentRefresh, 5000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [silentRefresh]);
 
   const isStoppable = (s: StrategySession) =>
     s.status === StrategySessionStatus.SUBMITTED || s.status === StrategySessionStatus.RUNNING;

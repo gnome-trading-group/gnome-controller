@@ -19,7 +19,7 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { Strategy, ConfigValue, StrategySession } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
-import { CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestStrategySizing } from '../../utils/sizing';
+import { STRATEGY_CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestStrategySizing } from '../../utils/sizing';
 import {
   defaultSimulationState,
   ListingProfileRow,
@@ -120,8 +120,8 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   const [strategyType, setStrategyType] = useState<string | null>(null);
   const [strategyClass, setStrategyClass] = useState('');
   const [params, setParams] = useState<ParamRow[]>([]);
-  const [cpu, setCpu] = useState(2048);
-  const [memory, setMemory] = useState(4096);
+  const [cpu, setCpu] = useState(4096);
+  const [memory, setMemory] = useState(8192);
   const [sizingUserOverridden, setSizingUserOverridden] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -281,8 +281,8 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     setStrategyType(null);
     setStrategyClass('');
     setParams([]);
-    setCpu(2048);
-    setMemory(4096);
+    setCpu(4096);
+    setMemory(8192);
     setSizingUserOverridden(false);
     setError(null);
   };
@@ -350,10 +350,10 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
         <Group grow>
           <Select
             label="CPU"
-            data={CPU_OPTIONS.map(String)}
+            data={STRATEGY_CPU_OPTIONS.map(String)}
             value={String(cpu)}
             onChange={(v) => {
-              const newCpu = Number(v ?? '2048');
+              const newCpu = Number(v ?? '4096');
               setCpu(newCpu);
               setMemory(VALID_MEMORY_OPTIONS[newCpu][0]);
               setSizingUserOverridden(true);

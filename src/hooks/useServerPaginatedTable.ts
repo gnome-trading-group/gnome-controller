@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MRT_PaginationState, MRT_SortingState } from 'mantine-react-table';
 import { PaginationParams } from '../types';
 
@@ -32,6 +32,7 @@ interface UseServerPaginatedTableResult<T> {
   setSorting: (updater: MRT_SortingState | ((prev: MRT_SortingState) => MRT_SortingState)) => void;
   setGlobalFilter: (value: string) => void;
   refresh: () => void;
+  silentRefresh: () => void;
 }
 
 export function useServerPaginatedTable<T>({
@@ -52,6 +53,7 @@ export function useServerPaginatedTable<T>({
   const [internalSorting, setInternalSorting] = useState<MRT_SortingState>([]);
   const [internalGlobalFilter, setInternalGlobalFilter] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const silentRefreshRef = useRef(false);
 
   const pagination = controlledState?.pagination ?? internalPagination;
   const sorting = controlledState?.sorting ?? internalSorting;
@@ -61,6 +63,10 @@ export function useServerPaginatedTable<T>({
   const setGlobalFilter = controlledState?.setGlobalFilter ?? setInternalGlobalFilter;
 
   const refresh = useCallback(() => setRefreshKey(k => k + 1), []);
+  const silentRefresh = useCallback(() => {
+    silentRefreshRef.current = true;
+    setRefreshKey(k => k + 1);
+  }, []);
 
   // Stable serialization of extraParams so object identity doesn't cause spurious re-fetches
   const extraParamsKey = JSON.stringify(extraParams);
@@ -82,7 +88,9 @@ export function useServerPaginatedTable<T>({
     const filterParams: PaginationParams = { ...extraParams };
     if (globalFilter) filterParams.search = globalFilter;
 
-    setIsLoading(true);
+    if (!silentRefreshRef.current) {
+      setIsLoading(true);
+    }
     setError(null);
 
     Promise.all([fetchFn(params), countFn(filterParams)])
@@ -91,7 +99,10 @@ export function useServerPaginatedTable<T>({
         setTotal(count);
       })
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load data'))
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        setIsLoading(false);
+        silentRefreshRef.current = false;
+      });
   }, [pagination.pageIndex, pagination.pageSize, sorting, globalFilter, refreshKey, externalRefreshKey, extraParamsKey]);
 
   return {
@@ -106,5 +117,6 @@ export function useServerPaginatedTable<T>({
     setSorting,
     setGlobalFilter,
     refresh,
+    silentRefresh,
   };
 }

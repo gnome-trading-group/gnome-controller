@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo, ReactNode, useRef } from 'react';
 import {
   Accordion,
   ActionIcon,
@@ -82,23 +82,28 @@ function ConfigTable({ entries }: { entries: [string, ConfigValue][] }) {
   );
 }
 
+const isTerminal = (s: StrategySession | null) =>
+  s?.status === StrategySessionStatus.STOPPED || s?.status === StrategySessionStatus.FAILED;
+
 function SessionDetail() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId: string }>();
   const [session, setSession] = useState<StrategySession | null>(null);
   const [strategyName, setStrategyName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [stopOpen, setStopOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [relaunchOpen, setRelaunchOpen] = useState(false);
+  const relaunchSessionRef = useRef<StrategySession | null>(null);
   const [pnlRows, setPnlRows] = useState<PnlSnapshot[]>([]);
   const [sessionLogs, setSessionLogs] = useState<TaskLogs[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [initialLogsLoad, setInitialLogsLoad] = useState(true);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (showLoading = true) => {
     if (!sessionId) return;
-    setLoading(true);
+    if (showLoading) setLoading(true);
     try {
       const [sessions, pnl] = await Promise.all([
         registryApi.listSessions({ sessionId }),
@@ -114,15 +119,17 @@ function SessionDetail() {
         }).catch(() => {});
       }
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
+      setInitialLoad(false);
     }
   }, [sessionId]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
-    const interval = setInterval(refresh, 5000);
+    if (isTerminal(session)) return;
+    const interval = setInterval(() => refresh(false), 5000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [refresh, session?.status]);
 
   const loadLogs = useCallback(async (showLoading = true) => {
     if (!sessionId || !session?.taskArn) return;
@@ -141,9 +148,10 @@ function SessionDetail() {
   useEffect(() => {
     if (!session?.taskArn) return;
     loadLogs();
+    if (isTerminal(session)) return;
     const interval = setInterval(() => loadLogs(false), 5000);
     return () => clearInterval(interval);
-  }, [session?.taskArn, loadLogs]);
+  }, [session?.taskArn, loadLogs, session?.status]);
 
   const handleStop = async () => {
     if (!session) return;
@@ -165,7 +173,17 @@ function SessionDetail() {
   const grouped = session ? groupConfig(session.config) : null;
 
   const pnlColumns = useMemo<MRT_ColumnDef<PnlSnapshot>[]>(() => [
-    { accessorKey: 'listingId', header: 'Listing ID', enableSorting: true, size: 80 },
+    {
+      accessorKey: 'listingId',
+      header: 'Listing ID',
+      enableSorting: true,
+      size: 80,
+      Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => (
+        <Text component={Link} to={`/security-master/listings/${row.original.listingId}`} size="sm" c="blue" style={{ textDecoration: 'none' }}>
+          {row.original.listingId}
+        </Text>
+      ),
+    },
     { accessorKey: 'netQuantity', header: 'Net Qty', enableSorting: true },
     { accessorKey: 'avgEntryPrice', header: 'Avg Entry', enableSorting: true },
     { accessorKey: 'realizedPnl', header: 'Realized PnL', enableSorting: true },
@@ -186,7 +204,7 @@ function SessionDetail() {
   const pnlTable = useMantineReactTable({
     columns: pnlColumns,
     data: pnlRows,
-    state: { isLoading: loading },
+    state: { isLoading: initialLoad },
     enableEditing: false,
     enableRowActions: false,
     enableColumnFilters: false,
@@ -213,13 +231,13 @@ function SessionDetail() {
           </Badge>
         )}
         <Tooltip label="Refresh" withArrow openDelay={500}>
-          <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
+          <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
             <IconRefresh size={20} />
           </ActionIcon>
         </Tooltip>
         {isRelaunchable && (
           <Tooltip label="Relaunch Session" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={() => setRelaunchOpen(true)}>
+            <ActionIcon size="lg" variant="filled" color="green" onClick={() => { relaunchSessionRef.current = session; setRelaunchOpen(true); }}>
               <IconAB2 size={20} />
             </ActionIcon>
           </Tooltip>
@@ -342,7 +360,7 @@ function SessionDetail() {
         opened={relaunchOpen}
         onClose={() => setRelaunchOpen(false)}
         onCreated={(newSessionId) => { setRelaunchOpen(false); navigate(`/sessions/${newSessionId}`); }}
-        initialSession={relaunchOpen ? session : null}
+        initialSession={relaunchOpen ? relaunchSessionRef.current : null}
         preselectedStrategyId={session?.strategyId}
       />
 

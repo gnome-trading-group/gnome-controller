@@ -19,7 +19,7 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { Strategy, StrategyStatus, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
-import { CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestStrategySizing } from '../../utils/sizing';
+import { STRATEGY_CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestStrategySizing } from '../../utils/sizing';
 import {
   defaultSimulationState,
   ListingProfileRow,
@@ -45,8 +45,8 @@ function defaultForm() {
     strategyClass: '',
     region: '',
     researchCommit: '',
-    cpu: 2048,
-    memory: 4096,
+    cpu: 4096,
+    memory: 8192,
     args: [] as { key: string; value: string | number | boolean; type: 'string' | 'number' | 'boolean' | 'json' }[],
   };
 }
@@ -135,8 +135,8 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
         })
       : [];
 
-    const loadedCpu = p.cpu ? Number(p.cpu) : 2048;
-    const loadedMemory = p.memory ? Number(p.memory) : 4096;
+    const loadedCpu = p.cpu ? Number(p.cpu) : 4096;
+    const loadedMemory = p.memory ? Number(p.memory) : 8192;
     setSizingUserOverridden(!!p.cpu);
     setForm({
       name: strategy.name ?? '',
@@ -251,10 +251,10 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
         <Group grow>
           <Select
             label="CPU"
-            data={CPU_OPTIONS.map(String)}
+            data={STRATEGY_CPU_OPTIONS.map(String)}
             value={String(form.cpu)}
             onChange={(v) => {
-              const newCpu = Number(v ?? '2048');
+              const newCpu = Number(v ?? '4096');
               setForm((f) => ({ ...f, cpu: newCpu, memory: VALID_MEMORY_OPTIONS[newCpu][0] }));
               setSizingUserOverridden(true);
             }}
@@ -263,7 +263,7 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
             label="Memory (MiB)"
             data={(VALID_MEMORY_OPTIONS[form.cpu] ?? []).map(String)}
             value={String(form.memory)}
-            onChange={(v) => { setForm((f) => ({ ...f, memory: Number(v ?? '4096') })); setSizingUserOverridden(true); }}
+            onChange={(v) => { setForm((f) => ({ ...f, memory: Number(v ?? '8192') })); setSizingUserOverridden(true); }}
           />
         </Group>
 
