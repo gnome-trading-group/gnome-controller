@@ -19,6 +19,7 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { Strategy, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
+import { CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestStrategySizing } from '../../utils/sizing';
 import {
   defaultSimulationState,
   ListingProfileRow,
@@ -45,6 +46,7 @@ const MODE_OPTIONS = [
   { value: 'paper', label: 'Paper' },
   { value: 'live', label: 'Live' },
 ];
+
 
 const STRATEGY_TYPE_OPTIONS = [
   { value: 'java', label: 'Java' },
@@ -117,6 +119,9 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
   const [strategyType, setStrategyType] = useState<string | null>(null);
   const [strategyClass, setStrategyClass] = useState('');
   const [params, setParams] = useState<ParamRow[]>([]);
+  const [cpu, setCpu] = useState(2048);
+  const [memory, setMemory] = useState(4096);
+  const [sizingUserOverridden, setSizingUserOverridden] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -181,6 +186,8 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
     if (p.listings && Array.isArray(p.listings) && String(p.mode) === 'live') {
       setSelectedLiveListingIds((p.listings as number[]).map(String));
     }
+    if (p.cpu) { setCpu(Number(p.cpu)); setSizingUserOverridden(true); }
+    if (p.memory) { setMemory(Number(p.memory)); }
   }, []);
 
   const handleStrategyChange = useCallback((value: string | null) => {
@@ -201,6 +208,18 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
     }
   }, [strategies, preselectedStrategyId, loadStrategyDefaults]);
 
+  useEffect(() => {
+    if (sizingUserOverridden) return;
+    const count = mode === 'paper'
+      ? listings.filter(l => l.listingId.trim()).length
+      : selectedLiveListingIds.length;
+    if (count > 0) {
+      const suggested = suggestStrategySizing(count);
+      setCpu(suggested.cpu);
+      setMemory(suggested.memory);
+    }
+  }, [listings, selectedLiveListingIds, mode, sizingUserOverridden]);
+
   const resetForm = () => {
     setStrategyId(preselectedStrategyId !== undefined ? String(preselectedStrategyId) : null);
     setMode('paper');
@@ -214,6 +233,9 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
     setStrategyType(null);
     setStrategyClass('');
     setParams([]);
+    setCpu(2048);
+    setMemory(4096);
+    setSizingUserOverridden(false);
     setError(null);
   };
 
@@ -246,6 +268,8 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
         config,
         researchCommit: researchCommit.trim() || undefined,
         region: region.trim() || undefined,
+        cpu,
+        memory,
       });
       onCreated();
       handleClose();
@@ -274,6 +298,28 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
         <Select label="Mode" data={MODE_OPTIONS} value={mode} onChange={v => setMode(v ?? 'paper')} required />
         <TextInput label="Research Commit" placeholder="git SHA or branch (optional)" value={researchCommit} onChange={e => setResearchCommit(e.currentTarget.value)} />
         <TextInput label="Region Override" placeholder="e.g. us-east-1 (optional)" value={region} onChange={e => setRegion(e.currentTarget.value)} />
+        <Group grow>
+          <Select
+            label="CPU"
+            data={CPU_OPTIONS.map(String)}
+            value={String(cpu)}
+            onChange={(v) => {
+              const newCpu = Number(v ?? '2048');
+              setCpu(newCpu);
+              setMemory(VALID_MEMORY_OPTIONS[newCpu][0]);
+              setSizingUserOverridden(true);
+            }}
+          />
+          <Select
+            label="Memory (MiB)"
+            data={(VALID_MEMORY_OPTIONS[cpu] ?? []).map(String)}
+            value={String(memory)}
+            onChange={(v) => {
+              setMemory(Number(v ?? '4096'));
+              setSizingUserOverridden(true);
+            }}
+          />
+        </Group>
 
         <Divider />
         <Title order={6} c="dimmed">Strategy Class</Title>

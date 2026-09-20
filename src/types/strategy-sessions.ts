@@ -30,4 +30,6 @@ export interface CreateStrategySessionRequest {
   config: Record<string, ConfigValue>;
   researchCommit?: string;
   region?: string;
+  cpu?: number;
+  memory?: number;
 }

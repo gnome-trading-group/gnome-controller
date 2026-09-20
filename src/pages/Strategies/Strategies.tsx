@@ -26,6 +26,7 @@ import { Strategy, StrategyStatus, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
 import { navigateRowProps } from '../../utils/navigation';
+import { CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestStrategySizing } from '../../utils/sizing';
 import {
   defaultSimulationState,
   ListingProfileRow,
@@ -57,6 +58,8 @@ function defaultForm() {
     strategyClass: '',
     region: '',
     researchCommit: '',
+    cpu: 2048,
+    memory: 4096,
     args: [] as { key: string; value: string | number | boolean; type: 'string' | 'number' | 'boolean' | 'json' }[],
   };
 }
@@ -83,6 +86,7 @@ function Strategies() {
   const [liveListingItems, setLiveListingItems] = useState<Record<string, string>>({});
   const [liveListingSearchValue, setLiveListingSearchValue] = useState('');
   const { options: liveListingSearchOptions, isLoading: liveListingSearchLoading } = useListingSearch(liveListingSearchValue);
+  const [sizingUserOverridden, setSizingUserOverridden] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const liveListingMergedData = useMemo(() => [
@@ -107,6 +111,17 @@ function Strategies() {
     setLiveListingItems(updated);
   }, [liveListingItems, liveListingSearchOptions]);
 
+  useEffect(() => {
+    if (sizingUserOverridden) return;
+    const count = form.mode === 'paper'
+      ? listings.filter(l => l.listingId.trim()).length
+      : liveListingIds.length;
+    if (count > 0) {
+      const suggested = suggestStrategySizing(count);
+      setForm(f => ({ ...f, cpu: suggested.cpu, memory: suggested.memory }));
+    }
+  }, [listings, liveListingIds, form.mode, sizingUserOverridden]);
+
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Strategy | null>(null);
 
@@ -130,6 +145,7 @@ function Strategies() {
     setLiveListingIds([]);
     setLiveListingItems({});
     setLiveListingSearchValue('');
+    setSizingUserOverridden(false);
     setFormError(null);
     setModalOpen(true);
   };
@@ -145,6 +161,9 @@ function Strategies() {
         })
       : [];
 
+    const loadedCpu = p.cpu ? Number(p.cpu) : 2048;
+    const loadedMemory = p.memory ? Number(p.memory) : 4096;
+    setSizingUserOverridden(!!p.cpu);
     setForm({
       name: strategy.name ?? '',
       description: strategy.description ?? '',
@@ -154,6 +173,8 @@ function Strategies() {
       strategyClass: p.strategyClass ? String(p.strategyClass) : '',
       region: p.region ? String(p.region) : '',
       researchCommit: p.researchCommit ? String(p.researchCommit) : '',
+      cpu: loadedCpu,
+      memory: loadedMemory,
       args,
     });
     if (Array.isArray(p.listings)) {
@@ -199,6 +220,8 @@ function Strategies() {
       if (form.researchCommit.trim()) parameters.research_commit = form.researchCommit.trim();
       if (Object.keys(args).length > 0) parameters.args = args;
       if (form.mode === 'paper') parameters.simulation = simulationProfilesToConfig(profiles, listings);
+      parameters.cpu = form.cpu;
+      parameters.memory = form.memory;
 
       if (editTarget) {
         await registryApi.updateStrategy(editTarget.strategyId, {
@@ -348,6 +371,24 @@ function Strategies() {
           <Group grow>
             <TextInput label="Region (optional)" placeholder="us-east-1" value={form.region} onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))} />
             <TextInput label="Research Commit (optional)" placeholder="main" value={form.researchCommit} onChange={(e) => setForm((f) => ({ ...f, researchCommit: e.target.value }))} />
+          </Group>
+          <Group grow>
+            <Select
+              label="CPU"
+              data={CPU_OPTIONS.map(String)}
+              value={String(form.cpu)}
+              onChange={(v) => {
+                const newCpu = Number(v ?? '2048');
+                setForm((f) => ({ ...f, cpu: newCpu, memory: VALID_MEMORY_OPTIONS[newCpu][0] }));
+                setSizingUserOverridden(true);
+              }}
+            />
+            <Select
+              label="Memory (MiB)"
+              data={(VALID_MEMORY_OPTIONS[form.cpu] ?? []).map(String)}
+              value={String(form.memory)}
+              onChange={(v) => { setForm((f) => ({ ...f, memory: Number(v ?? '4096') })); setSizingUserOverridden(true); }}
+            />
           </Group>
 
           <Divider />

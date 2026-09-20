@@ -27,6 +27,7 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useGlobalState } from '../../../context/GlobalStateContext';
 import { useListingSearch, useEventSearch } from '../../../hooks/useAsyncSearch';
+import { CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestCollectorSizing } from '../../../utils/sizing';
 
 interface Collector {
   listingId: number;
@@ -39,20 +40,6 @@ interface Collector {
   memory?: string;
 }
 
-const CPU_OPTIONS = ['256', '512', '1024', '2048'];
-const MEMORY_OPTIONS_BY_CPU: Record<string, string[]> = {
-  '256': ['512', '1024', '2048'],
-  '512': ['1024', '2048', '3072', '4096'],
-  '1024': ['2048', '3072', '4096', '5120', '6144', '7168', '8192'],
-  '2048': ['4096', '5120', '6144', '7168', '8192', '9216', '10240', '11264', '12288', '13312', '14336', '15360', '16384'],
-};
-
-function suggestSizing(count: number): { cpu: string; memory: string } {
-  if (count <= 3) return { cpu: '256', memory: '512' };
-  if (count <= 6) return { cpu: '512', memory: '1024' };
-  if (count <= 12) return { cpu: '1024', memory: '2048' };
-  return { cpu: '2048', memory: '4096' };
-}
 
 function Collectors() {
   const navigate = useNavigate();
@@ -68,8 +55,8 @@ function Collectors() {
 
   // Create modal shared state
   const [mode, setMode] = useState<string>('listings');
-  const [cpu, setCpu] = useState('256');
-  const [memory, setMemory] = useState('512');
+  const [cpu, setCpu] = useState(256);
+  const [memory, setMemory] = useState(512);
   const [sizingUserOverridden, setSizingUserOverridden] = useState(false);
 
   // Listings mode
@@ -131,7 +118,7 @@ function Collectors() {
   // Auto-suggest sizing when listing count changes (unless user overrode)
   useEffect(() => {
     if (sizingUserOverridden) return;
-    const suggestion = suggestSizing(activeListingIds.length);
+    const suggestion = suggestCollectorSizing(activeListingIds.length);
     setCpu(suggestion.cpu);
     setMemory(suggestion.memory);
   }, [activeListingIds.length, sizingUserOverridden]);
@@ -242,8 +229,8 @@ function Collectors() {
     setEventListings([]);
     setPrefilledEvent(null);
     setSizingUserOverridden(false);
-    setCpu('256');
-    setMemory('512');
+    setCpu(256);
+    setMemory(512);
     setListingsRegion(null);
   };
 
@@ -274,7 +261,7 @@ function Collectors() {
     try {
       setError(null);
       setCreating(true);
-      await marketDataApi.createCollector(activeListingIds, effectiveRegion, cpu, memory);
+      await marketDataApi.createCollector(activeListingIds, effectiveRegion, String(cpu), String(memory));
       setCreateModalOpen(false);
       resetCreateModal();
       await loadCollectors();
@@ -623,16 +610,16 @@ function Collectors() {
           <Group grow>
             <Select
               label="CPU (units)"
-              data={CPU_OPTIONS}
-              value={cpu}
-              onChange={v => { if (v) { setCpu(v); setSizingUserOverridden(true); setMemory(MEMORY_OPTIONS_BY_CPU[v][0]); } }}
+              data={CPU_OPTIONS.map(String)}
+              value={String(cpu)}
+              onChange={v => { if (v) { const c = Number(v); setCpu(c); setSizingUserOverridden(true); setMemory(VALID_MEMORY_OPTIONS[c][0]); } }}
               description={sizingUserOverridden ? undefined : 'Auto-suggested'}
             />
             <Select
               label="Memory (MiB)"
-              data={(MEMORY_OPTIONS_BY_CPU[cpu] ?? ['512']).map(m => ({ value: m, label: m }))}
-              value={memory}
-              onChange={v => { if (v) { setMemory(v); setSizingUserOverridden(true); } }}
+              data={(VALID_MEMORY_OPTIONS[cpu] ?? [512]).map(String)}
+              value={String(memory)}
+              onChange={v => { if (v) { setMemory(Number(v)); setSizingUserOverridden(true); } }}
               description={sizingUserOverridden ? undefined : 'Auto-suggested'}
             />
           </Group>
