@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, ReactNode } from 'react';
 import {
   Accordion,
   ActionIcon,
@@ -20,7 +20,7 @@ import {
 import { IconAB2, IconArrowLeft, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { StrategySession, StrategySessionStatus } from '../../types';
+import { StrategySession, StrategySessionStatus, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
 import { ContainerLogs, TaskLogs } from '../../components/ContainerLogs';
 
@@ -45,7 +45,7 @@ function StatCard({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function groupConfig(config: Record<string, string>) {
+function groupConfig(config: Record<string, ConfigValue>) {
   const params = Object.entries(config).filter(([k]) => k.startsWith('strategy.args.'));
   const strategy = Object.entries(config).filter(([k]) => k.startsWith('strategy.') && !k.startsWith('strategy.args.'));
   const simulation = Object.entries(config).filter(([k]) => k.startsWith('simulation.'));
@@ -55,7 +55,15 @@ function groupConfig(config: Record<string, string>) {
   return { core, strategy, params, simulation };
 }
 
-function ConfigTable({ entries }: { entries: [string, string][] }) {
+function renderConfigValue(v: ConfigValue): ReactNode {
+  if (typeof v === 'object' && v !== null) {
+    return <Code style={{ fontSize: '0.72rem' }}>{JSON.stringify(v)}</Code>;
+  }
+  if (typeof v === 'boolean') return String(v);
+  return String(v);
+}
+
+function ConfigTable({ entries }: { entries: [string, ConfigValue][] }) {
   if (entries.length === 0) return <Text size="sm" c="dimmed">None</Text>;
   return (
     <Table striped withColumnBorders fz="xs">
@@ -63,7 +71,7 @@ function ConfigTable({ entries }: { entries: [string, string][] }) {
         {entries.map(([k, v]) => (
           <Table.Tr key={k}>
             <Table.Td style={{ fontFamily: 'monospace', width: '45%' }}>{k}</Table.Td>
-            <Table.Td style={{ fontFamily: 'monospace' }}>{v}</Table.Td>
+            <Table.Td style={{ fontFamily: 'monospace' }}>{renderConfigValue(v)}</Table.Td>
           </Table.Tr>
         ))}
       </Table.Tbody>
@@ -79,6 +87,7 @@ function SessionDetail() {
   const [loading, setLoading] = useState(false);
   const [stopOpen, setStopOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [relaunchOpen, setRelaunchOpen] = useState(false);
   const [relaunching, setRelaunching] = useState(false);
   const [sessionLogs, setSessionLogs] = useState<TaskLogs[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -152,7 +161,7 @@ function SessionDetail() {
         mode: session.mode,
         config: session.config,
         researchCommit: session.researchCommit ?? undefined,
-        region: session.config['region'] ?? undefined,
+        region: session.config['region'] != null ? String(session.config['region']) : undefined,
       });
       navigate(`/sessions/${result.sessionId}`);
     } catch (e) {
@@ -184,7 +193,7 @@ function SessionDetail() {
         </Tooltip>
         {isRelaunchable && (
           <Tooltip label="Relaunch Session" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" loading={relaunching} onClick={handleRelaunch}>
+            <ActionIcon size="lg" variant="filled" color="green" onClick={() => setRelaunchOpen(true)}>
               <IconAB2 size={20} />
             </ActionIcon>
           </Tooltip>
@@ -297,6 +306,16 @@ function SessionDetail() {
           )}
         </>
       )}
+
+      <Modal opened={relaunchOpen} onClose={() => setRelaunchOpen(false)} title="Relaunch Session" size="sm">
+        <Stack>
+          <Text>Relaunch session <Text span fw={500} style={{ fontFamily: 'monospace' }}>{sessionId?.slice(0, 8)}…</Text> with the same config?</Text>
+          <Group justify="flex-end">
+            <Button variant="outline" onClick={() => setRelaunchOpen(false)}>Cancel</Button>
+            <Button color="green" loading={relaunching} onClick={handleRelaunch}>Relaunch</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal opened={stopOpen} onClose={() => setStopOpen(false)} title="Stop Session" size="sm">
         <Stack>

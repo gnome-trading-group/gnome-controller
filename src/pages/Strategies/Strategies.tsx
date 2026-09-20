@@ -6,9 +6,12 @@ import {
   Container,
   Divider,
   Group,
+  JsonInput,
   Modal,
+  NumberInput,
   Select,
   Stack,
+  Switch,
   Text,
   TextInput,
   Title,
@@ -18,7 +21,7 @@ import { IconEdit, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react'
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
-import { Strategy, StrategyStatus } from '../../types';
+import { Strategy, StrategyStatus, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
 import { navigateRowProps } from '../../utils/navigation';
 import {
@@ -53,7 +56,7 @@ function defaultForm() {
     listings: '',
     region: '',
     researchCommit: '',
-    args: [] as { key: string; value: string }[],
+    args: [] as { key: string; value: string | number | boolean; type: 'string' | 'number' | 'boolean' | 'json' }[],
   };
 }
 
@@ -104,7 +107,12 @@ function Strategies() {
   const openEdit = useCallback((strategy: Strategy) => {
     const p = strategy.parameters as Record<string, unknown> | undefined ?? {};
     const args = p.args && typeof p.args === 'object'
-      ? Object.entries(p.args as Record<string, unknown>).map(([key, value]) => ({ key, value: String(value) }))
+      ? Object.entries(p.args as Record<string, unknown>).map(([key, value]) => {
+          if (typeof value === 'number') return { key, value, type: 'number' as const };
+          if (typeof value === 'boolean') return { key, value, type: 'boolean' as const };
+          if (typeof value === 'object' && value !== null) return { key, value: JSON.stringify(value, null, 2), type: 'json' as const };
+          return { key, value: String(value), type: 'string' as const };
+        })
       : [];
 
     setForm({
@@ -139,9 +147,11 @@ function Strategies() {
   const handleSubmit = async () => {
     setFormError(null);
     try {
-      const args: Record<string, string> = {};
-      for (const { key, value } of form.args) {
-        if (key.trim()) args[key.trim()] = value;
+      const args: Record<string, ConfigValue> = {};
+      for (const { key, value, type } of form.args) {
+        if (key.trim()) {
+          args[key.trim()] = type === 'json' ? JSON.parse(value as string) : value;
+        }
       }
       const parameters: Record<string, unknown> = {
         mode: form.mode,
@@ -297,15 +307,32 @@ function Strategies() {
           <Divider />
           <Group justify="space-between">
             <Title order={6} c="dimmed">Strategy Args</Title>
-            <ActionIcon size="sm" variant="subtle" color="blue" onClick={() => setForm((f) => ({ ...f, args: [...f.args, { key: '', value: '' }] }))}>
+            <ActionIcon size="sm" variant="subtle" color="blue" onClick={() => setForm((f) => ({ ...f, args: [...f.args, { key: '', value: '', type: 'string' as const }] }))}>
               <IconPlus size={14} />
             </ActionIcon>
           </Group>
           {form.args.map((row, i) => (
-            <Group key={i} gap="xs" align="flex-end">
+            <Group key={i} gap="xs" align="flex-start">
               <TextInput placeholder="key" value={row.key} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, key: v } : r) })); }} style={{ flex: 1 }} />
-              <TextInput placeholder="value" value={row.value} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: v } : r) })); }} style={{ flex: 1 }} />
-              <ActionIcon variant="subtle" color="red" onClick={() => setForm((f) => ({ ...f, args: f.args.filter((_, j) => j !== i) }))}>
+              <Select
+                data={[{ value: 'string', label: 'String' }, { value: 'number', label: 'Number' }, { value: 'boolean', label: 'Boolean' }, { value: 'json', label: 'JSON' }]}
+                value={row.type}
+                onChange={(v) => setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, type: (v ?? 'string') as typeof r.type, value: v === 'boolean' ? false : v === 'number' ? 0 : '' } : r) }))}
+                w={100}
+              />
+              {row.type === 'number' && (
+                <NumberInput value={row.value as number} onChange={(v) => setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: v === '' ? 0 : Number(v) } : r) }))} style={{ flex: 1 }} />
+              )}
+              {row.type === 'boolean' && (
+                <Switch checked={row.value as boolean} onChange={(e) => { const checked = e.currentTarget.checked; setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: checked } : r) })); }} mt={6} />
+              )}
+              {row.type === 'json' && (
+                <JsonInput value={row.value as string} onChange={(v) => setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: v } : r) }))} validationError="Invalid JSON" formatOnBlur autosize minRows={1} style={{ flex: 1 }} />
+              )}
+              {row.type === 'string' && (
+                <TextInput placeholder="value" value={row.value as string} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: v } : r) })); }} style={{ flex: 1 }} />
+              )}
+              <ActionIcon variant="subtle" color="red" mt={6} onClick={() => setForm((f) => ({ ...f, args: f.args.filter((_, j) => j !== i) }))}>
                 <IconTrash size={14} />
               </ActionIcon>
             </Group>

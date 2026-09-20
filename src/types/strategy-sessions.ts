@@ -1,3 +1,5 @@
+export type ConfigValue = string | number | boolean | Record<string, unknown> | unknown[];
+
 export enum StrategySessionStatus {
   SUBMITTED = 'SUBMITTED',
   RUNNING = 'RUNNING',
@@ -10,7 +12,7 @@ export interface StrategySession {
   strategyId: number;
   status: StrategySessionStatus;
   mode: string;
-  config: Record<string, string>;
+  config: Record<string, ConfigValue>;
   researchCommit: string | null;
   taskArn: string | null;
   taskDefinitionArn: string | null;
@@ -25,7 +27,7 @@ export interface CreateStrategySessionRequest {
   sessionId: string;
   strategyId: number;
   mode: string;
-  config: Record<string, string>;
+  config: Record<string, ConfigValue>;
   researchCommit?: string;
   region?: string;
 }

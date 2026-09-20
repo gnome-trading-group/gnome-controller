@@ -1,3 +1,5 @@
+import { ConfigValue } from './strategy-sessions';
+
 export interface JsonSchemaProperty {
   type: string;
   enum?: string[];
@@ -43,8 +45,8 @@ export interface ResolvedStrategyConfig {
   listings: string;
   research_commit?: string;
   region?: string;
-  strategy_args: Record<string, string>;
-  simulation_config: Record<string, string>;
+  strategy_args: Record<string, ConfigValue>;
+  simulation_config: Record<string, ConfigValue>;
 }
 
 export interface LaunchRequest {

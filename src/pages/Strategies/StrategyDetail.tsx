@@ -62,6 +62,8 @@ function StrategyDetail() {
   const [loading, setLoading] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
   const [stopTarget, setStopTarget] = useState<StrategySession | null>(null);
+  const [relaunchTarget, setRelaunchTarget] = useState<StrategySession | null>(null);
+  const [relaunching, setRelaunching] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [createPolicyOpen, setCreatePolicyOpen] = useState(false);
   const [deletePolicyTarget, setDeletePolicyTarget] = useState<RiskPolicy | null>(null);
@@ -145,19 +147,24 @@ function StrategyDetail() {
   const isStoppable = (s: StrategySession) =>
     s.status === StrategySessionStatus.SUBMITTED || s.status === StrategySessionStatus.RUNNING;
 
-  const handleRelaunchSession = async (session: StrategySession) => {
+  const handleRelaunchSession = async () => {
+    if (!relaunchTarget) return;
+    setRelaunching(true);
     try {
       const result = await registryApi.createSession({
         sessionId: crypto.randomUUID(),
-        strategyId: session.strategyId,
-        mode: session.mode,
-        config: session.config,
-        researchCommit: session.researchCommit ?? undefined,
-        region: session.config['region'] ?? undefined,
+        strategyId: relaunchTarget.strategyId,
+        mode: relaunchTarget.mode,
+        config: relaunchTarget.config,
+        researchCommit: relaunchTarget.researchCommit ?? undefined,
+        region: relaunchTarget.config['region'] != null ? String(relaunchTarget.config['region']) : undefined,
       });
+      setRelaunchTarget(null);
       navigate(`/sessions/${result.sessionId}`);
     } catch (e) {
       console.error('Failed to relaunch session:', e);
+    } finally {
+      setRelaunching(false);
     }
   };
 
@@ -296,7 +303,7 @@ function StrategyDetail() {
           variant="subtle"
           color="green"
           disabled={isStoppable(row.original)}
-          onClick={e => { e.stopPropagation(); handleRelaunchSession(row.original); }}
+          onClick={e => { e.stopPropagation(); setRelaunchTarget(row.original); }}
         >
           <IconAB2 size={16} />
         </ActionIcon>
@@ -390,6 +397,16 @@ function StrategyDetail() {
           <Group justify="flex-end">
             <Button variant="outline" onClick={() => setStopTarget(null)}>Cancel</Button>
             <Button color="red" loading={stopping} onClick={handleStopSession}>Stop</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal opened={!!relaunchTarget} onClose={() => setRelaunchTarget(null)} title="Relaunch Session" size="sm">
+        <Stack>
+          <Text>Relaunch session <Text span fw={500} style={{ fontFamily: 'monospace' }}>{relaunchTarget?.sessionId.slice(0, 8)}…</Text> with the same config?</Text>
+          <Group justify="flex-end">
+            <Button variant="outline" onClick={() => setRelaunchTarget(null)}>Cancel</Button>
+            <Button color="green" loading={relaunching} onClick={handleRelaunchSession}>Relaunch</Button>
           </Group>
         </Stack>
       </Modal>

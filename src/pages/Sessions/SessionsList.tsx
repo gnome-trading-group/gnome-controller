@@ -50,6 +50,8 @@ function SessionsList() {
   const [deployOpen, setDeployOpen] = useState(false);
   const [stopTarget, setStopTarget] = useState<StrategySession | null>(null);
   const [stopping, setStopping] = useState(false);
+  const [relaunchTarget, setRelaunchTarget] = useState<StrategySession | null>(null);
+  const [relaunching, setRelaunching] = useState(false);
 
   const urlState = useUrlTableState({ defaultSort: { id: 'dateCreated', desc: true } });
   const statusFilter = urlState.getParam('status');
@@ -93,19 +95,24 @@ function SessionsList() {
       },
     });
 
-  const handleRelaunch = async (session: StrategySession) => {
+  const handleRelaunch = async () => {
+    if (!relaunchTarget) return;
+    setRelaunching(true);
     try {
       const result = await registryApi.createSession({
         sessionId: crypto.randomUUID(),
-        strategyId: session.strategyId,
-        mode: session.mode,
-        config: session.config,
-        researchCommit: session.researchCommit ?? undefined,
-        region: session.config['region'] ?? undefined,
+        strategyId: relaunchTarget.strategyId,
+        mode: relaunchTarget.mode,
+        config: relaunchTarget.config,
+        researchCommit: relaunchTarget.researchCommit ?? undefined,
+        region: relaunchTarget.config['region'] != null ? String(relaunchTarget.config['region']) : undefined,
       });
+      setRelaunchTarget(null);
       navigate(`/sessions/${result.sessionId}`);
     } catch (e) {
       console.error('Failed to relaunch session:', e);
+    } finally {
+      setRelaunching(false);
     }
   };
 
@@ -214,7 +221,7 @@ function SessionsList() {
           variant="subtle"
           color="green"
           disabled={isStoppable(row.original)}
-          onClick={e => { e.stopPropagation(); handleRelaunch(row.original); }}
+          onClick={e => { e.stopPropagation(); setRelaunchTarget(row.original); }}
         >
           <IconAB2 size={16} />
         </ActionIcon>
@@ -272,6 +279,16 @@ function SessionsList() {
         onClose={() => setDeployOpen(false)}
         onCreated={() => { setDeployOpen(false); refresh(); }}
       />
+
+      <Modal opened={!!relaunchTarget} onClose={() => setRelaunchTarget(null)} title="Relaunch Session" size="sm">
+        <Stack>
+          <Text>Relaunch session <Text span fw={500} style={{ fontFamily: 'monospace' }}>{relaunchTarget?.sessionId.slice(0, 8)}…</Text> with the same config?</Text>
+          <Group justify="flex-end">
+            <Button variant="outline" onClick={() => setRelaunchTarget(null)}>Cancel</Button>
+            <Button color="green" loading={relaunching} onClick={handleRelaunch}>Relaunch</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal opened={!!stopTarget} onClose={() => setStopTarget(null)} title="Stop Session" size="sm">
         <Stack>

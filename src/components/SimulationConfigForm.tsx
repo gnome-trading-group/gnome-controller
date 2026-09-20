@@ -1,4 +1,5 @@
 import { ActionIcon, Accordion, Button, Divider, Group, NumberInput, Select, Stack, Text, TextInput, Title } from '@mantine/core';
+import { ConfigValue } from '../types';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 
 export interface SimulationState {
@@ -49,46 +50,46 @@ export const defaultSimulationState = (): SimulationState => ({
   cancelAheadProbability: 0.5,
 });
 
-export function simulationStateToConfig(sim: SimulationState): Record<string, string> {
-  const cfg: Record<string, string> = {};
+export function simulationStateToConfig(sim: SimulationState): Record<string, ConfigValue> {
+  const cfg: Record<string, ConfigValue> = {};
   cfg['fee.model'] = sim.feeModel;
   if (sim.feeModel === 'parametric') {
-    cfg['fee.taker.rate'] = String(sim.feeTakerRate);
-    cfg['fee.maker.rate'] = String(sim.feeMakerRate);
+    cfg['fee.taker.rate'] = Number(sim.feeTakerRate);
+    cfg['fee.maker.rate'] = Number(sim.feeMakerRate);
   } else {
-    cfg['fee.taker'] = String(sim.feeTaker);
-    cfg['fee.maker'] = String(sim.feeMaker);
+    cfg['fee.taker'] = Number(sim.feeTaker);
+    cfg['fee.maker'] = Number(sim.feeMaker);
   }
   cfg['network.latency.model'] = sim.networkLatencyModel;
   if (sim.networkLatencyModel === 'gaussian') {
-    cfg['network.latency.mu'] = String(sim.networkLatencyMu);
-    cfg['network.latency.sigma'] = String(sim.networkLatencySigma);
+    cfg['network.latency.mu'] = Number(sim.networkLatencyMu);
+    cfg['network.latency.sigma'] = Number(sim.networkLatencySigma);
   } else if (sim.networkLatencyModel === 'maker_taker') {
-    cfg['network.latency.base.nanos'] = String(sim.networkLatencyBaseNanos);
-    cfg['network.latency.taker.delay.nanos'] = String(sim.networkLatencyTakerDelayNanos);
-    cfg['network.latency.maker.delay.nanos'] = String(sim.networkLatencyMakerDelayNanos);
+    cfg['network.latency.base.nanos'] = Number(sim.networkLatencyBaseNanos);
+    cfg['network.latency.taker.delay.nanos'] = Number(sim.networkLatencyTakerDelayNanos);
+    cfg['network.latency.maker.delay.nanos'] = Number(sim.networkLatencyMakerDelayNanos);
   } else {
-    cfg['network.latency.nanos'] = String(sim.networkLatencyNanos);
+    cfg['network.latency.nanos'] = Number(sim.networkLatencyNanos);
   }
   cfg['order.latency.model'] = sim.orderLatencyModel;
   if (sim.orderLatencyModel === 'gaussian') {
-    cfg['order.latency.mu'] = String(sim.orderLatencyMu);
-    cfg['order.latency.sigma'] = String(sim.orderLatencySigma);
+    cfg['order.latency.mu'] = Number(sim.orderLatencyMu);
+    cfg['order.latency.sigma'] = Number(sim.orderLatencySigma);
   } else if (sim.orderLatencyModel === 'maker_taker') {
-    cfg['order.latency.base.nanos'] = String(sim.orderLatencyBaseNanos);
-    cfg['order.latency.taker.delay.nanos'] = String(sim.orderLatencyTakerDelayNanos);
-    cfg['order.latency.maker.delay.nanos'] = String(sim.orderLatencyMakerDelayNanos);
+    cfg['order.latency.base.nanos'] = Number(sim.orderLatencyBaseNanos);
+    cfg['order.latency.taker.delay.nanos'] = Number(sim.orderLatencyTakerDelayNanos);
+    cfg['order.latency.maker.delay.nanos'] = Number(sim.orderLatencyMakerDelayNanos);
   } else {
-    cfg['order.latency.nanos'] = String(sim.orderLatencyNanos);
+    cfg['order.latency.nanos'] = Number(sim.orderLatencyNanos);
   }
   cfg['queue.model'] = sim.queueModel;
   if (sim.queueModel === 'probabilistic') {
-    cfg['queue.cancel.ahead.probability'] = String(sim.cancelAheadProbability);
+    cfg['queue.cancel.ahead.probability'] = Number(sim.cancelAheadProbability);
   }
   return cfg;
 }
 
-export function simulationStateFromConfig(sim: Record<string, string>): SimulationState {
+export function simulationStateFromConfig(sim: Record<string, ConfigValue>): SimulationState {
   const s = defaultSimulationState();
   const feeModel = sim['fee.model'];
   if (feeModel === 'parametric') {
@@ -142,8 +143,8 @@ export type ProfilesState = Record<string, SimulationState>;
 export function simulationProfilesToConfig(
   profiles: ProfilesState,
   listings: ListingProfileRow[],
-): Record<string, string> {
-  const cfg: Record<string, string> = {};
+): Record<string, ConfigValue> {
+  const cfg: Record<string, ConfigValue> = {};
   for (const [name, sim] of Object.entries(profiles)) {
     const simCfg = simulationStateToConfig(sim);
     for (const [k, v] of Object.entries(simCfg)) {
@@ -158,11 +159,11 @@ export function simulationProfilesToConfig(
   return cfg;
 }
 
-export function simulationProfilesFromConfig(config: Record<string, string>): {
+export function simulationProfilesFromConfig(config: Record<string, ConfigValue>): {
   profiles: ProfilesState;
   listings: ListingProfileRow[];
 } {
-  const profileKeys: Record<string, Record<string, string>> = {};
+  const profileKeys: Record<string, Record<string, ConfigValue>> = {};
   const listingMap: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(config)) {
@@ -175,7 +176,7 @@ export function simulationProfilesFromConfig(config: Record<string, string>): {
     }
     const listingMatch = key.match(/^simulation\.listing\.(\d+)\.profile$/);
     if (listingMatch) {
-      listingMap[listingMatch[1]] = value;
+      listingMap[listingMatch[1]] = String(value);
     }
   }
 

@@ -4,15 +4,18 @@ import {
   Button,
   Divider,
   Group,
+  JsonInput,
   Modal,
+  NumberInput,
   Select,
   Stack,
+  Switch,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
-import { Strategy } from '../../types';
+import { Strategy, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
 import {
   defaultSimulationState,
@@ -25,7 +28,8 @@ import {
 
 interface ParamRow {
   key: string;
-  value: string;
+  value: string | number | boolean;
+  type: 'string' | 'number' | 'boolean' | 'json';
 }
 
 interface DeploySessionModalProps {
@@ -56,12 +60,12 @@ function flattenToSessionConfig(
   region: string,
   params: ParamRow[],
   profiles: ProfilesState,
-): Record<string, string> {
+): Record<string, ConfigValue> {
   const listingsStr = mode === 'paper'
     ? listings.map(l => l.listingId.trim()).filter(Boolean).join(',')
     : liveListings.trim();
 
-  const config: Record<string, string> = {
+  const config: Record<string, ConfigValue> = {
     'strategy.id': strategyId,
     mode,
     listings: listingsStr,
@@ -72,8 +76,10 @@ function flattenToSessionConfig(
   }
   if (researchCommit.trim()) config['research_commit'] = researchCommit.trim();
   if (region.trim()) config['region'] = region.trim();
-  for (const { key, value } of params) {
-    if (key.trim()) config[`strategy.args.${key.trim()}`] = value;
+  for (const { key, value, type } of params) {
+    if (key.trim()) {
+      config[`strategy.args.${key.trim()}`] = type === 'json' ? JSON.parse(value as string) : value;
+    }
   }
   if (mode === 'paper') {
     const simCfg = simulationProfilesToConfig(profiles, listings);
@@ -129,7 +135,12 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
     if (p.researchCommit) setResearchCommit(String(p.researchCommit));
     if (p.args && typeof p.args === 'object') {
       const entries = Object.entries(p.args as Record<string, unknown>);
-      setParams(entries.map(([k, v]) => ({ key: k, value: String(v) })));
+      setParams(entries.map(([k, v]) => {
+        if (typeof v === 'number') return { key: k, value: v, type: 'number' as const };
+        if (typeof v === 'boolean') return { key: k, value: v, type: 'boolean' as const };
+        if (typeof v === 'object' && v !== null) return { key: k, value: JSON.stringify(v, null, 2), type: 'json' as const };
+        return { key: k, value: String(v), type: 'string' as const };
+      }));
     }
     if (p.simulation && typeof p.simulation === 'object') {
       const { profiles: loadedProfiles, listings: loadedListings } = simulationProfilesFromConfig(
@@ -243,15 +254,32 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId 
         <Divider />
         <Group justify="space-between">
           <Title order={6} c="dimmed">Strategy Parameters</Title>
-          <ActionIcon size="sm" variant="subtle" color="blue" onClick={() => setParams(p => [...p, { key: '', value: '' }])}>
+          <ActionIcon size="sm" variant="subtle" color="blue" onClick={() => setParams(p => [...p, { key: '', value: '', type: 'string' as const }])}>
             <IconPlus size={14} />
           </ActionIcon>
         </Group>
         {params.map((row, i) => (
-          <Group key={i} gap="xs" align="flex-end">
+          <Group key={i} gap="xs" align="flex-start">
             <TextInput placeholder="key" value={row.key} onChange={e => setParams(p => p.map((r, j) => j === i ? { ...r, key: e.currentTarget.value } : r))} style={{ flex: 1 }} />
-            <TextInput placeholder="value" value={row.value} onChange={e => setParams(p => p.map((r, j) => j === i ? { ...r, value: e.currentTarget.value } : r))} style={{ flex: 1 }} />
-            <ActionIcon variant="subtle" color="red" onClick={() => setParams(p => p.filter((_, j) => j !== i))}>
+            <Select
+              data={[{ value: 'string', label: 'String' }, { value: 'number', label: 'Number' }, { value: 'boolean', label: 'Boolean' }, { value: 'json', label: 'JSON' }]}
+              value={row.type}
+              onChange={(v) => setParams(p => p.map((r, j) => j === i ? { ...r, type: (v ?? 'string') as ParamRow['type'], value: v === 'boolean' ? false : v === 'number' ? 0 : '' } : r))}
+              w={100}
+            />
+            {row.type === 'number' && (
+              <NumberInput value={row.value as number} onChange={(v) => setParams(p => p.map((r, j) => j === i ? { ...r, value: v === '' ? 0 : Number(v) } : r))} style={{ flex: 1 }} />
+            )}
+            {row.type === 'boolean' && (
+              <Switch checked={row.value as boolean} onChange={(e) => { const checked = e.currentTarget.checked; setParams(p => p.map((r, j) => j === i ? { ...r, value: checked } : r)); }} mt={6} />
+            )}
+            {row.type === 'json' && (
+              <JsonInput value={row.value as string} onChange={(v) => setParams(p => p.map((r, j) => j === i ? { ...r, value: v } : r))} validationError="Invalid JSON" formatOnBlur autosize minRows={1} style={{ flex: 1 }} />
+            )}
+            {row.type === 'string' && (
+              <TextInput placeholder="value" value={row.value as string} onChange={e => setParams(p => p.map((r, j) => j === i ? { ...r, value: e.currentTarget.value } : r))} style={{ flex: 1 }} />
+            )}
+            <ActionIcon variant="subtle" color="red" mt={6} onClick={() => setParams(p => p.filter((_, j) => j !== i))}>
               <IconTrash size={14} />
             </ActionIcon>
           </Group>
