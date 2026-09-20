@@ -38,7 +38,7 @@ interface ParamRow {
 interface DeploySessionModalProps {
   opened: boolean;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (sessionId: string) => void;
   preselectedStrategyId?: number;
   initialSession?: StrategySession | null;
 }
@@ -309,8 +309,9 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
 
     setSubmitting(true);
     try {
+      const newSessionId = crypto.randomUUID();
       await registryApi.createSession({
-        sessionId: crypto.randomUUID(),
+        sessionId: newSessionId,
         strategyId: parseInt(strategyId),
         mode,
         config,
@@ -319,8 +320,8 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
         cpu,
         memory,
       });
-      onCreated();
       handleClose();
+      onCreated(newSessionId);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to deploy session');
     } finally {

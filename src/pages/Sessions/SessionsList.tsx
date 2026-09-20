@@ -260,7 +260,13 @@ function SessionsList() {
       <DeploySessionModal
         opened={deployOpen || !!relaunchSession}
         onClose={() => { setDeployOpen(false); setRelaunchSession(null); }}
-        onCreated={() => { setDeployOpen(false); setRelaunchSession(null); refresh(); }}
+        onCreated={(newSessionId) => {
+          const wasRelaunch = !!relaunchSession;
+          setDeployOpen(false);
+          setRelaunchSession(null);
+          if (wasRelaunch) navigate(`/sessions/${newSessionId}`);
+          else refresh();
+        }}
         initialSession={relaunchSession}
       />
 

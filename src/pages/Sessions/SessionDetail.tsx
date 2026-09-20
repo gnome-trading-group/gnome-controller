@@ -119,6 +119,10 @@ function SessionDetail() {
   }, [sessionId]);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    const interval = setInterval(refresh, 5000);
+    return () => clearInterval(interval);
+  }, [refresh]);
 
   const loadLogs = useCallback(async (showLoading = true) => {
     if (!sessionId || !session?.taskArn) return;
@@ -337,7 +341,7 @@ function SessionDetail() {
       <DeploySessionModal
         opened={relaunchOpen}
         onClose={() => setRelaunchOpen(false)}
-        onCreated={() => { setRelaunchOpen(false); refresh(); }}
+        onCreated={(newSessionId) => { setRelaunchOpen(false); navigate(`/sessions/${newSessionId}`); }}
         initialSession={relaunchOpen ? session : null}
         preselectedStrategyId={session?.strategyId}
       />

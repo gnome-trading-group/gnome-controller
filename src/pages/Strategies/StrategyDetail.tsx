@@ -97,6 +97,10 @@ function StrategyDetail() {
   }, [id, pnlMode]);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    const interval = setInterval(refresh, 10000);
+    return () => clearInterval(interval);
+  }, [refresh]);
 
   const handleToggleEnabled = async (policy: RiskPolicy) => {
     await registryApi.updateRiskPolicy(policy.policyId, { enabled: !policy.enabled });
@@ -394,7 +398,13 @@ function StrategyDetail() {
       <DeploySessionModal
         opened={deployOpen || !!relaunchSession}
         onClose={() => { setDeployOpen(false); setRelaunchSession(null); }}
-        onCreated={() => { setDeployOpen(false); setRelaunchSession(null); refresh(); }}
+        onCreated={(newSessionId) => {
+          const wasRelaunch = !!relaunchSession;
+          setDeployOpen(false);
+          setRelaunchSession(null);
+          if (wasRelaunch) navigate(`/sessions/${newSessionId}`);
+          else refresh();
+        }}
         preselectedStrategyId={id}
         initialSession={relaunchSession}
       />
