@@ -281,8 +281,9 @@ function StrategyDetail() {
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: false,
-    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 50 }, sorting: [{ id: 'snapshotTime', desc: true }] },
-    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true, style: { tableLayout: 'fixed' } },
+    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 15 }, sorting: [{ id: 'snapshotTime', desc: true }] },
+    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
+    mantinePaperProps: { style: { width: '100%' } },
   });
 
   const sessionTable = useMantineReactTable({
@@ -297,7 +298,7 @@ function StrategyDetail() {
     enableBottomToolbar: true,
     enableTopToolbar: false,
     positionActionsColumn: 'last' as const,
-    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 50 }, sorting: [{ id: 'startedAt', desc: true }] },
+    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 15 }, sorting: [{ id: 'startedAt', desc: true }] },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     mantineTableBodyRowProps: ({ row }: { row: MRT_Row<StrategySession> }) => (
       navigateRowProps(navigate, `/sessions/${row.original.sessionId}`)
@@ -336,7 +337,7 @@ function StrategyDetail() {
     enableBottomToolbar: true,
     enableTopToolbar: false,
     positionActionsColumn: 'last' as const,
-    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 50 } },
+    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 15 } },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     renderRowActions: ({ row }: { row: MRT_Row<RiskPolicy> }) => (
       <ActionIcon variant="subtle" color="red" onClick={() => setDeletePolicyTarget(row.original)}>

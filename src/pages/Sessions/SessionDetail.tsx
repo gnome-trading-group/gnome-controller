@@ -213,8 +213,9 @@ function SessionDetail() {
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: false,
-    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 50 }, sorting: [{ id: 'snapshotTime', desc: true }] },
-    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true, style: { tableLayout: 'fixed' } },
+    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 15 }, sorting: [{ id: 'snapshotTime', desc: true }] },
+    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
+    mantinePaperProps: { style: { width: '100%' } },
   });
 
   return (
