@@ -3,6 +3,7 @@ import {
   Accordion,
   ActionIcon,
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -179,9 +180,9 @@ function SessionDetail() {
       enableSorting: true,
       size: 80,
       Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => (
-        <Text component={Link} to={`/security-master/listings/${row.original.listingId}`} size="sm" c="blue" style={{ textDecoration: 'none' }}>
+        <Anchor component={Link} to={`/security-master/listings/${row.original.listingId}`} size="sm">
           {row.original.listingId}
-        </Text>
+        </Anchor>
       ),
     },
     { accessorKey: 'netQuantity', header: 'Net Qty', enableSorting: true },
@@ -209,11 +210,11 @@ function SessionDetail() {
     enableRowActions: false,
     enableColumnFilters: false,
     enableSorting: true,
-    enablePagination: false,
-    enableBottomToolbar: false,
+    enablePagination: true,
+    enableBottomToolbar: true,
     enableTopToolbar: false,
-    initialState: { density: 'xs' },
-    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
+    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 50 }, sorting: [{ id: 'snapshotTime', desc: true }] },
+    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true, style: { tableLayout: 'fixed' } },
   });
 
   return (
@@ -256,7 +257,7 @@ function SessionDetail() {
           <SimpleGrid cols={{ base: 2, sm: 3 }} mb="md">
             <StatCard label="Strategy" value={
               strategyName
-                ? <Text component={Link} to={`/strategies/${session.strategyId}`} c="blue" fw={600} size="lg" style={{ textDecoration: 'none' }}>{strategyName}</Text>
+                ? <Anchor component={Link} to={`/strategies/${session.strategyId}`} fw={600} size="lg">{strategyName}</Anchor>
                 : String(session.strategyId)
             } />
             <StatCard label="Mode" value={

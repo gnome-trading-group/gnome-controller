@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   ActionIcon,
+  Anchor,
   Badge,
   Button,
   Checkbox,
@@ -78,8 +79,8 @@ function StrategyDetail() {
   });
   const [policyError, setPolicyError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const [allStrategies, pnl, allPolicies, sessionList] = await Promise.all([
         registryApi.listStrategies({ strategyId: id }),
@@ -92,13 +93,13 @@ function StrategyDetail() {
       setPolicies(allPolicies.filter((p) => p.scope === 0 ? false : p.strategyId === id));
       setSessions(sessionList);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, [id, pnlMode]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
-    const interval = setInterval(refresh, 10000);
+    const interval = setInterval(() => refresh(false), 10000);
     return () => clearInterval(interval);
   }, [refresh]);
 
@@ -214,9 +215,9 @@ function StrategyDetail() {
       enableSorting: true,
       size: 80,
       Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => (
-        <Text component={Link} to={`/security-master/listings/${row.original.listingId}`} size="sm" c="blue" style={{ textDecoration: 'none' }}>
+        <Anchor component={Link} to={`/security-master/listings/${row.original.listingId}`} size="sm">
           {row.original.listingId}
-        </Text>
+        </Anchor>
       ),
     },
     {
@@ -277,11 +278,11 @@ function StrategyDetail() {
     enableRowActions: false,
     enableColumnFilters: false,
     enableSorting: true,
-    enablePagination: false,
-    enableBottomToolbar: false,
+    enablePagination: true,
+    enableBottomToolbar: true,
     enableTopToolbar: false,
-    initialState: { density: 'xs' },
-    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
+    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 50 }, sorting: [{ id: 'snapshotTime', desc: true }] },
+    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true, style: { tableLayout: 'fixed' } },
   });
 
   const sessionTable = useMantineReactTable({
@@ -292,11 +293,11 @@ function StrategyDetail() {
     enableRowActions: true,
     enableColumnFilters: false,
     enableSorting: true,
-    enablePagination: false,
-    enableBottomToolbar: false,
+    enablePagination: true,
+    enableBottomToolbar: true,
     enableTopToolbar: false,
     positionActionsColumn: 'last' as const,
-    initialState: { density: 'xs', sorting: [{ id: 'startedAt', desc: true }] },
+    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 50 }, sorting: [{ id: 'startedAt', desc: true }] },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     mantineTableBodyRowProps: ({ row }: { row: MRT_Row<StrategySession> }) => (
       navigateRowProps(navigate, `/sessions/${row.original.sessionId}`)
@@ -331,11 +332,11 @@ function StrategyDetail() {
     enableRowActions: true,
     enableColumnFilters: false,
     enableSorting: true,
-    enablePagination: false,
-    enableBottomToolbar: false,
+    enablePagination: true,
+    enableBottomToolbar: true,
     enableTopToolbar: false,
     positionActionsColumn: 'last' as const,
-    initialState: { density: 'xs' },
+    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 50 } },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     renderRowActions: ({ row }: { row: MRT_Row<RiskPolicy> }) => (
       <ActionIcon variant="subtle" color="red" onClick={() => setDeletePolicyTarget(row.original)}>
@@ -367,7 +368,7 @@ function StrategyDetail() {
             </ActionIcon>
           </Tooltip>
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh}>
+            <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()}>
               <IconRefresh size={20} />
             </ActionIcon>
           </Tooltip>

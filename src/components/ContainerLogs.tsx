@@ -44,9 +44,10 @@ function LogList({ entries }: { entries: LogEntry[] }) {
       </Center>
     );
   }
+  const reversed = [...entries].reverse();
   return (
     <Stack gap="xs">
-      {entries.map((logEvent, index) => (
+      {reversed.map((logEvent, index) => (
         <div key={index}>
           <Group gap="xs" align="flex-start">
             <Text size="xs" c="dimmed" style={{ minWidth: '140px' }}>
@@ -56,7 +57,7 @@ function LogList({ entries }: { entries: LogEntry[] }) {
               {logEvent.message}
             </Code>
           </Group>
-          {index < entries.length - 1 && <Divider size="xs" />}
+          {index < reversed.length - 1 && <Divider size="xs" />}
         </div>
       ))}
     </Stack>
