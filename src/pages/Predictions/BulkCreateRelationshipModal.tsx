@@ -9,6 +9,7 @@ import {
   NumberInput,
   Paper,
   ScrollArea,
+  SegmentedControl,
   Select,
   Stack,
   Switch,
@@ -119,7 +120,13 @@ function BulkCreateRelationshipModal({
   currentEventTitle,
   currentContracts,
 }: BulkCreateRelationshipModalProps) {
+  const [mode, setMode] = useState<'matching' | 'cartesian'>('matching');
+
+  // Cartesian mode state
   const [selectedA, setSelectedA] = useState<number[]>([]);
+
+  // Matching mode state: maps Side A securityId → Side B securityId (null = unset)
+  const [pairings, setPairings] = useState<Record<number, number | null>>({});
 
   const [eventSearch, setEventSearch] = useState('');
   const { options: eventOptions, isLoading: eventsLoading } = useEventSearch(eventSearch);
@@ -139,11 +146,13 @@ function BulkCreateRelationshipModal({
     if (!targetEventId) {
       setTargetContracts([]);
       setSelectedB([]);
+      setPairings({});
       return;
     }
     if (targetEventId === currentEventId) {
       setTargetContracts(currentContracts);
       setSelectedB([]);
+      setPairings({});
       return;
     }
     setLoadingTarget(true);
@@ -151,6 +160,7 @@ function BulkCreateRelationshipModal({
       .then(cs => setTargetContracts(cs as EventContract[]))
       .catch(() => setTargetContracts([]))
       .finally(() => setLoadingTarget(false));
+    setPairings({});
   }, [targetEventId, currentEventId, currentContracts]);
 
   const sameEvent = targetEventId === currentEventId;
@@ -158,8 +168,9 @@ function BulkCreateRelationshipModal({
 
   const effectiveTargetContracts = sameEvent ? currentContracts : targetContracts;
 
-  const preview = useMemo(() => {
-    if (!relationshipType || selectedA.length === 0 || selectedB.length === 0) return [];
+  // Cartesian mode preview
+  const cartesianPreview = useMemo(() => {
+    if (mode !== 'cartesian' || !relationshipType || selectedA.length === 0 || selectedB.length === 0) return [];
     const seen = new Set<string>();
     const results: { securityIdA: number; securityIdB: number; symbolA: string; symbolB: string; relationshipType: ContractRelationshipType; confidence: number }[] = [];
     for (const a of selectedA) {
@@ -176,10 +187,34 @@ function BulkCreateRelationshipModal({
       }
     }
     return results;
-  }, [selectedA, selectedB, relationshipType, confidence, bidirectional, currentContracts, effectiveTargetContracts]);
+  }, [mode, selectedA, selectedB, relationshipType, confidence, bidirectional, currentContracts, effectiveTargetContracts]);
+
+  // 1:1 matching mode preview
+  const matchingPreview = useMemo(() => {
+    if (mode !== 'matching') return [];
+    const results: { securityIdA: number; securityIdB: number; symbolA: string; symbolB: string; relationshipType: ContractRelationshipType; confidence: number }[] = [];
+    for (const contract of currentContracts) {
+      const bId = pairings[contract.securityId];
+      if (bId == null) continue;
+      const symbolA = contractSymbol(contract.securityId, currentContracts);
+      const symbolB = contractSymbol(bId, effectiveTargetContracts);
+      results.push({ securityIdA: contract.securityId, securityIdB: bId, symbolA, symbolB, relationshipType, confidence });
+      if (bidirectional) {
+        results.push({ securityIdA: bId, securityIdB: contract.securityId, symbolA: symbolB, symbolB: symbolA, relationshipType, confidence });
+      }
+    }
+    return results;
+  }, [mode, currentContracts, pairings, effectiveTargetContracts, relationshipType, confidence, bidirectional]);
+
+  const activePreview = mode === 'cartesian' ? cartesianPreview : matchingPreview;
+
+  // B IDs already used in pairings (for disabling in other dropdowns)
+  const usedBIds = useMemo(() => new Set(Object.values(pairings).filter((v): v is number => v != null)), [pairings]);
 
   const handleClose = () => {
+    setMode('matching');
     setSelectedA([]);
+    setPairings({});
     setEventSearch('');
     setTargetEventId(null);
     setTargetContracts([]);
@@ -192,11 +227,11 @@ function BulkCreateRelationshipModal({
   };
 
   const handleSubmit = async () => {
-    if (preview.length === 0) return;
+    if (activePreview.length === 0) return;
     setSubmitting(true);
     setError(null);
     try {
-      const bodies: CreateContractRelationship[] = preview.map(p => ({
+      const bodies: CreateContractRelationship[] = activePreview.map(p => ({
         securityIdA: p.securityIdA,
         securityIdB: p.securityIdB,
         relationshipType: p.relationshipType,
@@ -213,46 +248,116 @@ function BulkCreateRelationshipModal({
     }
   };
 
+  const targetContractOptions = effectiveTargetContracts.map(c => ({
+    value: String(c.securityId),
+    label: contractLabel(c),
+    disabled: usedBIds.has(c.securityId),
+  }));
+
   return (
     <Modal opened={opened} onClose={handleClose} title="Bulk Create Relationships" size="xl">
       <Stack gap="md">
-        <Group align="flex-start" grow>
-          <Paper withBorder p="sm">
-            <Title order={6} mb="xs">Side A — {currentEventTitle}</Title>
-            <ContractCheckboxList
-              contracts={currentContracts}
-              selected={selectedA}
-              onToggle={setSelectedA}
-            />
-          </Paper>
+        <SegmentedControl
+          value={mode}
+          onChange={v => setMode(v as typeof mode)}
+          data={[
+            { value: 'matching', label: '1:1 Matching' },
+            { value: 'cartesian', label: 'Cartesian Product' },
+          ]}
+        />
 
-          <Paper withBorder p="sm">
-            <Title order={6} mb="xs">Side B — Target Event</Title>
-            <Stack gap="xs">
-              <Select
-                placeholder="Search for an event..."
-                data={eventOptions}
-                searchable
-                searchValue={eventSearch}
-                onSearchChange={setEventSearch}
-                value={targetEventId ? String(targetEventId) : null}
-                onChange={v => { setTargetEventId(v ? Number(v) : null); setSelectedB([]); }}
-                nothingFoundMessage="No events found"
-                rightSection={eventsLoading ? <Loader size="xs" /> : undefined}
-                filter={({ options }) => options}
+        {mode === 'cartesian' ? (
+          <Group align="flex-start" grow>
+            <Paper withBorder p="sm">
+              <Title order={6} mb="xs">Side A — {currentEventTitle}</Title>
+              <ContractCheckboxList
+                contracts={currentContracts}
+                selected={selectedA}
+                onToggle={setSelectedA}
               />
-              {targetEventId && (
-                <ContractCheckboxList
-                  contracts={effectiveTargetContracts}
-                  selected={selectedB}
-                  onToggle={setSelectedB}
-                  disabledIds={disabledForB}
-                  loading={loadingTarget}
+            </Paper>
+
+            <Paper withBorder p="sm">
+              <Title order={6} mb="xs">Side B — Target Event</Title>
+              <Stack gap="xs">
+                <Select
+                  placeholder="Search for an event..."
+                  data={eventOptions}
+                  searchable
+                  searchValue={eventSearch}
+                  onSearchChange={setEventSearch}
+                  value={targetEventId ? String(targetEventId) : null}
+                  onChange={v => { setTargetEventId(v ? Number(v) : null); setSelectedB([]); }}
+                  nothingFoundMessage="No events found"
+                  rightSection={eventsLoading ? <Loader size="xs" /> : undefined}
+                  filter={({ options }) => options}
                 />
-              )}
-            </Stack>
-          </Paper>
-        </Group>
+                {targetEventId && (
+                  <ContractCheckboxList
+                    contracts={effectiveTargetContracts}
+                    selected={selectedB}
+                    onToggle={setSelectedB}
+                    disabledIds={disabledForB}
+                    loading={loadingTarget}
+                  />
+                )}
+              </Stack>
+            </Paper>
+          </Group>
+        ) : (
+          <Stack gap="xs">
+            <Select
+              label="Target Event"
+              placeholder="Search for an event..."
+              data={eventOptions}
+              searchable
+              searchValue={eventSearch}
+              onSearchChange={setEventSearch}
+              value={targetEventId ? String(targetEventId) : null}
+              onChange={v => { setTargetEventId(v ? Number(v) : null); }}
+              nothingFoundMessage="No events found"
+              rightSection={eventsLoading ? <Loader size="xs" /> : undefined}
+              filter={({ options }) => options}
+            />
+            {targetEventId && (
+              loadingTarget ? <Loader size="sm" /> : (
+                <Table fz="sm" withColumnBorders withRowBorders>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>{currentEventTitle}</Table.Th>
+                      <Table.Th>Paired with</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {currentContracts.map(c => {
+                      const currentPairing = pairings[c.securityId] ?? null;
+                      const filteredOptions = targetContractOptions.map(opt => ({
+                        ...opt,
+                        disabled: opt.disabled && Number(opt.value) !== currentPairing,
+                      }));
+                      return (
+                        <Table.Tr key={c.securityId}>
+                          <Table.Td>{contractLabel(c)}</Table.Td>
+                          <Table.Td>
+                            <Select
+                              size="xs"
+                              placeholder="— unpaired —"
+                              data={filteredOptions}
+                              value={currentPairing != null ? String(currentPairing) : null}
+                              onChange={v => setPairings(prev => ({ ...prev, [c.securityId]: v ? Number(v) : null }))}
+                              clearable
+                              searchable
+                            />
+                          </Table.Td>
+                        </Table.Tr>
+                      );
+                    })}
+                  </Table.Tbody>
+                </Table>
+              )
+            )}
+          </Stack>
+        )}
 
         <Group grow>
           <Select
@@ -280,9 +385,12 @@ function BulkCreateRelationshipModal({
 
         <Stack gap="xs">
           <Text size="sm" c="dimmed">
-            {selectedA.length} × {selectedB.length}{bidirectional ? ' × 2' : ''} = <strong>{preview.length}</strong> relationships to create
+            {mode === 'matching'
+              ? `${Object.values(pairings).filter(v => v != null).length} pairs${bidirectional ? ' × 2' : ''} = `
+              : `${selectedA.length} × ${selectedB.length}${bidirectional ? ' × 2' : ''} = `}
+            <strong>{activePreview.length}</strong> relationships to create
           </Text>
-          {preview.length > 0 && (
+          {activePreview.length > 0 && (
             <ScrollArea.Autosize mah={200}>
               <Table fz="xs" striped withColumnBorders>
                 <Table.Thead>
@@ -294,7 +402,7 @@ function BulkCreateRelationshipModal({
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {preview.map((p, i) => (
+                  {activePreview.map((p, i) => (
                     <Table.Tr key={i}>
                       <Table.Td>{p.symbolA}</Table.Td>
                       <Table.Td>{p.symbolB}</Table.Td>
@@ -316,8 +424,8 @@ function BulkCreateRelationshipModal({
 
         <Group justify="flex-end">
           <Button variant="outline" onClick={handleClose}>Cancel</Button>
-          <Button color="green" onClick={handleSubmit} loading={submitting} disabled={preview.length === 0}>
-            Create {preview.length > 0 ? preview.length : ''} Relationships
+          <Button color="green" onClick={handleSubmit} loading={submitting} disabled={activePreview.length === 0}>
+            Create {activePreview.length > 0 ? activePreview.length : ''} Relationships
           </Button>
         </Group>
       </Stack>
