@@ -38,6 +38,7 @@ import { PnlSnapshot, RiskPolicy, Strategy, StrategySession, StrategySessionStat
 import { BacktestRun } from '../../types/backtests';
 import { ResearchSession } from '../../types/research';
 import { controllerApi, marketDataApi, registryApi } from '../../utils/api';
+import { unscaleNotional } from '../../utils/security-master';
 
 interface Collector {
   listingId: number;
@@ -134,7 +135,7 @@ function Dashboard() {
     [sessions],
   );
 
-  const totalRealizedPnl = useMemo(() => pnlSnapshots.reduce((sum, s) => sum + s.realizedPnl, 0), [pnlSnapshots]);
+  const totalRealizedPnl = useMemo(() => unscaleNotional(pnlSnapshots.reduce((sum, s) => sum + s.realizedPnl, 0)), [pnlSnapshots]);
 
   const activeCollectorCount = useMemo(() => collectors.filter(c => c.status === 'ACTIVE').length, [collectors]);
   const failedCollectorCount = useMemo(() => collectors.filter(c => c.status === 'FAILED').length, [collectors]);
@@ -145,7 +146,7 @@ function Dashboard() {
     return Object.entries(grouped).map(([id, pnl]) => ({
       strategyId: Number(id),
       strategyName: strategyMap[Number(id)] ?? `Strategy ${id}`,
-      realizedPnl: pnl,
+      realizedPnl: unscaleNotional(pnl),
     }));
   }, [pnlSnapshots, strategyMap]);
 

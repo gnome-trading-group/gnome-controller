@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   ActionIcon,
-  Anchor,
   Badge,
   Button,
   Checkbox,
@@ -22,12 +21,13 @@ import {
 import { IconAB2, IconArrowLeft, IconEdit, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
 import { PnlSnapshot, RiskPolicy, RISK_POLICY_TYPES, Strategy, StrategySession, StrategySessionStatus, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
 import DeploySessionModal from '../Sessions/DeploySessionModal';
 import StrategyFormModal from './StrategyFormModal';
+import { PnlSnapshotTable } from '../../components/PnlSnapshotTable';
 
 const SESSION_STATUS_COLORS: Record<string, string> = {
   [StrategySessionStatus.SUBMITTED]: 'blue',
@@ -208,43 +208,6 @@ function StrategyDetail() {
     },
   ], []);
 
-  const pnlColumns = useMemo<MRT_ColumnDef<PnlSnapshot>[]>(() => [
-    {
-      accessorKey: 'listingId',
-      header: 'Listing ID',
-      enableSorting: true,
-      size: 80,
-      Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => (
-        <Anchor component={Link} to={`/security-master/listings/${row.original.listingId}`} size="sm">
-          {row.original.listingId}
-        </Anchor>
-      ),
-    },
-    {
-      accessorKey: 'mode',
-      header: 'Mode',
-      size: 80,
-      Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => row.original.mode
-        ? <Badge color={MODE_COLORS[row.original.mode.toLowerCase()] ?? 'gray'} variant="light" size="xs">{row.original.mode}</Badge>
-        : <Text size="xs" c="dimmed">—</Text>,
-    },
-    { accessorKey: 'netQuantity', header: 'Net Qty', enableSorting: true, size: 100 },
-    { accessorKey: 'avgEntryPrice', header: 'Avg Entry', enableSorting: true, size: 110 },
-    { accessorKey: 'realizedPnl', header: 'Realized PnL', enableSorting: true, size: 120 },
-    { accessorKey: 'totalFees', header: 'Fees', enableSorting: true, size: 90 },
-    { accessorKey: 'leavesBuyQty', header: 'Leaves Buy', enableSorting: true, size: 100 },
-    { accessorKey: 'leavesSellQty', header: 'Leaves Sell', enableSorting: true, size: 100 },
-    {
-      accessorKey: 'snapshotTime',
-      header: 'Snapshot Time',
-      enableSorting: true,
-      Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) =>
-        row.original.snapshotTime
-          ? <ReactTimeAgo date={new Date(row.original.snapshotTime)} timeStyle="round" />
-          : '-',
-    },
-  ], []);
-
   const policyColumns = useMemo<MRT_ColumnDef<RiskPolicy>[]>(() => [
     { accessorKey: 'policyId', header: 'ID', enableSorting: true, size: 60 },
     { accessorKey: 'policyType', header: 'Type', enableSorting: true },
@@ -269,22 +232,6 @@ function StrategyDetail() {
           : '-',
     },
   ], []);
-
-  const pnlTable = useMantineReactTable({
-    columns: pnlColumns,
-    data: pnlRows,
-    state: { isLoading: loading },
-    enableEditing: false,
-    enableRowActions: false,
-    enableColumnFilters: false,
-    enableSorting: true,
-    enablePagination: true,
-    enableBottomToolbar: true,
-    enableTopToolbar: false,
-    defaultColumn: { minSize: 0 },
-    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 15 }, sorting: [{ id: 'snapshotTime', desc: true }] },
-    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-  });
 
   const sessionTable = useMantineReactTable({
     columns: sessionColumns,
@@ -385,7 +332,7 @@ function StrategyDetail() {
           data={['All', 'Live']}
         />
       </Group>
-      <MantineReactTable table={pnlTable} />
+      <PnlSnapshotTable data={pnlRows} isLoading={loading} showModeColumn />
 
       <Space h="xl" />
 

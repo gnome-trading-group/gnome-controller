@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, ReactNode, useRef } from 'react';
+import { useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 import {
   Accordion,
   ActionIcon,
@@ -21,11 +21,11 @@ import {
 } from '@mantine/core';
 import { IconAB2, IconArrowLeft, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
-import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { PnlSnapshot, StrategySession, StrategySessionStatus, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
 import { ContainerLogs, TaskLogs } from '../../components/ContainerLogs';
+import { PnlSnapshotTable } from '../../components/PnlSnapshotTable';
 import DeploySessionModal from './DeploySessionModal';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -173,52 +173,6 @@ function SessionDetail() {
 
   const grouped = session ? groupConfig(session.config) : null;
 
-  const pnlColumns = useMemo<MRT_ColumnDef<PnlSnapshot>[]>(() => [
-    {
-      accessorKey: 'listingId',
-      header: 'Listing ID',
-      enableSorting: true,
-      size: 80,
-      Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => (
-        <Anchor component={Link} to={`/security-master/listings/${row.original.listingId}`} size="sm">
-          {row.original.listingId}
-        </Anchor>
-      ),
-    },
-    { accessorKey: 'netQuantity', header: 'Net Qty', enableSorting: true, size: 100 },
-    { accessorKey: 'avgEntryPrice', header: 'Avg Entry', enableSorting: true, size: 120 },
-    { accessorKey: 'realizedPnl', header: 'Realized PnL', enableSorting: true, size: 120 },
-    { accessorKey: 'totalFees', header: 'Fees', enableSorting: true, size: 90 },
-    { accessorKey: 'leavesBuyQty', header: 'Leaves Buy', enableSorting: true, size: 100 },
-    { accessorKey: 'leavesSellQty', header: 'Leaves Sell', enableSorting: true, size: 100 },
-    {
-      accessorKey: 'snapshotTime',
-      header: 'Snapshot Time',
-      enableSorting: true,
-      size: 130,
-      Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) =>
-        row.original.snapshotTime
-          ? <ReactTimeAgo date={new Date(row.original.snapshotTime)} timeStyle="round" />
-          : '—',
-    },
-  ], []);
-
-  const pnlTable = useMantineReactTable({
-    columns: pnlColumns,
-    data: pnlRows,
-    state: { isLoading: initialLoad },
-    enableEditing: false,
-    enableRowActions: false,
-    enableColumnFilters: false,
-    enableSorting: true,
-    enablePagination: true,
-    enableBottomToolbar: true,
-    enableTopToolbar: false,
-    defaultColumn: { minSize: 0 },
-    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 15 }, sorting: [{ id: 'snapshotTime', desc: true }] },
-    mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-  });
-
   return (
     <Container size="xl" py="xl">
       <Group mb="md">
@@ -286,7 +240,7 @@ function SessionDetail() {
           </SimpleGrid>
 
           <Title order={4} mb="xs">PnL Snapshot (latest per listing)</Title>
-          <MantineReactTable table={pnlTable} />
+          <PnlSnapshotTable data={pnlRows} isLoading={initialLoad} />
 
           <Space h="xl" />
 
