@@ -228,12 +228,12 @@ function StrategyDetail() {
         ? <Badge color={MODE_COLORS[row.original.mode.toLowerCase()] ?? 'gray'} variant="light" size="xs">{row.original.mode}</Badge>
         : <Text size="xs" c="dimmed">—</Text>,
     },
-    { accessorKey: 'netQuantity', header: 'Net Qty', enableSorting: true },
-    { accessorKey: 'avgEntryPrice', header: 'Avg Entry', enableSorting: true },
-    { accessorKey: 'realizedPnl', header: 'Realized PnL', enableSorting: true },
-    { accessorKey: 'totalFees', header: 'Fees', enableSorting: true },
-    { accessorKey: 'leavesBuyQty', header: 'Leaves Buy', enableSorting: true },
-    { accessorKey: 'leavesSellQty', header: 'Leaves Sell', enableSorting: true },
+    { accessorKey: 'netQuantity', header: 'Net Qty', enableSorting: true, size: 100 },
+    { accessorKey: 'avgEntryPrice', header: 'Avg Entry', enableSorting: true, size: 110 },
+    { accessorKey: 'realizedPnl', header: 'Realized PnL', enableSorting: true, size: 120 },
+    { accessorKey: 'totalFees', header: 'Fees', enableSorting: true, size: 90 },
+    { accessorKey: 'leavesBuyQty', header: 'Leaves Buy', enableSorting: true, size: 100 },
+    { accessorKey: 'leavesSellQty', header: 'Leaves Sell', enableSorting: true, size: 100 },
     {
       accessorKey: 'snapshotTime',
       header: 'Snapshot Time',
@@ -281,9 +281,9 @@ function StrategyDetail() {
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: false,
+    defaultColumn: { minSize: 0 },
     initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 15 }, sorting: [{ id: 'snapshotTime', desc: true }] },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    mantinePaperProps: { style: { width: '100%' } },
   });
 
   const sessionTable = useMantineReactTable({
