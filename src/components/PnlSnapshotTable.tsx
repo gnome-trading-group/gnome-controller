@@ -59,6 +59,7 @@ export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, titl
       });
     }
     cols.push(
+      // Position
       {
         accessorKey: 'netQuantity',
         header: 'Net Qty',
@@ -72,6 +73,36 @@ export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, titl
         enableSorting: true,
         size: 120,
         Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displayPrice(row.original.avgEntryPrice, scaled),
+      },
+      {
+        accessorKey: 'markPrice',
+        header: 'Mark Price',
+        enableSorting: true,
+        size: 120,
+        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displayPrice(row.original.markPrice, scaled),
+      },
+      // Pending orders
+      {
+        accessorKey: 'leavesBuyQty',
+        header: 'Leaves Buy',
+        enableSorting: true,
+        size: 100,
+        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displaySize(row.original.leavesBuyQty, scaled),
+      },
+      {
+        accessorKey: 'leavesSellQty',
+        header: 'Leaves Sell',
+        enableSorting: true,
+        size: 100,
+        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displaySize(row.original.leavesSellQty, scaled),
+      },
+      // P&L
+      {
+        accessorKey: 'unrealizedPnl',
+        header: 'Unrealized PnL',
+        enableSorting: true,
+        size: 130,
+        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displayNotional(row.original.unrealizedPnl, scaled),
       },
       {
         accessorKey: 'realizedPnl',
@@ -88,18 +119,11 @@ export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, titl
         Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displayPrice(row.original.totalFees, scaled),
       },
       {
-        accessorKey: 'leavesBuyQty',
-        header: 'Leaves Buy',
+        accessorKey: 'totalPnl',
+        header: 'Total PnL',
         enableSorting: true,
-        size: 100,
-        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displaySize(row.original.leavesBuyQty, scaled),
-      },
-      {
-        accessorKey: 'leavesSellQty',
-        header: 'Leaves Sell',
-        enableSorting: true,
-        size: 100,
-        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displaySize(row.original.leavesSellQty, scaled),
+        size: 120,
+        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displayNotional(row.original.totalPnl, scaled),
       },
       {
         accessorKey: 'snapshotTime',
@@ -127,7 +151,7 @@ export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, titl
     enableBottomToolbar: true,
     enableTopToolbar: false,
     defaultColumn: { minSize: 0 },
-    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 15 }, sorting: [{ id: 'snapshotTime', desc: true }] },
+    initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 15 }, sorting: [{ id: 'snapshotTime', desc: true }], columnVisibility: { leavesBuyQty: false, leavesSellQty: false } },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
   });
 

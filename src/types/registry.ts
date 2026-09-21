@@ -24,6 +24,9 @@ export interface PnlSnapshot {
   totalFees: number;
   leavesBuyQty: number;
   leavesSellQty: number;
+  markPrice: number;
+  unrealizedPnl: number;
+  totalPnl: number;
   snapshotTime: string;
   sessionId?: string;
   mode?: string;

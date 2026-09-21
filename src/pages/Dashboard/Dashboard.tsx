@@ -136,17 +136,19 @@ function Dashboard() {
   );
 
   const totalRealizedPnl = useMemo(() => unscaleNotional(pnlSnapshots.reduce((sum, s) => sum + s.realizedPnl, 0)), [pnlSnapshots]);
+  const totalUnrealizedPnl = useMemo(() => unscaleNotional(pnlSnapshots.reduce((sum, s) => sum + s.unrealizedPnl, 0)), [pnlSnapshots]);
+  const totalPnl = useMemo(() => unscaleNotional(pnlSnapshots.reduce((sum, s) => sum + s.totalPnl, 0)), [pnlSnapshots]);
 
   const activeCollectorCount = useMemo(() => collectors.filter(c => c.status === 'ACTIVE').length, [collectors]);
   const failedCollectorCount = useMemo(() => collectors.filter(c => c.status === 'FAILED').length, [collectors]);
 
   const pnlByStrategy = useMemo(() => {
     const grouped: Record<number, number> = {};
-    pnlSnapshots.forEach(s => { grouped[s.strategyId] = (grouped[s.strategyId] ?? 0) + s.realizedPnl; });
+    pnlSnapshots.forEach(s => { grouped[s.strategyId] = (grouped[s.strategyId] ?? 0) + s.totalPnl; });
     return Object.entries(grouped).map(([id, pnl]) => ({
       strategyId: Number(id),
       strategyName: strategyMap[Number(id)] ?? `Strategy ${id}`,
-      realizedPnl: unscaleNotional(pnl),
+      totalPnl: unscaleNotional(pnl),
     }));
   }, [pnlSnapshots, strategyMap]);
 
@@ -331,7 +333,7 @@ function Dashboard() {
     ),
   });
 
-  const pnlColor = totalRealizedPnl >= 0 ? 'var(--mantine-color-green-6)' : 'var(--mantine-color-red-6)';
+  const pnlColor = totalPnl >= 0 ? 'var(--mantine-color-green-6)' : 'var(--mantine-color-red-6)';
 
   return (
     <Container size="xl" py="xl">
@@ -388,11 +390,13 @@ function Dashboard() {
         <Paper withBorder p="md" radius="md">
           <Group justify="space-between">
             <div>
-              <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Realized PnL</Text>
-              <Text size="xl" fw={700} c={totalRealizedPnl >= 0 ? 'green' : 'red'}>
-                {totalRealizedPnl >= 0 ? '+' : ''}{totalRealizedPnl.toFixed(2)}
+              <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total PnL</Text>
+              <Text size="xl" fw={700} c={totalPnl >= 0 ? 'green' : 'red'}>
+                {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(2)}
               </Text>
-              <Text size="xs" c="dimmed">{pnlSnapshots.length} positions</Text>
+              <Text size="xs" c="dimmed">
+                R: {totalRealizedPnl >= 0 ? '+' : ''}{totalRealizedPnl.toFixed(2)} · U: {totalUnrealizedPnl >= 0 ? '+' : ''}{totalUnrealizedPnl.toFixed(2)}
+              </Text>
             </div>
             <IconCurrencyDollar size={32} stroke={1.5} color={pnlColor} />
           </Group>
@@ -451,11 +455,11 @@ function Dashboard() {
               <YAxis tick={{ fontSize: 11 }} />
               <RechartsTooltip
                 contentStyle={{ background: 'var(--mantine-color-dark-7)', border: '1px solid var(--mantine-color-dark-4)' }}
-                formatter={(value) => [typeof value === 'number' ? value.toFixed(2) : value, 'Realized PnL']}
+                formatter={(value) => [typeof value === 'number' ? value.toFixed(2) : value, 'Total PnL']}
               />
-              <Bar dataKey="realizedPnl">
+              <Bar dataKey="totalPnl">
                 {pnlByStrategy.map((entry, i) => (
-                  <Cell key={i} fill={entry.realizedPnl >= 0 ? '#2f9e44' : '#e03131'} />
+                  <Cell key={i} fill={entry.totalPnl >= 0 ? '#2f9e44' : '#e03131'} />
                 ))}
               </Bar>
             </BarChart>
