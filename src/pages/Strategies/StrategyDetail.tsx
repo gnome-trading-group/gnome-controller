@@ -323,16 +323,15 @@ function StrategyDetail() {
         </Group>
       </Group>
 
-      <Group justify="space-between" mb="xs">
-        <Title order={4}>PnL Snapshot (latest per listing)</Title>
-        <SegmentedControl
-          size="xs"
-          value={pnlMode}
-          onChange={setPnlMode}
-          data={['All', 'Live']}
-        />
-      </Group>
-      <PnlSnapshotTable data={pnlRows} isLoading={loading} showModeColumn />
+      <PnlSnapshotTable
+        title="PnL Snapshot (latest per listing)"
+        extraControls={
+          <SegmentedControl size="xs" value={pnlMode} onChange={setPnlMode} data={['All', 'Live']} />
+        }
+        data={pnlRows}
+        isLoading={loading}
+        showModeColumn
+      />
 
       <Space h="xl" />
 

@@ -239,8 +239,7 @@ function SessionDetail() {
             } />
           </SimpleGrid>
 
-          <Title order={4} mb="xs">PnL Snapshot (latest per listing)</Title>
-          <PnlSnapshotTable data={pnlRows} isLoading={initialLoad} />
+          <PnlSnapshotTable title="PnL Snapshot (latest per listing)" data={pnlRows} isLoading={initialLoad} />
 
           <Space h="xl" />
 

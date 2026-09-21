@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Anchor, Badge, Group, SegmentedControl, Text } from '@mantine/core';
+import { Anchor, Badge, Group, SegmentedControl, Text, Title } from '@mantine/core';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
@@ -27,9 +27,11 @@ interface PnlSnapshotTableProps {
   data: PnlSnapshot[];
   isLoading: boolean;
   showModeColumn?: boolean;
+  title?: string;
+  extraControls?: React.ReactNode;
 }
 
-export function PnlSnapshotTable({ data, isLoading, showModeColumn = false }: PnlSnapshotTableProps) {
+export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, title, extraControls }: PnlSnapshotTableProps) {
   const [scaled, setScaled] = useState(false);
 
   const columns = useMemo<MRT_ColumnDef<PnlSnapshot>[]>(() => {
@@ -131,13 +133,17 @@ export function PnlSnapshotTable({ data, isLoading, showModeColumn = false }: Pn
 
   return (
     <>
-      <Group justify="flex-end" mb="xs">
-        <SegmentedControl
-          size="xs"
-          value={scaled ? 'Scaled' : 'Unscaled'}
-          onChange={(v) => setScaled(v === 'Scaled')}
-          data={['Unscaled', 'Scaled']}
-        />
+      <Group justify="space-between" mb="xs">
+        {title && <Title order={4}>{title}</Title>}
+        <Group gap="sm">
+          {extraControls}
+          <SegmentedControl
+            size="xs"
+            value={scaled ? 'Scaled' : 'Unscaled'}
+            onChange={(v) => setScaled(v === 'Scaled')}
+            data={['Unscaled', 'Scaled']}
+          />
+        </Group>
       </Group>
       <MantineReactTable table={table} />
     </>
