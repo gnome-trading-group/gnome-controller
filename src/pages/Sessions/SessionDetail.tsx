@@ -11,6 +11,7 @@ import {
   Container,
   Group,
   Modal,
+  SegmentedControl,
   SimpleGrid,
   Space,
   Stack,
@@ -26,6 +27,7 @@ import { PnlSnapshot, StrategySession, StrategySessionStatus, ConfigValue } from
 import { registryApi } from '../../utils/api';
 import { ContainerLogs, TaskLogs } from '../../components/ContainerLogs';
 import { PnlSnapshotTable } from '../../components/PnlSnapshotTable';
+import { SessionPnlCharts } from '../../components/SessionPnlCharts';
 import DeploySessionModal from './DeploySessionModal';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -101,6 +103,9 @@ function SessionDetail() {
   const [sessionLogs, setSessionLogs] = useState<TaskLogs[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [initialLogsLoad, setInitialLogsLoad] = useState(true);
+  const [historySnapshots, setHistorySnapshots] = useState<PnlSnapshot[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [chartRange, setChartRange] = useState('24h');
 
   const refresh = useCallback(async (showLoading = true) => {
     if (!sessionId) return;
@@ -153,6 +158,37 @@ function SessionDetail() {
     const interval = setInterval(() => loadLogs(false), 5000);
     return () => clearInterval(interval);
   }, [session?.taskArn, loadLogs, session?.status]);
+
+  const loadHistory = useCallback(async () => {
+    if (!sessionId) return;
+    const isTerminalSession = session?.status === StrategySessionStatus.STOPPED || session?.status === StrategySessionStatus.FAILED;
+    const anchor = isTerminalSession && session?.stoppedAt
+      ? new Date(session.stoppedAt).getTime()
+      : Date.now();
+    const durations: Record<string, number> = { '1h': 3600000, '6h': 21600000, '24h': 86400000, '7d': 604800000 };
+    const duration = durations[chartRange];
+    const startTime = duration ? new Date(anchor - duration).toISOString() : undefined;
+    setHistoryLoading(true);
+    try {
+      const result = await registryApi.listPnlSnapshots(sessionId, startTime);
+      setHistorySnapshots(result);
+    } catch (err) {
+      console.error('Failed to load PnL history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [sessionId, session?.status, session?.stoppedAt, chartRange]);
+
+  useEffect(() => {
+    if (!session) return;
+    loadHistory();
+  }, [loadHistory]);
+
+  useEffect(() => {
+    if (isTerminal(session)) return;
+    const interval = setInterval(loadHistory, 30000);
+    return () => clearInterval(interval);
+  }, [loadHistory, session?.status]);
 
   const handleStop = async () => {
     if (!session) return;
@@ -238,6 +274,19 @@ function SessionDetail() {
                 : '—'
             } />
           </SimpleGrid>
+
+          <Card withBorder mb="md">
+            <Group justify="space-between" mb="md">
+              <Title order={4}>PnL History</Title>
+              <SegmentedControl
+                size="xs"
+                value={chartRange}
+                onChange={setChartRange}
+                data={['1h', '6h', '24h', '7d', 'All']}
+              />
+            </Group>
+            <SessionPnlCharts snapshots={historySnapshots} loading={historyLoading} />
+          </Card>
 
           <PnlSnapshotTable title="PnL Snapshot (latest per listing)" data={pnlRows} isLoading={initialLoad} />
 
