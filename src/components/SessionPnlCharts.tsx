@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   CartesianGrid,
   Legend,
@@ -9,11 +9,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Center, Loader, Stack, Text } from '@mantine/core';
+import { Center, Loader, Stack, Tabs, Text } from '@mantine/core';
 import { PnlSnapshot } from '../types';
-import { unscaleNotional } from '../utils/security-master';
+import { unscaleNotional, unscaleSize } from '../utils/security-master';
 
-const LINE_COLORS = ['#4dabf7', '#f08c00', '#e64980', '#cc5de8', '#20c997', '#ff6b6b', '#a9e34b', '#74c0fc'];
+const LINE_COLORS = ['#4c6ef5', '#f76707', '#2f9e44', '#ae3ec9', '#e03131', '#1098ad', '#f59f00', '#74c0fc'];
 
 const TOOLTIP_STYLE = {
   background: 'var(--mantine-color-dark-7)',
@@ -28,6 +28,12 @@ function yTickFormatter(v: number) {
   return v.toFixed(2);
 }
 
+function bucketTime(isoTime: string): string {
+  const d = new Date(isoTime);
+  d.setSeconds(0, 0);
+  return d.toISOString();
+}
+
 function toLabel(isoTime: string) {
   return new Date(isoTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -38,6 +44,8 @@ interface SessionPnlChartsProps {
 }
 
 export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) {
+  const [activeTab, setActiveTab] = useState<string | null>('aggregate');
+
   const listingIds = useMemo(
     () => [...new Set(snapshots.map(s => s.listingId))].sort((a, b) => a - b),
     [snapshots],
@@ -46,11 +54,12 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
   const aggregateData = useMemo(() => {
     const grouped = new Map<string, { time: string; totalPnl: number; realizedPnl: number; unrealizedPnl: number }>();
     snapshots.forEach(s => {
-      const existing = grouped.get(s.snapshotTime) ?? { time: s.snapshotTime, totalPnl: 0, realizedPnl: 0, unrealizedPnl: 0 };
-      existing.totalPnl += s.totalPnl;
-      existing.realizedPnl += s.realizedPnl;
-      existing.unrealizedPnl += s.unrealizedPnl;
-      grouped.set(s.snapshotTime, existing);
+      const key = bucketTime(s.snapshotTime);
+      const existing = grouped.get(key) ?? { time: key, totalPnl: 0, realizedPnl: 0, unrealizedPnl: 0 };
+      existing.totalPnl += Number(s.totalPnl);
+      existing.realizedPnl += Number(s.realizedPnl);
+      existing.unrealizedPnl += Number(s.unrealizedPnl);
+      grouped.set(key, existing);
     });
     return Array.from(grouped.values())
       .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
@@ -65,9 +74,23 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
   const perListingData = useMemo(() => {
     const grouped = new Map<string, Record<string, number | string>>();
     snapshots.forEach(s => {
-      const existing = grouped.get(s.snapshotTime) ?? { time: s.snapshotTime };
-      existing[String(s.listingId)] = unscaleNotional(s.totalPnl);
-      grouped.set(s.snapshotTime, existing);
+      const key = bucketTime(s.snapshotTime);
+      const existing = grouped.get(key) ?? { time: key };
+      existing[String(s.listingId)] = unscaleNotional(Number(s.totalPnl));
+      grouped.set(key, existing);
+    });
+    return Array.from(grouped.values())
+      .sort((a, b) => new Date(String(a.time)).getTime() - new Date(String(b.time)).getTime())
+      .map(d => ({ ...d, label: toLabel(String(d.time)) }));
+  }, [snapshots]);
+
+  const positionsData = useMemo(() => {
+    const grouped = new Map<string, Record<string, number | string>>();
+    snapshots.forEach(s => {
+      const key = bucketTime(s.snapshotTime);
+      const existing = grouped.get(key) ?? { time: key };
+      existing[String(s.listingId)] = unscaleSize(Number(s.netQuantity));
+      grouped.set(key, existing);
     });
     return Array.from(grouped.values())
       .sort((a, b) => new Date(String(a.time)).getTime() - new Date(String(b.time)).getTime())
@@ -97,9 +120,14 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
   const gridStyle = { strokeDasharray: '3 3', stroke: 'var(--mantine-color-dark-4)' };
 
   return (
-    <Stack gap="xl">
-      <div>
-        <Text size="sm" fw={600} mb="xs">Aggregate PnL</Text>
+    <Tabs value={activeTab} onChange={setActiveTab}>
+      <Tabs.List mb="sm">
+        <Tabs.Tab value="aggregate">Aggregate</Tabs.Tab>
+        <Tabs.Tab value="by-listing">By Listing</Tabs.Tab>
+        <Tabs.Tab value="positions">Positions</Tabs.Tab>
+      </Tabs.List>
+
+      <Tabs.Panel value="aggregate">
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={aggregateData}>
             <CartesianGrid {...gridStyle} />
@@ -108,37 +136,57 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
             <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} />
             <Legend />
             <Line type="monotone" dataKey="totalPnl" name="Total PnL" stroke="#2f9e44" dot={false} strokeWidth={2} />
-            <Line type="monotone" dataKey="realizedPnl" name="Realized" stroke="#4dabf7" dot={false} strokeWidth={1.5} />
-            <Line type="monotone" dataKey="unrealizedPnl" name="Unrealized" stroke="#cc5de8" dot={false} strokeWidth={1.5} />
+            <Line type="monotone" dataKey="realizedPnl" name="Realized" stroke="#4c6ef5" dot={false} strokeWidth={1.5} />
+            <Line type="monotone" dataKey="unrealizedPnl" name="Unrealized" stroke="#f76707" dot={false} strokeWidth={1.5} />
           </LineChart>
         </ResponsiveContainer>
-      </div>
+      </Tabs.Panel>
 
-      {listingIds.length > 1 && (
-        <div>
-          <Text size="sm" fw={600} mb="xs">PnL by Listing</Text>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={perListingData}>
-              <CartesianGrid {...gridStyle} />
-              <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
-              <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
-              <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} />
-              <Legend />
-              {listingIds.map((id, i) => (
-                <Line
-                  key={id}
-                  type="monotone"
-                  dataKey={String(id)}
-                  name={`Listing ${id}`}
-                  stroke={LINE_COLORS[i % LINE_COLORS.length]}
-                  dot={false}
-                  strokeWidth={1.5}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </Stack>
+      <Tabs.Panel value="by-listing">
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={perListingData}>
+            <CartesianGrid {...gridStyle} />
+            <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
+            <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
+            <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} />
+            <Legend />
+            {listingIds.map((id, i) => (
+              <Line
+                key={id}
+                type="monotone"
+                dataKey={String(id)}
+                name={`Listing ${id}`}
+                stroke={LINE_COLORS[i % LINE_COLORS.length]}
+                dot={false}
+                strokeWidth={1.5}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </Tabs.Panel>
+
+      <Tabs.Panel value="positions">
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={positionsData}>
+            <CartesianGrid {...gridStyle} />
+            <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
+            <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
+            <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} />
+            <Legend />
+            {listingIds.map((id, i) => (
+              <Line
+                key={id}
+                type="monotone"
+                dataKey={String(id)}
+                name={`Listing ${id}`}
+                stroke={LINE_COLORS[i % LINE_COLORS.length]}
+                dot={false}
+                strokeWidth={1.5}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </Tabs.Panel>
+    </Tabs>
   );
 }
