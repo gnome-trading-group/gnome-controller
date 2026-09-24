@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { Center, Loader, Stack, Tabs, Text } from '@mantine/core';
 import { PnlSnapshot } from '../types';
-import { unscaleNotional, unscaleSize } from '../utils/security-master';
+import { unscaleNotional, unscalePrice, unscaleSize } from '../utils/security-master';
 
 const LINE_COLORS = ['#4c6ef5', '#f76707', '#2f9e44', '#ae3ec9', '#e03131', '#1098ad', '#f59f00', '#74c0fc'];
 
@@ -30,12 +30,21 @@ function yTickFormatter(v: number) {
 
 function bucketTime(isoTime: string): string {
   const d = new Date(isoTime);
-  d.setSeconds(0, 0);
+  const rounded = Math.round(d.getSeconds() / 30) * 30;
+  d.setSeconds(rounded, 0);
   return d.toISOString();
 }
 
 function toLabel(isoTime: string) {
   return new Date(isoTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function toTooltipLabel(isoTime: string) {
+  return new Date(isoTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function tooltipLabelFormatter(_label: string, payload: any[]) {
+  return payload?.[0]?.payload?.tooltipLabel ?? _label;
 }
 
 interface SessionPnlChartsProps {
@@ -65,6 +74,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
       .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
       .map(d => ({
         label: toLabel(d.time),
+        tooltipLabel: toTooltipLabel(d.time),
         totalPnl: unscaleNotional(d.totalPnl),
         realizedPnl: unscaleNotional(d.realizedPnl),
         unrealizedPnl: unscaleNotional(d.unrealizedPnl),
@@ -81,7 +91,33 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
     });
     return Array.from(grouped.values())
       .sort((a, b) => new Date(String(a.time)).getTime() - new Date(String(b.time)).getTime())
-      .map(d => ({ ...d, label: toLabel(String(d.time)) }));
+      .map(d => ({ ...d, label: toLabel(String(d.time)), tooltipLabel: toTooltipLabel(String(d.time)) }));
+  }, [snapshots]);
+
+  const aggregateFeesData = useMemo(() => {
+    const grouped = new Map<string, { time: string; totalFees: number }>();
+    snapshots.forEach(s => {
+      const key = bucketTime(s.snapshotTime);
+      const existing = grouped.get(key) ?? { time: key, totalFees: 0 };
+      existing.totalFees += Number(s.totalFees);
+      grouped.set(key, existing);
+    });
+    return Array.from(grouped.values())
+      .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
+      .map(d => ({ label: toLabel(d.time), tooltipLabel: toTooltipLabel(d.time), totalFees: unscalePrice(d.totalFees) }));
+  }, [snapshots]);
+
+  const perListingFeesData = useMemo(() => {
+    const grouped = new Map<string, Record<string, number | string>>();
+    snapshots.forEach(s => {
+      const key = bucketTime(s.snapshotTime);
+      const existing = grouped.get(key) ?? { time: key };
+      existing[String(s.listingId)] = unscalePrice(Number(s.totalFees));
+      grouped.set(key, existing);
+    });
+    return Array.from(grouped.values())
+      .sort((a, b) => new Date(String(a.time)).getTime() - new Date(String(b.time)).getTime())
+      .map(d => ({ ...d, label: toLabel(String(d.time)), tooltipLabel: toTooltipLabel(String(d.time)) }));
   }, [snapshots]);
 
   const positionsData = useMemo(() => {
@@ -94,7 +130,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
     });
     return Array.from(grouped.values())
       .sort((a, b) => new Date(String(a.time)).getTime() - new Date(String(b.time)).getTime())
-      .map(d => ({ ...d, label: toLabel(String(d.time)) }));
+      .map(d => ({ ...d, label: toLabel(String(d.time)), tooltipLabel: toTooltipLabel(String(d.time)) }));
   }, [snapshots]);
 
   if (loading && snapshots.length === 0) {
@@ -125,6 +161,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
         <Tabs.Tab value="aggregate">Aggregate</Tabs.Tab>
         <Tabs.Tab value="by-listing">By Listing</Tabs.Tab>
         <Tabs.Tab value="positions">Positions</Tabs.Tab>
+        <Tabs.Tab value="fees">Fees</Tabs.Tab>
       </Tabs.List>
 
       <Tabs.Panel value="aggregate">
@@ -133,7 +170,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
             <CartesianGrid {...gridStyle} />
             <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
             <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
-            <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} />
+            <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} labelFormatter={tooltipLabelFormatter} />
             <Legend />
             <Line type="monotone" dataKey="totalPnl" name="Total PnL" stroke="#2f9e44" dot={false} strokeWidth={2} />
             <Line type="monotone" dataKey="realizedPnl" name="Realized" stroke="#4c6ef5" dot={false} strokeWidth={1.5} />
@@ -148,7 +185,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
             <CartesianGrid {...gridStyle} />
             <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
             <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
-            <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} />
+            <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} labelFormatter={tooltipLabelFormatter} />
             <Legend />
             {listingIds.map((id, i) => (
               <Line
@@ -171,7 +208,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
             <CartesianGrid {...gridStyle} />
             <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
             <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
-            <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} />
+            <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} labelFormatter={tooltipLabelFormatter} />
             <Legend />
             {listingIds.map((id, i) => (
               <Line
@@ -186,6 +223,40 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
             ))}
           </LineChart>
         </ResponsiveContainer>
+      </Tabs.Panel>
+      <Tabs.Panel value="fees">
+        <Stack gap="md">
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={aggregateFeesData}>
+              <CartesianGrid {...gridStyle} />
+              <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
+              <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
+              <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} labelFormatter={tooltipLabelFormatter} />
+              <Legend />
+              <Line type="monotone" dataKey="totalFees" name="Total Fees" stroke="#e03131" dot={false} strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={perListingFeesData}>
+              <CartesianGrid {...gridStyle} />
+              <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
+              <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
+              <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} labelFormatter={tooltipLabelFormatter} />
+              <Legend />
+              {listingIds.map((id, i) => (
+                <Line
+                  key={id}
+                  type="monotone"
+                  dataKey={String(id)}
+                  name={`Listing ${id}`}
+                  stroke={LINE_COLORS[i % LINE_COLORS.length]}
+                  dot={false}
+                  strokeWidth={1.5}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </Stack>
       </Tabs.Panel>
     </Tabs>
   );
