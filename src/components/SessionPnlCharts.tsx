@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   CartesianGrid,
   Legend,
@@ -43,7 +43,7 @@ function toTooltipLabel(isoTime: string) {
   return new Date(isoTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-function tooltipLabelFormatter(_label: string, payload: any[]) {
+function tooltipLabelFormatter(_label: React.ReactNode, payload: readonly any[]) {
   return payload?.[0]?.payload?.tooltipLabel ?? _label;
 }
 
