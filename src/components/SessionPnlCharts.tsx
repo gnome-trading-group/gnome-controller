@@ -43,8 +43,8 @@ function toTooltipLabel(isoTime: string) {
   return new Date(isoTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-function tooltipLabelFormatter(_label: React.ReactNode, payload: readonly any[]) {
-  return payload?.[0]?.payload?.tooltipLabel ?? _label;
+function tooltipLabelFormatter(ts: React.ReactNode): React.ReactNode {
+  return typeof ts === 'number' ? toTooltipLabel(new Date(ts).toISOString()) : ts;
 }
 
 interface SessionPnlChartsProps {
@@ -73,8 +73,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
     return Array.from(grouped.values())
       .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
       .map(d => ({
-        label: toLabel(d.time),
-        tooltipLabel: toTooltipLabel(d.time),
+        ts: new Date(d.time).getTime(),
         totalPnl: unscaleNotional(d.totalPnl),
         realizedPnl: unscaleNotional(d.realizedPnl),
         unrealizedPnl: unscaleNotional(d.unrealizedPnl),
@@ -91,7 +90,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
     });
     return Array.from(grouped.values())
       .sort((a, b) => new Date(String(a.time)).getTime() - new Date(String(b.time)).getTime())
-      .map(d => ({ ...d, label: toLabel(String(d.time)), tooltipLabel: toTooltipLabel(String(d.time)) }));
+      .map(d => ({ ...d, ts: new Date(String(d.time)).getTime() }));
   }, [snapshots]);
 
   const aggregateFeesData = useMemo(() => {
@@ -104,7 +103,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
     });
     return Array.from(grouped.values())
       .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
-      .map(d => ({ label: toLabel(d.time), tooltipLabel: toTooltipLabel(d.time), totalFees: unscalePrice(d.totalFees) }));
+      .map(d => ({ ts: new Date(d.time).getTime(), totalFees: unscalePrice(d.totalFees) }));
   }, [snapshots]);
 
   const perListingFeesData = useMemo(() => {
@@ -117,7 +116,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
     });
     return Array.from(grouped.values())
       .sort((a, b) => new Date(String(a.time)).getTime() - new Date(String(b.time)).getTime())
-      .map(d => ({ ...d, label: toLabel(String(d.time)), tooltipLabel: toTooltipLabel(String(d.time)) }));
+      .map(d => ({ ...d, ts: new Date(String(d.time)).getTime() }));
   }, [snapshots]);
 
   const positionsData = useMemo(() => {
@@ -130,7 +129,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
     });
     return Array.from(grouped.values())
       .sort((a, b) => new Date(String(a.time)).getTime() - new Date(String(b.time)).getTime())
-      .map(d => ({ ...d, label: toLabel(String(d.time)), tooltipLabel: toTooltipLabel(String(d.time)) }));
+      .map(d => ({ ...d, ts: new Date(String(d.time)).getTime() }));
   }, [snapshots]);
 
   if (loading && snapshots.length === 0) {
@@ -168,7 +167,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={aggregateData}>
             <CartesianGrid {...gridStyle} />
-            <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
+            <XAxis dataKey="ts" tick={axisStyle} interval="preserveStartEnd" tickFormatter={(v: number) => toLabel(new Date(v).toISOString())} />
             <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
             <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} labelFormatter={tooltipLabelFormatter} />
             <Legend />
@@ -183,7 +182,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={perListingData}>
             <CartesianGrid {...gridStyle} />
-            <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
+            <XAxis dataKey="ts" tick={axisStyle} interval="preserveStartEnd" tickFormatter={(v: number) => toLabel(new Date(v).toISOString())} />
             <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
             <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} labelFormatter={tooltipLabelFormatter} />
             <Legend />
@@ -206,7 +205,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={positionsData}>
             <CartesianGrid {...gridStyle} />
-            <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
+            <XAxis dataKey="ts" tick={axisStyle} interval="preserveStartEnd" tickFormatter={(v: number) => toLabel(new Date(v).toISOString())} />
             <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
             <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} labelFormatter={tooltipLabelFormatter} />
             <Legend />
@@ -229,7 +228,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={aggregateFeesData}>
               <CartesianGrid {...gridStyle} />
-              <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
+              <XAxis dataKey="ts" tick={axisStyle} interval="preserveStartEnd" tickFormatter={(v: number) => toLabel(new Date(v).toISOString())} />
               <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
               <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} labelFormatter={tooltipLabelFormatter} />
               <Legend />
@@ -239,7 +238,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={perListingFeesData}>
               <CartesianGrid {...gridStyle} />
-              <XAxis dataKey="label" tick={axisStyle} interval="preserveStartEnd" />
+              <XAxis dataKey="ts" tick={axisStyle} interval="preserveStartEnd" tickFormatter={(v: number) => toLabel(new Date(v).toISOString())} />
               <YAxis tick={axisStyle} tickFormatter={yTickFormatter} width={70} />
               <RechartsTooltip contentStyle={TOOLTIP_STYLE} formatter={tooltipFormatter} labelFormatter={tooltipLabelFormatter} />
               <Legend />
