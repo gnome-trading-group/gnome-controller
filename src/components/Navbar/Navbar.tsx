@@ -52,7 +52,15 @@ const routes = [
     ],
   },
   { icon: IconTestPipe, label: 'Backtests', link: '/backtests' },
-  { icon: IconFlask, label: 'Research', link: '/research' },
+  {
+    label: 'Research',
+    icon: IconFlask,
+    links: [
+      { label: 'Sessions', link: '/research/sessions' },
+      { label: 'Artifacts', link: '/research/artifacts' },
+      { label: 'Datasets', link: '/research/datasets' },
+    ],
+  },
   {
     label: 'Tools',
     icon: IconTool,

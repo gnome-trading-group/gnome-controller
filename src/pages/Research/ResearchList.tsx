@@ -138,7 +138,7 @@ function ResearchList() {
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     initialState: { sorting: [{ id: 'updatedAt', desc: true }], density: 'xs' },
     mantineTableBodyRowProps: ({ row }: { row: MRT_Row<ResearchSession> }) => (
-      navigateRowProps(navigate, `/research/${row.original.sessionName}`)
+      navigateRowProps(navigate, `/research/sessions/${row.original.sessionName}`)
     ),
   });
 

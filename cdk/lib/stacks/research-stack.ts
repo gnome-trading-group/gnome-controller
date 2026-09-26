@@ -34,6 +34,13 @@ export class ResearchStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    table.addGlobalSecondaryIndex({
+      indexName: "artifact-type-name-index",
+      partitionKey: { name: "artifact_type", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "artifact_name", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // ---------------------------------------------------------------------------
     // Lambda functions
     // ---------------------------------------------------------------------------
@@ -94,6 +101,42 @@ export class ResearchStack extends cdk.Stack {
     });
     table.grantReadWriteData(addNoteLambda.function);
 
+    const listArtifactsLambda = new PythonLambdaFunction(this, "ResearchListArtifactsLambda", {
+      codePath: "lambda/functions/research/list-artifacts",
+      functionName: "gnome-research-list-artifacts",
+      description: "List artifact metadata records",
+      timeout: cdk.Duration.seconds(30),
+      environment: commonEnv,
+    });
+    table.grantReadData(listArtifactsLambda.function);
+
+    const registerArtifactLambda = new PythonLambdaFunction(this, "ResearchRegisterArtifactLambda", {
+      codePath: "lambda/functions/research/register-artifact",
+      functionName: "gnome-research-register-artifact",
+      description: "Register artifact metadata after S3 upload",
+      timeout: cdk.Duration.seconds(30),
+      environment: commonEnv,
+    });
+    table.grantReadWriteData(registerArtifactLambda.function);
+
+    const listDatasetsLambda = new PythonLambdaFunction(this, "ResearchListDatasetsLambda", {
+      codePath: "lambda/functions/research/list-datasets",
+      functionName: "gnome-research-list-datasets",
+      description: "List dataset metadata records",
+      timeout: cdk.Duration.seconds(30),
+      environment: commonEnv,
+    });
+    table.grantReadData(listDatasetsLambda.function);
+
+    const registerDatasetLambda = new PythonLambdaFunction(this, "ResearchRegisterDatasetLambda", {
+      codePath: "lambda/functions/research/register-dataset",
+      functionName: "gnome-research-register-dataset",
+      description: "Register dataset metadata after S3 upload",
+      timeout: cdk.Duration.seconds(30),
+      environment: commonEnv,
+    });
+    table.grantReadWriteData(registerDatasetLambda.function);
+
     // ---------------------------------------------------------------------------
     // API Gateway routes — Cognito auth (shared authorizer from BackendStack)
     // ---------------------------------------------------------------------------
@@ -117,5 +160,13 @@ export class ResearchStack extends cdk.Stack {
 
     const notesResource = sessionResource.addResource("notes");
     notesResource.addMethod("POST", new apigateway.LambdaIntegration(addNoteLambda.function), cognitoOpts);
+
+    const artifactsResource = researchResource.addResource("artifacts");
+    artifactsResource.addMethod("GET", new apigateway.LambdaIntegration(listArtifactsLambda.function), cognitoOpts);
+    artifactsResource.addMethod("POST", new apigateway.LambdaIntegration(registerArtifactLambda.function), cognitoOpts);
+
+    const datasetsResource = researchResource.addResource("datasets");
+    datasetsResource.addMethod("GET", new apigateway.LambdaIntegration(listDatasetsLambda.function), cognitoOpts);
+    datasetsResource.addMethod("POST", new apigateway.LambdaIntegration(registerDatasetLambda.function), cognitoOpts);
   }
 }

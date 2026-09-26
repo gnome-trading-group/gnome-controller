@@ -29,6 +29,8 @@ import BacktestList from './pages/Backtests/BacktestList';
 import BacktestDetail from './pages/Backtests/BacktestDetail';
 import ResearchList from './pages/Research/ResearchList';
 import ResearchDetail from './pages/Research/ResearchDetail';
+import ArtifactList from './pages/Research/ArtifactList';
+import DatasetList from './pages/Research/DatasetList';
 import EventsList from './pages/Predictions/EventsList';
 import EventDetail from './pages/Predictions/EventDetail';
 import ContractRelationships from './pages/Predictions/ContractRelationships';
@@ -148,8 +150,11 @@ function AppContent() {
             <Route path="/risk/policies" element={<RiskPolicies />} />
             <Route path="/backtests" element={<BacktestList />} />
             <Route path="/backtests/:runId" element={<BacktestDetail />} />
-            <Route path="/research" element={<ResearchList />} />
-            <Route path="/research/:sessionName" element={<ResearchDetail />} />
+            <Route path="/research" element={<Navigate to="/research/sessions" replace />} />
+            <Route path="/research/sessions" element={<ResearchList />} />
+            <Route path="/research/sessions/:sessionName" element={<ResearchDetail />} />
+            <Route path="/research/artifacts" element={<ArtifactList />} />
+            <Route path="/research/datasets" element={<DatasetList />} />
             <Route path="/predictions/events" element={<EventsList />} />
             <Route path="/predictions/events/:eventId" element={<EventDetail />} />
             <Route path="/predictions/relationships" element={<ContractRelationships />} />

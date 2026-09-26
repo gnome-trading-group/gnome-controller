@@ -1,7 +1,7 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
 import { ContractRelationship, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, ExchangeEvent, Exchange, HedgeKeyword, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
-import { ResearchSession, ResearchSessionListResponse } from '../types/research';
+import { ResearchSession, ResearchSessionListResponse, ResearchArtifactListResponse, ResearchDatasetListResponse } from '../types/research';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
@@ -870,6 +870,26 @@ export const controllerApi = {
         body: { content },
       }
     ),
+  listArtifacts: (params?: { type?: string; name?: string; sessionName?: string }) => {
+    const queryParams: Record<string, string> = {};
+    if (params?.type) queryParams.type = params.type;
+    if (params?.name) queryParams.name = params.name;
+    if (params?.sessionName) queryParams.session_name = params.sessionName;
+    return sendApiRequest<ResearchArtifactListResponse>('/research/artifacts', 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  listDatasets: (params?: { name?: string }) => {
+    const queryParams: Record<string, string> = {};
+    if (params?.name) queryParams.name = params.name;
+    return sendApiRequest<ResearchDatasetListResponse>('/research/datasets', 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
   getServiceConfig: (service: string) =>
     sendApiRequest<ServiceConfigResponse>(`/config/${service}`, 'GET', {
       apiUrl: CONTROLLER_API_URL,
