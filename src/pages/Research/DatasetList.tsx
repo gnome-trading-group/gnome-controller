@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ActionIcon, Badge, Container, Group, TextInput, Title, Tooltip } from '@mantine/core';
+import { ActionIcon, Container, Group, TextInput, Title, Tooltip } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
