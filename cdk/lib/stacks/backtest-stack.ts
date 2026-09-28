@@ -1,9 +1,14 @@
 import * as cdk from "aws-cdk-lib";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as ecr from "aws-cdk-lib/aws-ecr";
+import * as batch from "aws-cdk-lib/aws-batch";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
+import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as s3 from "aws-cdk-lib/aws-s3";
+import * as events from "aws-cdk-lib/aws-events";
+import * as targets from "aws-cdk-lib/aws-events-targets";
 import { Construct } from "constructs";
 import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
@@ -64,66 +69,66 @@ export class BacktestStack extends cdk.Stack {
 
     // ---------------------------------------------------------------------------
     // AWS Batch — Spot compute
-    // (commented out for two-step VPC migration; will be restored after deploy)
     // ---------------------------------------------------------------------------
 
-    // const vpc = ec2.Vpc.fromLookup(this, "Vpc", { vpcName: "gnome-orchestrator-vpc" });
+    const vpc = ec2.Vpc.fromLookup(this, "Vpc", { vpcName: "gnome-orchestrator-vpc" });
 
-    // const batchJobRole = new iam.Role(this, "BatchJobRole", {
-    //   assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
-    // });
-    // const marketDataBucketName = `gnome-market-data-${props.stage}`;
-    // batchJobRole.addToPolicy(new iam.PolicyStatement({
-    //   actions: ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
-    //   resources: [
-    //     `arn:aws:s3:::${marketDataBucketName}`,
-    //     `arn:aws:s3:::${marketDataBucketName}/*`,
-    //     researchBucket.bucketArn,
-    //     `${researchBucket.bucketArn}/*`,
-    //   ],
-    // }));
-    // batchJobRole.addToPolicy(new iam.PolicyStatement({
-    //   actions: ["secretsmanager:GetSecretValue"],
-    //   resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:gnomepy/gh-token*`],
-    // }));
+    const batchJobRole = new iam.Role(this, "BatchJobRole", {
+      assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+    });
+    const marketDataBucketName = `gnome-market-data-${props.stage}`;
+    batchJobRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
+      resources: [
+        `arn:aws:s3:::${marketDataBucketName}`,
+        `arn:aws:s3:::${marketDataBucketName}/*`,
+        researchBucket.bucketArn,
+        `${researchBucket.bucketArn}/*`,
+      ],
+    }));
+    batchJobRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["secretsmanager:GetSecretValue"],
+      resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:gnomepy/gh-token*`],
+    }));
 
-    // const batchExecutionRole = new iam.Role(this, "BatchExecutionRole", {
-    //   assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
-    //   managedPolicies: [
-    //     iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AmazonECSTaskExecutionRolePolicy"),
-    //   ],
-    // });
+    const batchExecutionRole = new iam.Role(this, "BatchExecutionRole", {
+      assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AmazonECSTaskExecutionRolePolicy"),
+      ],
+    });
 
-    // const computeEnvironment = new batch.ManagedEc2EcsComputeEnvironment(this, "BacktestComputeEnv", {
-    //   spot: true,
-    //   instanceTypes: [
-    //     ec2.InstanceType.of(ec2.InstanceClass.C5, ec2.InstanceSize.XLARGE),
-    //     ec2.InstanceType.of(ec2.InstanceClass.C5, ec2.InstanceSize.XLARGE2),
-    //     ec2.InstanceType.of(ec2.InstanceClass.M5, ec2.InstanceSize.XLARGE),
-    //     ec2.InstanceType.of(ec2.InstanceClass.M5, ec2.InstanceSize.XLARGE2),
-    //   ],
-    //   maxvCpus: 64,
-    //   vpc,
-    //   vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
-    // });
+    const computeEnvironment = new batch.ManagedEc2EcsComputeEnvironment(this, "BacktestComputeEnv", {
+      computeEnvironmentName: "gnome-backtest-spot",
+      spot: true,
+      instanceTypes: [
+        ec2.InstanceType.of(ec2.InstanceClass.C5, ec2.InstanceSize.XLARGE),
+        ec2.InstanceType.of(ec2.InstanceClass.C5, ec2.InstanceSize.XLARGE2),
+        ec2.InstanceType.of(ec2.InstanceClass.M5, ec2.InstanceSize.XLARGE),
+        ec2.InstanceType.of(ec2.InstanceClass.M5, ec2.InstanceSize.XLARGE2),
+      ],
+      maxvCpus: 64,
+      vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+    });
 
-    // const jobQueue = new batch.JobQueue(this, "BacktestJobQueue", {
-    //   jobQueueName: "gnome-backtest-queue",
-    //   computeEnvironments: [{ computeEnvironment, order: 1 }],
-    // });
+    const jobQueue = new batch.JobQueue(this, "BacktestJobQueue", {
+      jobQueueName: "gnome-backtest-queue",
+      computeEnvironments: [{ computeEnvironment, order: 1 }],
+    });
 
-    // const jobDefinition = new batch.EcsJobDefinition(this, "BacktestJobDefinition", {
-    //   jobDefinitionName: "gnome-backtest",
-    //   container: new batch.EcsEc2ContainerDefinition(this, "BacktestContainer", {
-    //     image: ecs.ContainerImage.fromEcrRepository(ecrRepo, "latest"),
-    //     cpu: 4,
-    //     memory: cdk.Size.gibibytes(8),
-    //     jobRole: batchJobRole,
-    //     executionRole: batchExecutionRole,
-    //     environment: { AWS_DEFAULT_REGION: this.region, STAGE: props.stage },
-    //   }),
-    //   retryAttempts: 2,
-    // });
+    const jobDefinition = new batch.EcsJobDefinition(this, "BacktestJobDefinition", {
+      jobDefinitionName: "gnome-backtest",
+      container: new batch.EcsEc2ContainerDefinition(this, "BacktestContainer", {
+        image: ecs.ContainerImage.fromEcrRepository(ecrRepo, "latest"),
+        cpu: 4,
+        memory: cdk.Size.gibibytes(8),
+        jobRole: batchJobRole,
+        executionRole: batchExecutionRole,
+        environment: { AWS_DEFAULT_REGION: this.region, STAGE: props.stage },
+      }),
+      retryAttempts: 2,
+    });
 
     // ---------------------------------------------------------------------------
     // Lambda functions
@@ -142,8 +147,8 @@ export class BacktestStack extends cdk.Stack {
       memorySize: 512,
       environment: {
         ...commonEnv,
-        // BATCH_JOB_QUEUE: jobQueue.jobQueueArn,
-        // BATCH_JOB_DEFINITION: jobDefinition.jobDefinitionArn,
+        BATCH_JOB_QUEUE: jobQueue.jobQueueArn,
+        BATCH_JOB_DEFINITION: jobDefinition.jobDefinitionArn,
       },
     });
     table.grantWriteData(submitLambda.function);
@@ -151,10 +156,10 @@ export class BacktestStack extends cdk.Stack {
       actions: ["s3:PutObject"],
       resources: [`${researchBucket.bucketArn}/backtests/*`],
     }));
-    // submitLambda.function.addToRolePolicy(new iam.PolicyStatement({
-    //   actions: ["batch:SubmitJob"],
-    //   resources: [jobQueue.jobQueueArn, jobDefinition.jobDefinitionArn],
-    // }));
+    submitLambda.function.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["batch:SubmitJob"],
+      resources: [jobQueue.jobQueueArn, jobDefinition.jobDefinitionArn],
+    }));
 
     const getLambda = new PythonLambdaFunction(this, "BacktestGetLambda", {
       codePath: "lambda/functions/backtests/get",
@@ -200,7 +205,7 @@ export class BacktestStack extends cdk.Stack {
       memorySize: 256,
       environment: {
         ...commonEnv,
-        // BATCH_JOB_QUEUE_ARN: jobQueue.jobQueueArn,
+        BATCH_JOB_QUEUE_ARN: jobQueue.jobQueueArn,
       },
     });
     table.grantReadWriteData(statusHandlerLambda.function);
@@ -208,26 +213,25 @@ export class BacktestStack extends cdk.Stack {
       actions: ["s3:GetObject"],
       resources: [`${researchBucket.bucketArn}/backtests/*`],
     }));
-    // statusHandlerLambda.function.addToRolePolicy(new iam.PolicyStatement({
-    //   actions: ["batch:DescribeJobs"],
-    //   resources: ["*"],
-    // }));
+    statusHandlerLambda.function.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["batch:DescribeJobs"],
+      resources: ["*"],
+    }));
 
     // ---------------------------------------------------------------------------
     // EventBridge — Batch job state changes → status handler
-    // (commented out for two-step VPC migration; will be restored after deploy)
     // ---------------------------------------------------------------------------
 
-    // new events.Rule(this, "BatchJobStateChangeRule", {
-    //   eventPattern: {
-    //     source: ["aws.batch"],
-    //     detailType: ["Batch Job State Change"],
-    //     detail: {
-    //       jobQueue: [jobQueue.jobQueueArn],
-    //     },
-    //   },
-    //   targets: [new targets.LambdaFunction(statusHandlerLambda.function)],
-    // });
+    new events.Rule(this, "BatchJobStateChangeRule", {
+      eventPattern: {
+        source: ["aws.batch"],
+        detailType: ["Batch Job State Change"],
+        detail: {
+          jobQueue: [jobQueue.jobQueueArn],
+        },
+      },
+      targets: [new targets.LambdaFunction(statusHandlerLambda.function)],
+    });
 
     // ---------------------------------------------------------------------------
     // API Gateway routes — Cognito auth (shared authorizer from BackendStack)
