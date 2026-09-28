@@ -78,7 +78,7 @@ export class PipelineStack extends cdk.Stack {
     const taskSecurityGroup = new ec2.SecurityGroup(this, "PipelineTaskSg", {
       vpc,
       allowAllOutbound: true,
-      description: "Pipeline Fargate tasks — outbound-only",
+      description: "Pipeline Fargate tasks - outbound-only",
     });
 
     // ---------------------------------------------------------------------------
