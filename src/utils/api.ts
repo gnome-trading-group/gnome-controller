@@ -2,6 +2,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
 import { ContractRelationship, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, ExchangeEvent, Exchange, HedgeKeyword, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse, ResearchArtifactListResponse, ResearchDatasetListResponse } from '../types/research';
+import { PipelineListResponse, PipelineDetailResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
@@ -890,6 +891,34 @@ export const controllerApi = {
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
   },
+  listPipelines: () =>
+    sendApiRequest<PipelineListResponse>('/research/pipelines', 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+    }),
+  getPipeline: (pipelineName: string) =>
+    sendApiRequest<PipelineDetailResponse>(`/research/pipelines/${pipelineName}`, 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+    }),
+  createPipeline: (body: Record<string, unknown>) =>
+    sendApiRequest<{ pipeline: unknown }>('/research/pipelines', 'POST', {
+      apiUrl: CONTROLLER_API_URL,
+      body,
+      convertToCamelCase: true,
+    }),
+  updatePipeline: (pipelineName: string, body: Record<string, unknown>) =>
+    sendApiRequest<{ pipeline: unknown }>(`/research/pipelines/${pipelineName}`, 'PUT', {
+      apiUrl: CONTROLLER_API_URL,
+      body,
+      convertToCamelCase: true,
+    }),
+  triggerPipeline: (pipelineName: string, params?: Record<string, unknown>) =>
+    sendApiRequest<{ runId: string; ecsTaskArn: string }>(`/research/pipelines/${pipelineName}/trigger`, 'POST', {
+      apiUrl: CONTROLLER_API_URL,
+      body: { parameters: params ?? {} },
+      convertToCamelCase: true,
+    }),
   getServiceConfig: (service: string) =>
     sendApiRequest<ServiceConfigResponse>(`/config/${service}`, 'GET', {
       apiUrl: CONTROLLER_API_URL,

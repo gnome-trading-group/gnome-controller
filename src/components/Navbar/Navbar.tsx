@@ -59,6 +59,7 @@ const routes = [
       { label: 'Sessions', link: '/research/sessions' },
       { label: 'Artifacts', link: '/research/artifacts' },
       { label: 'Datasets', link: '/research/datasets' },
+      { label: 'Pipelines', link: '/research/pipelines' },
     ],
   },
   {

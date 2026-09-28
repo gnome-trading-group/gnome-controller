@@ -43,6 +43,8 @@ import ServiceConfig from './pages/Tools/ServiceConfig';
 import LaunchRules from './pages/Launcher/LaunchRules';
 import LaunchHistory from './pages/Launcher/LaunchHistory';
 import ManualTrigger from './pages/Launcher/ManualTrigger';
+import PipelineList from './pages/Pipelines/PipelineList';
+import PipelineDetail from './pages/Pipelines/PipelineDetail';
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -170,6 +172,8 @@ function AppContent() {
             <Route path="/research/sessions/:sessionName" element={<ResearchDetail />} />
             <Route path="/research/artifacts" element={<ArtifactList />} />
             <Route path="/research/datasets" element={<DatasetList />} />
+            <Route path="/research/pipelines" element={<PipelineList />} />
+            <Route path="/research/pipelines/:pipelineName" element={<PipelineDetail />} />
             <Route path="/predictions/events" element={<EventsList />} />
             <Route path="/predictions/events/:eventId" element={<EventDetail />} />
             <Route path="/predictions/relationships" element={<ContractRelationships />} />

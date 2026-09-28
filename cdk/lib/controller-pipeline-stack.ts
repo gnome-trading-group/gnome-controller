@@ -12,6 +12,7 @@ import { ResearchStack } from "./stacks/research-stack";
 import { ServiceConfigStack } from "./stacks/service-config-stack";
 import { MonitoringStack } from "./stacks/monitoring-stack";
 import { LatencyProbeStack, PROBE_REGIONS } from "./stacks/latency-probe-stack";
+import { PipelineStack } from "./stacks/pipeline-stack";
 
 class AppStage extends cdk.Stage {
   constructor(scope: Construct, id: string, config: ControllerConfig) {
@@ -36,6 +37,12 @@ class AppStage extends cdk.Stage {
     });
 
     new ResearchStack(this, "ControllerResearchStack", {
+      stage: config.account.stage,
+      apiGateway: backendStack.apiGateway,
+      cognitoAuthorizer: backendStack.cognitoAuthorizer,
+    });
+
+    new PipelineStack(this, "ControllerPipelineStack", {
       stage: config.account.stage,
       apiGateway: backendStack.apiGateway,
       cognitoAuthorizer: backendStack.cognitoAuthorizer,
