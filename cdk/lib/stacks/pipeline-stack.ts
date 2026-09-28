@@ -70,16 +70,10 @@ export class PipelineStack extends cdk.Stack {
     });
 
     // ---------------------------------------------------------------------------
-    // VPC + Security group for Fargate tasks (public subnet, internet access)
+    // VPC + Security group for Fargate tasks
     // ---------------------------------------------------------------------------
 
-    const vpc = new ec2.Vpc(this, "PipelineVpc", {
-      maxAzs: 2,
-      natGateways: 0,
-      subnetConfiguration: [
-        { name: "PublicSubnet", subnetType: ec2.SubnetType.PUBLIC },
-      ],
-    });
+    const vpc = ec2.Vpc.fromLookup(this, "Vpc", { vpcName: "gnome-orchestrator-vpc" });
 
     const taskSecurityGroup = new ec2.SecurityGroup(this, "PipelineTaskSg", {
       vpc,
