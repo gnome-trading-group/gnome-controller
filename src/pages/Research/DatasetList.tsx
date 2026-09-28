@@ -129,7 +129,7 @@ function DatasetList() {
             w={200}
           />
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="teal" onClick={refresh} loading={loading}>
+            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
               <IconRefresh size={20} />
             </ActionIcon>
           </Tooltip>

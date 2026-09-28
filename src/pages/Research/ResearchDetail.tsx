@@ -322,7 +322,7 @@ function ResearchDetail() {
               <tbody>
                 {artifacts.map((a) => (
                   <tr key={a.sk} style={{ borderBottom: '1px solid var(--mantine-color-dark-5)' }}>
-                    <td style={{ padding: '6px 12px' }}><Badge variant="light" color="violet" size="sm">{a.artifactType}</Badge></td>
+                    <td style={{ padding: '6px 12px' }}><Badge variant="light" color="green" size="sm">{a.artifactType}</Badge></td>
                     <td style={{ padding: '6px 12px', fontFamily: 'monospace' }}>{a.artifactName}</td>
                     <td style={{ padding: '6px 12px' }}>{a.version}</td>
                     <td style={{ padding: '6px 12px' }}><Badge variant="outline" color="gray" size="xs">{a.fileFormat}</Badge></td>

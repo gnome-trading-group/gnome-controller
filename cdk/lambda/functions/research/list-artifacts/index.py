@@ -50,6 +50,8 @@ def handler(event: dict, context) -> dict:
         filter_expr = Attr("sk").begins_with("ARTIFACT#")
         if artifact_type:
             filter_expr = filter_expr & Attr("artifact_type").eq(artifact_type)
+        if name:
+            filter_expr = filter_expr & Attr("artifact_name").eq(name)
         resp = _table.scan(FilterExpression=filter_expr)
         items = resp.get("Items", [])
 

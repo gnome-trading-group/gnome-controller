@@ -36,10 +36,10 @@ function ArtifactList() {
   const columns = useMemo<MRT_ColumnDef<ResearchArtifact>[]>(() => [
     {
       accessorKey: 'artifactType',
-      header: 'Type',
+      header: 'artifact_type',
       size: 160,
       Cell: ({ row }) => (
-        <Badge variant="light" color="violet">{row.original.artifactType}</Badge>
+        <Badge variant="light" color="green">{row.original.artifactType}</Badge>
       ),
     },
     {
@@ -129,7 +129,7 @@ function ArtifactList() {
             w={160}
           />
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="violet" onClick={refresh} loading={loading}>
+            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
               <IconRefresh size={20} />
             </ActionIcon>
           </Tooltip>

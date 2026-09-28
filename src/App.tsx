@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { useRef } from 'react';
 import { usePageTitle } from './hooks/usePageTitle';
 import { signInWithRedirect, signOut } from 'aws-amplify/auth';
 import { useAuthenticator, Authenticator } from '@aws-amplify/ui-react';
@@ -45,6 +46,10 @@ import ManualTrigger from './pages/Launcher/ManualTrigger';
 
 function LoginScreen() {
   const handleLogin = () => {
+    const currentPath = window.location.pathname + window.location.search + window.location.hash;
+    if (currentPath && currentPath !== '/') {
+      sessionStorage.setItem('postLoginRedirect', currentPath);
+    }
     signInWithRedirect();
   };
 
@@ -80,9 +85,19 @@ function PageTitle() {
 function AppContent() {
   const { authStatus } = useAuthenticator();
   const [navbarOpened, { toggle: toggleNavbar }] = useDisclosure(true);
+  const redirectHandled = useRef(false);
 
   if (authStatus !== 'authenticated') {
     return <LoginScreen />;
+  }
+
+  if (!redirectHandled.current) {
+    redirectHandled.current = true;
+    const saved = sessionStorage.getItem('postLoginRedirect');
+    if (saved) {
+      sessionStorage.removeItem('postLoginRedirect');
+      window.history.replaceState(null, '', saved);
+    }
   }
 
   return (
