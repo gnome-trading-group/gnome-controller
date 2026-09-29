@@ -6,12 +6,14 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'man
 import { useNavigate } from 'react-router-dom';
 import { PipelineDefinition } from '../../types/pipeline';
 import { controllerApi } from '../../utils/api';
+import PipelineFormModal from './PipelineFormModal';
 
 function PipelineList() {
   const navigate = useNavigate();
   const [pipelines, setPipelines] = useState<PipelineDefinition[]>([]);
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState<string | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -141,7 +143,7 @@ function PipelineList() {
           <Button
             size="sm"
             variant="light"
-            onClick={() => navigate('/research/pipelines/new')}
+            onClick={() => setCreateModalOpen(true)}
           >
             New Pipeline
           </Button>
@@ -158,6 +160,12 @@ function PipelineList() {
       )}
 
       <MantineReactTable table={table} />
+
+      <PipelineFormModal
+        opened={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onSaved={refresh}
+      />
     </Container>
   );
 }

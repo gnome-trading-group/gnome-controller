@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 
 import boto3
-from utils import create_response
+from utils import create_response, DecimalEncoder
 
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
 ECS_CLUSTER_ARN = os.environ["ECS_CLUSTER_ARN"]
@@ -19,6 +19,7 @@ _PIPELINES_PK = "__pipelines__"
 _ddb = boto3.resource("dynamodb")
 _table = _ddb.Table(DYNAMODB_TABLE)
 _ecs = boto3.client("ecs")
+
 
 
 def _now() -> str:
@@ -92,7 +93,7 @@ def handler(event: dict, context) -> dict:
                 "environment": [
                     {"name": "PIPELINE_NAME", "value": pipeline_name_str},
                     {"name": "RUN_ID", "value": run_id},
-                    {"name": "PIPELINE_PARAMS", "value": json.dumps(merged_params)},
+                    {"name": "PIPELINE_PARAMS", "value": json.dumps(merged_params, cls=DecimalEncoder)},
                 ],
             }],
             "cpu": str(cpu),
