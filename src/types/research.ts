@@ -56,7 +56,7 @@ export interface ResearchArtifact {
   version: number;
   s3Uri: string;
   fileFormat: string;
-  sizeBytes: number;
+  sizeBytes?: number;
   createdAt: string;
   createdBy?: string;
   description?: string;
@@ -77,9 +77,10 @@ export interface ResearchDataset {
   version: number;
   s3Uri: string;
   fileFormat: string;
-  sizeBytes: number;
+  sizeBytes?: number;
   rowCount?: number;
   columns?: string[];
+  columnTypes?: Record<string, string>;
   createdAt: string;
   createdBy?: string;
   description?: string;

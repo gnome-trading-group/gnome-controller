@@ -1,15 +1,95 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ActionIcon, Container, Group, TextInput, Title, Tooltip } from '@mantine/core';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActionIcon, Box, Container, Group, SimpleGrid, Text, TextInput, Title, Tooltip } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { ResearchDataset } from '../../types/research';
 import { controllerApi } from '../../utils/api';
 
-function formatBytes(bytes: number): string {
+function formatBytes(bytes: number | undefined): string {
+  if (bytes == null || isNaN(bytes)) return '—';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+interface GroupedDataset {
+  datasetName: string;
+  latest: ResearchDataset;
+  versions: ResearchDataset[];
+}
+
+function groupDatasets(datasets: ResearchDataset[]): GroupedDataset[] {
+  const map = new Map<string, ResearchDataset[]>();
+  for (const d of datasets) {
+    const list = map.get(d.datasetName) ?? [];
+    list.push(d);
+    map.set(d.datasetName, list);
+  }
+  return Array.from(map.entries()).map(([datasetName, versions]) => {
+    const sorted = [...versions].sort((a, b) => b.version - a.version);
+    return { datasetName, latest: sorted[0], versions: sorted };
+  });
+}
+
+const VERSION_COLUMNS: MRT_ColumnDef<ResearchDataset>[] = [
+  { accessorKey: 'version', header: 'Ver', size: 60 },
+  {
+    id: 'rowCount', header: 'Rows', size: 90,
+    Cell: ({ row }) => row.original.rowCount != null ? row.original.rowCount.toLocaleString() : '—',
+  },
+  {
+    id: 'sizeBytes', header: 'Size', size: 90,
+    Cell: ({ row }) => formatBytes(row.original.sizeBytes),
+  },
+  {
+    id: 'createdAt', header: 'Created', size: 120,
+    Cell: ({ row }) => row.original.createdAt
+      ? <ReactTimeAgo date={new Date(row.original.createdAt)} timeStyle="round" />
+      : '—',
+  },
+];
+
+function VersionsDetailPanel({ versions, columns, columnTypes }: {
+  versions: ResearchDataset[];
+  columns: string[];
+  columnTypes: Record<string, string>;
+}) {
+  const table = useMantineReactTable({
+    columns: VERSION_COLUMNS,
+    data: versions,
+    enableTopToolbar: false,
+    enableBottomToolbar: false,
+    enablePagination: false,
+    enableColumnFilters: false,
+    enableSorting: false,
+    mantineTableProps: { withColumnBorders: true, withTableBorder: true },
+    initialState: { density: 'xs' },
+  });
+
+  return (
+    <Box p="sm">
+      <Text size="xs" fw={600} c="dimmed" mb={6}>VERSIONS</Text>
+      <MantineReactTable table={table} />
+      {columns.length > 0 && (
+        <>
+          <Text size="xs" fw={600} c="dimmed" mt="md" mb={6}>
+            COLUMNS ({columns.length})
+          </Text>
+          <SimpleGrid cols={4} spacing={4}>
+            {columns.map((col) => (
+              <Text key={col} size="xs" style={{ fontFamily: 'monospace' }}>
+                {col}
+                {columnTypes[col] && (
+                  <Text span size="xs" c="dimmed"> : {columnTypes[col]}</Text>
+                )}
+              </Text>
+            ))}
+          </SimpleGrid>
+        </>
+      )}
+    </Box>
+  );
 }
 
 function DatasetList() {
@@ -20,9 +100,7 @@ function DatasetList() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await controllerApi.listDatasets({
-        name: nameFilter || undefined,
-      });
+      const result = await controllerApi.listDatasets({ name: nameFilter || undefined });
       setDatasets(result.datasets);
     } finally {
       setLoading(false);
@@ -31,7 +109,9 @@ function DatasetList() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const columns = useMemo<MRT_ColumnDef<ResearchDataset>[]>(() => [
+  const grouped = useMemo(() => groupDatasets(datasets), [datasets]);
+
+  const columns = useMemo<MRT_ColumnDef<GroupedDataset>[]>(() => [
     {
       accessorKey: 'datasetName',
       header: 'Name',
@@ -41,31 +121,32 @@ function DatasetList() {
       ),
     },
     {
-      accessorKey: 'version',
-      header: 'Ver',
-      size: 60,
-    },
-    {
-      accessorKey: 'rowCount',
+      id: 'rowCount',
       header: 'Rows',
       size: 90,
       Cell: ({ row }) =>
-        row.original.rowCount != null
-          ? row.original.rowCount.toLocaleString()
+        row.original.latest.rowCount != null
+          ? row.original.latest.rowCount.toLocaleString()
           : <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>,
     },
     {
-      accessorKey: 'sizeBytes',
+      id: 'sizeBytes',
       header: 'Size',
       size: 90,
-      Cell: ({ row }) => formatBytes(row.original.sizeBytes),
+      Cell: ({ row }) => formatBytes(row.original.latest.sizeBytes),
     },
     {
-      accessorKey: 'columns',
+      id: 'versions',
+      header: 'Versions',
+      size: 80,
+      Cell: ({ row }) => row.original.versions.length,
+    },
+    {
+      id: 'columns',
       header: 'Columns',
       size: 200,
       Cell: ({ row }) => {
-        const cols = row.original.columns;
+        const cols = row.original.latest.columns;
         if (!cols?.length) return <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>;
         const display = cols.slice(0, 4).join(', ');
         const extra = cols.length > 4 ? ` +${cols.length - 4}` : '';
@@ -77,43 +158,52 @@ function DatasetList() {
       },
     },
     {
-      accessorKey: 'producingSession',
+      id: 'producingSession',
       header: 'Session',
       size: 160,
       Cell: ({ row }) => (
         <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--mantine-color-dimmed)' }}>
-          {row.original.producingSession || '—'}
+          {row.original.latest.producingSession || '—'}
         </span>
       ),
     },
     {
-      accessorKey: 'description',
+      id: 'description',
       header: 'Description',
       size: 220,
-      Cell: ({ row }) => row.original.description || <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>,
+      Cell: ({ row }) => row.original.latest.description || <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>,
     },
     {
-      accessorKey: 'createdAt',
-      header: 'Created',
+      id: 'createdAt',
+      header: 'Latest',
       size: 120,
       Cell: ({ row }) =>
-        row.original.createdAt
-          ? <ReactTimeAgo date={new Date(row.original.createdAt)} timeStyle="round" />
+        row.original.latest.createdAt
+          ? <ReactTimeAgo date={new Date(row.original.latest.createdAt)} timeStyle="round" />
           : '—',
     },
   ], []);
 
   const table = useMantineReactTable({
     columns,
-    data: datasets,
+    data: grouped,
+    getRowId: (row) => row.datasetName,
     state: { isLoading: loading },
-    enableColumnFilters: true,
+    enableColumnFilters: false,
     enableSorting: true,
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: false,
+    enableExpanding: true,
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    initialState: { sorting: [{ id: 'createdAt', desc: true }], density: 'xs' },
+    initialState: { density: 'xs', pagination: { pageSize: 20, pageIndex: 0 } },
+    renderDetailPanel: ({ row }) => (
+      <VersionsDetailPanel
+        versions={row.original.versions}
+        columns={row.original.latest.columns ?? []}
+        columnTypes={row.original.latest.columnTypes ?? {}}
+      />
+    ),
   });
 
   return (

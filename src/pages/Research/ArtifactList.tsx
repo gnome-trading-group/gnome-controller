@@ -6,7 +6,8 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'man
 import { ResearchArtifact } from '../../types/research';
 import { controllerApi } from '../../utils/api';
 
-function formatBytes(bytes: number): string {
+function formatBytes(bytes: number | undefined): string {
+  if (bytes == null || isNaN(bytes)) return '—';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -36,7 +37,7 @@ function ArtifactList() {
   const columns = useMemo<MRT_ColumnDef<ResearchArtifact>[]>(() => [
     {
       accessorKey: 'artifactType',
-      header: 'artifact_type',
+      header: 'Type',
       size: 160,
       Cell: ({ row }) => (
         <Badge variant="light" color="green">{row.original.artifactType}</Badge>

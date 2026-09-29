@@ -49,6 +49,8 @@ def handler(event: dict, context) -> dict:
         item["row_count"] = int(body["row_count"])
     if "columns" in body:
         item["columns"] = body["columns"]
+    if "column_types" in body:
+        item["column_types"] = body["column_types"]
     if "producing_session" in body:
         item["producing_session"] = body["producing_session"]
 
