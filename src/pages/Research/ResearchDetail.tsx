@@ -327,7 +327,7 @@ function ResearchDetail() {
                     <td style={{ padding: '6px 12px' }}>{a.version}</td>
                     <td style={{ padding: '6px 12px' }}><Badge variant="outline" color="gray" size="xs">{a.fileFormat}</Badge></td>
                     <td style={{ padding: '6px 12px', color: 'var(--mantine-color-dimmed)' }}>
-                      {a.sizeBytes < 1024 * 1024 ? `${(a.sizeBytes / 1024).toFixed(1)} KB` : `${(a.sizeBytes / (1024 * 1024)).toFixed(1)} MB`}
+                      {a.sizeBytes == null ? '—' : a.sizeBytes < 1024 * 1024 ? `${(a.sizeBytes / 1024).toFixed(1)} KB` : `${(a.sizeBytes / (1024 * 1024)).toFixed(1)} MB`}
                     </td>
                     <td style={{ padding: '6px 12px', color: 'var(--mantine-color-dimmed)' }}>
                       {a.createdAt ? <ReactTimeAgo date={new Date(a.createdAt)} timeStyle="round" /> : '—'}
