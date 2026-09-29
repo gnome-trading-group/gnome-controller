@@ -199,9 +199,9 @@ function DatasetList() {
     initialState: { density: 'xs', pagination: { pageSize: 20, pageIndex: 0 } },
     renderDetailPanel: ({ row }) => (
       <VersionsDetailPanel
-        versions={row.original.versions}
-        columns={row.original.latest.columns ?? []}
-        columnTypes={row.original.latest.columnTypes ?? {}}
+        versions={row.original.versions ?? []}
+        columns={row.original.latest?.columns ?? []}
+        columnTypes={row.original.latest?.columnTypes ?? {}}
       />
     ),
   });
