@@ -55,6 +55,7 @@ export interface Security {
 
 export interface Exchange {
   exchangeId: number;
+  exchangeCode: string;
   exchangeName: string;
   region: string;
   schemaType: string;

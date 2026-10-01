@@ -65,11 +65,11 @@ function formatUtcShort(epochSeconds: number): string {
   return `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)}`;
 }
 
-function getExchangeSearchUrl(exchangeName: string, query: string): string | null {
-  switch (exchangeName.toLowerCase()) {
-    case 'kalshi':
+function getExchangeSearchUrl(exchangeCode: string, query: string): string | null {
+  switch (exchangeCode) {
+    case 'KALSHI':
       return `https://kalshi.com/search?q=${encodeURIComponent(query)}`;
-    case 'polymarket':
+    case 'POLYMARKET_INTL':
       return `https://polymarket.com/search?_q=${query.toLowerCase().replace(/\s+/g, '-')}`;
     default:
       return null;
@@ -412,6 +412,10 @@ function EventDetail() {
     () => Object.fromEntries(exchanges.map(e => [e.exchangeId, e.exchangeName])),
     [exchanges],
   );
+  const exchangeCodeById = useMemo(
+    () => Object.fromEntries(exchanges.map(e => [e.exchangeId, e.exchangeCode])),
+    [exchanges],
+  );
 
   const securitySymbolMap = useMemo(() => {
     const map: Record<number, string> = {};
@@ -509,7 +513,7 @@ function EventDetail() {
                         </Group>
                       </Anchor>
                     ) : xe.nativeEventId;
-                    const searchUrl = getExchangeSearchUrl(exchangeName, xe.rawTitle);
+                    const searchUrl = getExchangeSearchUrl(exchangeCodeById[xe.exchangeId] ?? '', xe.rawTitle);
                     return (
                       <Table.Tr key={xe.exchangeEventId}>
                         <Table.Td>{exchangeName || `#${xe.exchangeId}`}</Table.Td>

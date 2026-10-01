@@ -25,6 +25,7 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
 
   const [createExchangeOpen, setCreateExchangeOpen] = useState(false);
   const [newExchangeForm, setNewExchangeForm] = useState({
+    exchangeCode: '',
     exchangeName: '',
     region: '',
     schemaType: '',
@@ -35,7 +36,7 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
       await registryApi.createExchange(newExchangeForm);
       await refreshExchanges();
       setCreateExchangeOpen(false);
-      setNewExchangeForm({ exchangeName: '', region: '', schemaType: '' });
+      setNewExchangeForm({ exchangeCode: '', exchangeName: '', region: '', schemaType: '' });
     } catch (err) {
       console.error('Failed to create exchange:', err);
     }
@@ -48,6 +49,21 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
       enableSorting: true,
       enableEditing: false,
       size: 60,
+    },
+    {
+      accessorKey: 'exchangeCode',
+      header: 'Code',
+      enableSorting: true,
+      enableEditing: true,
+      size: 160,
+      Edit: ({ cell, row }) => (
+        <TextInput
+          defaultValue={cell.getValue<string>()}
+          onChange={(e) => {
+            row.original.exchangeCode = e.target.value.toUpperCase();
+          }}
+        />
+      ),
     },
     {
       accessorKey: 'exchangeName',
@@ -183,6 +199,13 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
         size="sm"
       >
         <Stack>
+          <TextInput
+            label="Exchange Code"
+            description="Identifier services match on, e.g. KALSHI or POLYMARKET_INTL"
+            value={newExchangeForm.exchangeCode}
+            onChange={(e) => setNewExchangeForm(prev => ({ ...prev, exchangeCode: e.target.value.toUpperCase() }))}
+            required
+          />
           <TextInput
             label="Exchange Name"
             value={newExchangeForm.exchangeName}

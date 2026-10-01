@@ -94,7 +94,7 @@ function SecurityMaster() {
 
   const handleDownloadTemplate = () => {
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ exchangeName: 'Binance', region: 'us-east-1', schemaType: 'mbp-10' }]), 'Exchanges');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ exchangeCode: 'BINANCE', exchangeName: 'Binance', region: 'us-east-1', schemaType: 'mbp-10' }]), 'Exchanges');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ symbol: 'BTC', type: 0, description: 'BTC Spot' }]), 'Securities');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ exchangeId: 1, securityId: 1, exchangeSecurityId: 'BTC', exchangeSecuritySymbol: 'BTC' }]), 'Listings');
     XLSX.writeFile(wb, 'security_master_template.xlsx');
