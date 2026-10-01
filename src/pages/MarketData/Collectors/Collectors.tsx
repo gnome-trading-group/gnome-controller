@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { navigateRowProps } from '../../../utils/navigation';
 import { marketDataApi, registryApi, ApiError } from '../../../utils/api';
-import { DenormalizedListing, EventContract, ExchangeEvent } from '../../../types';
+import { DenormalizedListing, Event, EventContract } from '../../../types';
 import {
   Button,
   ActionIcon,
@@ -71,7 +71,7 @@ function Collectors() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selectedExchangeId, setSelectedExchangeId] = useState<string | null>(null);
   const [eventContracts, setEventContracts] = useState<EventContract[]>([]);
-  const [exchangeEvents, setExchangeEvents] = useState<ExchangeEvent[]>([]);
+  const [eventExchangeId, setEventExchangeId] = useState<number | null>(null);
   const [eventListings, setEventListings] = useState<DenormalizedListing[]>([]);
   const [loadingEventListings, setLoadingEventListings] = useState(false);
   const [prefilledEvent, setPrefilledEvent] = useState<{ value: string; label: string } | null>(null);
@@ -123,11 +123,11 @@ function Collectors() {
     setMemory(suggestion.memory);
   }, [activeListingIds.length, sizingUserOverridden]);
 
-  // Fetch event contracts + exchange events when event is selected
+  // Fetch event contracts + the event's exchange when event is selected
   useEffect(() => {
     if (!selectedEventId) {
       setEventContracts([]);
-      setExchangeEvents([]);
+      setEventExchangeId(null);
       setSelectedExchangeId(null);
       setEventListings([]);
       return;
@@ -135,10 +135,12 @@ function Collectors() {
     const id = Number(selectedEventId);
     Promise.all([
       registryApi.listEventContracts({ eventId: id }),
-      registryApi.listExchangeEvents({ eventId: id }),
-    ]).then(([contracts, exEvts]) => {
+      registryApi.listEvents({ eventId: id }),
+    ]).then(([contracts, evts]) => {
+      const exchangeId = (evts as Event[])[0]?.exchangeId ?? null;
       setEventContracts(contracts);
-      setExchangeEvents(exEvts);
+      setEventExchangeId(exchangeId);
+      setSelectedExchangeId(exchangeId != null ? String(exchangeId) : null);
     }).catch(() => {});
   }, [selectedEventId]);
 
@@ -163,11 +165,10 @@ function Collectors() {
   }, [selectedExchangeId, eventContracts]);
 
   const exchangeOptions = useMemo(() => {
-    const ids = new Set(exchangeEvents.map(ee => ee.exchangeId));
     return exchanges
-      .filter(e => ids.has(e.exchangeId))
+      .filter(e => e.exchangeId === eventExchangeId)
       .map(e => ({ value: String(e.exchangeId), label: e.exchangeName }));
-  }, [exchangeEvents, exchanges]);
+  }, [eventExchangeId, exchanges]);
 
   const eventSelectData = useMemo(() => {
     if (!prefilledEvent) return eventSearchOptions;
@@ -225,7 +226,7 @@ function Collectors() {
     setSelectedEventId(null);
     setSelectedExchangeId(null);
     setEventContracts([]);
-    setExchangeEvents([]);
+    setEventExchangeId(null);
     setEventListings([]);
     setPrefilledEvent(null);
     setSizingUserOverridden(false);

@@ -1,6 +1,6 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
-import { ContractRelationship, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, ExchangeEvent, Exchange, HedgeKeyword, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
+import { ContractRelationship, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, HedgeKeyword, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse, ResearchArtifactListResponse, ResearchDatasetListResponse } from '../types/research';
 import { PipelineListResponse, PipelineDetailResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
@@ -807,18 +807,6 @@ export const registryApi = {
       convertToCamelCase: true,
       body: { hedgeKeywordId },
     }),
-  listExchangeEvents: (params?: { eventId?: number; exchangeId?: number; nativeEventId?: string }) => {
-    const queryParams: Record<string, string | number | boolean> = {};
-    if (params?.eventId !== undefined) queryParams.eventId = params.eventId;
-    if (params?.exchangeId !== undefined) queryParams.exchangeId = params.exchangeId;
-    if (params?.nativeEventId) queryParams.nativeEventId = params.nativeEventId;
-    return sendApiRequest<ExchangeEvent[]>('/exchange-events', 'GET', {
-      apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
-      convertToCamelCase: true,
-      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
-    });
-  },
 }
 
 

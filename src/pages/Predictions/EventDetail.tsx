@@ -40,7 +40,7 @@ import {
   ReferenceArea,
   Legend,
 } from 'recharts';
-import { ContractRelationship, ContractRelationshipType, DenormalizedListing, Event, EventContract, ExchangeEvent } from '../../types';
+import { ContractRelationship, ContractRelationshipType, DenormalizedListing, Event, EventContract } from '../../types';
 import { BboDataPoint } from '../../types/bbo-timeline';
 import { marketDataApi, registryApi } from '../../utils/api';
 import { useGlobalState } from '../../context/GlobalStateContext';
@@ -94,7 +94,6 @@ function EventDetail() {
 
   const [event, setEvent] = useState<Event | null>(null);
   const [contracts, setContracts] = useState<EnrichedContract[]>([]);
-  const [exchangeEvents, setExchangeEvents] = useState<ExchangeEvent[]>([]);
   const [relationships, setRelationships] = useState<ContractRelationship[]>([]);
   const [loading, setLoading] = useState(true);
   const [listingsBySecurityId, setListingsBySecurityId] = useState<Record<number, DenormalizedListing[]>>({});
@@ -121,11 +120,9 @@ function EventDetail() {
     Promise.all([
       registryApi.listEvents({ eventId: id }),
       registryApi.listEventContracts({ eventId: id }),
-      registryApi.listExchangeEvents({ eventId: id }),
       registryApi.listContractRelationships({ eventId: id }),
-    ]).then(async ([evts, ecs, exEvts, rels]) => {
+    ]).then(async ([evts, ecs, rels]) => {
       setEvent((evts as Event[])[0] ?? null);
-      setExchangeEvents(exEvts as ExchangeEvent[]);
       setContracts(ecs as EventContract[]);
       setRelationships(rels as ContractRelationship[]);
 
@@ -437,6 +434,10 @@ function EventDetail() {
     return <Container size="xl" py="xl"><Text>Event not found.</Text></Container>;
   }
 
+  const exchangeSearchUrl = event.exchangeId != null
+    ? getExchangeSearchUrl(exchangeCodeById[event.exchangeId] ?? '', event.title)
+    : null;
+
   return (
     <Container size="xl" py="xl">
       <Breadcrumbs mb="md">
@@ -489,60 +490,33 @@ function EventDetail() {
 
         <Grid.Col span={{ base: 12, md: 6 }}>
           <Paper withBorder p="md" h="100%">
-            <Title order={5} mb="sm">Exchange Mappings ({exchangeEvents.length})</Title>
-            {exchangeEvents.length === 0 ? (
-              <Text size="sm" c="dimmed">No exchange mappings.</Text>
-            ) : (
-              <Table striped highlightOnHover withColumnBorders fz="sm" style={{ tableLayout: 'fixed', width: '100%' }}>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Exchange</Table.Th>
-                    <Table.Th>Native ID</Table.Th>
-                    <Table.Th>Raw Title</Table.Th>
-                    <Table.Th style={{ width: 60 }}>Search</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {exchangeEvents.map(xe => {
-                    const exchangeName = exchangeById[xe.exchangeId] ?? '';
-                    const nativeIdCell = xe.nativeUrl ? (
-                      <Anchor href={xe.nativeUrl} target="_blank" rel="noopener noreferrer" size="sm">
-                        <Group gap={4} wrap="nowrap">
-                          {xe.nativeEventId}
-                          <IconExternalLink size={14} />
-                        </Group>
-                      </Anchor>
-                    ) : xe.nativeEventId;
-                    const searchUrl = getExchangeSearchUrl(exchangeCodeById[xe.exchangeId] ?? '', xe.rawTitle);
-                    return (
-                      <Table.Tr key={xe.exchangeEventId}>
-                        <Table.Td>{exchangeName || `#${xe.exchangeId}`}</Table.Td>
-                        <Table.Td style={{ maxWidth: 180, wordBreak: 'break-all' }}>{nativeIdCell}</Table.Td>
-                        <Table.Td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {xe.rawTitle}
-                        </Table.Td>
-                        <Table.Td style={{ textAlign: 'center' }}>
-                          {searchUrl && (
-                            <Tooltip label="Search on exchange" openDelay={500}>
-                              <ActionIcon
-                                component="a"
-                                href={searchUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                variant="subtle"
-                                size="sm"
-                              >
-                                <IconSearch size={14} />
-                              </ActionIcon>
-                            </Tooltip>
-                          )}
-                        </Table.Td>
-                      </Table.Tr>
-                    );
-                  })}
-                </Table.Tbody>
-              </Table>
-            )}
+            <Title order={5} mb="sm">Exchange</Title>
+            <InfoRow label="Exchange" value={event.exchangeId != null ? (exchangeById[event.exchangeId] ?? `#${event.exchangeId}`) : '-'} />
+            <InfoRow
+              label="Native ID"
+              value={
+                event.nativeUrl ? (
+                  <Anchor href={event.nativeUrl} target="_blank" rel="noopener noreferrer" size="sm">
+                    <Group gap={4} wrap="nowrap">
+                      {event.nativeEventId}
+                      <IconExternalLink size={14} />
+                    </Group>
+                  </Anchor>
+                ) : (event.nativeEventId ?? '-')
+              }
+            />
+            <InfoRow
+              label="Search"
+              value={
+                exchangeSearchUrl ? (
+                  <Tooltip label="Search on exchange" openDelay={500}>
+                    <ActionIcon component="a" href={exchangeSearchUrl} target="_blank" rel="noopener noreferrer" variant="subtle" size="sm">
+                      <IconSearch size={14} />
+                    </ActionIcon>
+                  </Tooltip>
+                ) : '-'
+              }
+            />
           </Paper>
         </Grid.Col>
       </Grid>

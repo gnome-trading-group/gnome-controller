@@ -118,6 +118,9 @@ export interface Event {
   expiry: string | null;
   dateCreated: string;
   dateModified: string;
+  exchangeId: number | null;
+  nativeEventId: string | null;
+  nativeUrl: string | null;
 }
 
 export interface EventContract {
@@ -139,16 +142,6 @@ export interface ContractRelationship {
   dateCreated: string;
   symbolA?: string;
   symbolB?: string;
-}
-
-export interface ExchangeEvent {
-  exchangeEventId: number;
-  exchangeId: number;
-  eventId: number;
-  nativeEventId: string;
-  rawTitle: string;
-  dateCreated: string;
-  nativeUrl?: string;
 }
 
 export interface CreateContractRelationship {
