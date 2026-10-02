@@ -201,7 +201,7 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
         <Stack>
           <TextInput
             label="Exchange Code"
-            description="Identifier services match on, e.g. KALSHI or POLYMARKET_INTL"
+            description="Identifier services match on, e.g. KALSHI, POLYMARKET_INTL or POLYMARKET_US"
             value={newExchangeForm.exchangeCode}
             onChange={(e) => setNewExchangeForm(prev => ({ ...prev, exchangeCode: e.target.value.toUpperCase() }))}
             required

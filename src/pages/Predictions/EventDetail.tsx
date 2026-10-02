@@ -71,6 +71,8 @@ function getExchangeSearchUrl(exchangeCode: string, query: string): string | nul
       return `https://kalshi.com/search?q=${encodeURIComponent(query)}`;
     case 'POLYMARKET_INTL':
       return `https://polymarket.com/search?_q=${query.toLowerCase().replace(/\s+/g, '-')}`;
+    case 'POLYMARKET_US':
+      return `https://polymarket.us/search?q=${encodeURIComponent(query)}`;
     default:
       return null;
   }
