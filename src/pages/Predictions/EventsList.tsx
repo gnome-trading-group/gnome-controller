@@ -5,37 +5,37 @@ import { useNavigate } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
-import { Event, EventContract } from '../../types';
+import { Event } from '../../types';
 import { registryApi } from '../../utils/api';
+import { useGlobalState } from '../../context/GlobalStateContext';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import { useState } from 'react';
 
-interface EnrichedEvent extends Event {
-  contractCount: number;
-}
-
 function EventsList() {
   const navigate = useNavigate();
-  const [contractCounts, setContractCounts] = useState<Record<number, number>>({});
+  const { exchanges } = useGlobalState();
   const [categories, setCategories] = useState<string[]>([]);
 
   const urlState = useUrlTableState({ defaultSort: { id: 'dateCreated', desc: true } });
   const tag = urlState.getParam('tag');
   const category = urlState.getParam('category');
+  const exchangeId = urlState.getParam('exchange');
   const showResolved = urlState.getParam('resolved') === 'true';
 
   const setTag = (value: string) => urlState.setParam('tag', value);
   const setCategory = (value: string | null) => urlState.setParam('category', value ?? '');
+  const setExchangeId = (value: string | null) => urlState.setParam('exchange', value ?? '');
   const setShowResolved = (value: boolean) => urlState.setParam('resolved', value ? 'true' : '');
 
   const extraParams = useMemo(() => {
     const p: Record<string, string | number | boolean> = {};
     if (category) p.category = category;
+    if (exchangeId) p.exchangeId = Number(exchangeId);
     if (!showResolved) p.resolved = false;
     if (tag) p.tag = tag;
     return p;
-  }, [category, showResolved, tag]);
+  }, [category, exchangeId, showResolved, tag]);
 
   const {
     data: rawEvents,
@@ -64,28 +64,22 @@ function EventsList() {
   });
 
   useEffect(() => {
-    registryApi.listEventContracts().then(ecs => {
-      const counts: Record<number, number> = {};
-      for (const ec of ecs as EventContract[]) {
-        counts[ec.eventId] = (counts[ec.eventId] ?? 0) + 1;
-      }
-      setContractCounts(counts);
-    }).catch(console.error);
-  }, []);
-
-  useEffect(() => {
     if (rawEvents.length > 0) {
       const cats = [...new Set(rawEvents.map(e => e.category).filter(Boolean) as string[])].sort();
       setCategories(prev => [...new Set([...prev, ...cats])].sort());
     }
   }, [rawEvents]);
 
-  const events = useMemo<EnrichedEvent[]>(
-    () => rawEvents.map(e => ({ ...e, contractCount: contractCounts[e.eventId] ?? 0 })),
-    [rawEvents, contractCounts],
+  const exchangeNameById = useMemo(
+    () => Object.fromEntries(exchanges.map(e => [e.exchangeId, e.exchangeName])),
+    [exchanges],
+  );
+  const exchangeOptions = useMemo(
+    () => exchanges.map(e => ({ value: String(e.exchangeId), label: e.exchangeName })),
+    [exchanges],
   );
 
-  const columns = useMemo<MRT_ColumnDef<EnrichedEvent>[]>(() => [
+  const columns = useMemo<MRT_ColumnDef<Event>[]>(() => [
     {
       accessorKey: 'title',
       header: 'Title',
@@ -99,10 +93,14 @@ function EventsList() {
       Cell: ({ row }) => row.original.category ?? '-',
     },
     {
-      accessorKey: 'contractCount',
-      header: 'Contracts',
+      accessorKey: 'exchangeId',
+      header: 'Exchange',
       enableSorting: false,
-      size: 90,
+      size: 160,
+      Cell: ({ row }) => {
+        const exchangeId = row.original.exchangeId;
+        return exchangeId != null ? (exchangeNameById[exchangeId] ?? `#${exchangeId}`) : '-';
+      },
     },
     {
       accessorKey: 'resolved',
@@ -133,11 +131,11 @@ function EventsList() {
           <ReactTimeAgo date={new Date(row.original.dateCreated)} timeStyle="round" />
         ) : '-',
     },
-  ], []);
+  ], [exchangeNameById]);
 
   const table = useMantineReactTable({
     columns,
-    data: events,
+    data: rawEvents,
     rowCount: total,
     manualPagination: true,
     manualSorting: true,
@@ -174,6 +172,15 @@ function EventsList() {
             label="Show Resolved"
             checked={showResolved}
             onChange={e => setShowResolved(e.currentTarget.checked)}
+          />
+          <Select
+            placeholder="All Exchanges"
+            data={exchangeOptions}
+            value={exchangeId || null}
+            onChange={setExchangeId}
+            clearable
+            size="sm"
+            style={{ width: 200 }}
           />
           <Select
             placeholder="All Categories"
