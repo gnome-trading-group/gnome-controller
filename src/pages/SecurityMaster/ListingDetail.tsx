@@ -24,7 +24,6 @@ import {
   formatSecurityType,
   formatUnscaled,
   unscaleContractMultiplier,
-  unscaleNotional,
   unscalePrice,
   unscaleSize,
 } from '../../utils/security-master';
@@ -211,7 +210,7 @@ function ListingDetail() {
                     <Table.Tr key={i}>
                       <Table.Td>{formatUnscaled(unscalePrice(spec.tickSize))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscaleSize(spec.lotSize))}</Table.Td>
-                      <Table.Td>{formatUnscaled(unscaleNotional(spec.minNotional))}</Table.Td>
+                      <Table.Td>{formatUnscaled(unscalePrice(spec.minNotional))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscaleContractMultiplier(spec.contractMultiplier))}</Table.Td>
                       <Table.Td><ReactTimeAgo date={new Date(spec.recordedAt)} timeStyle="round" /></Table.Td>
                     </Table.Tr>

@@ -4,7 +4,7 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { PnlSnapshot } from '../types';
-import { formatUnscaled, unscaleNotional, unscalePrice, unscaleSize } from '../utils/security-master';
+import { formatUnscaled, unscalePrice, unscaleSize } from '../utils/security-master';
 
 const MODE_COLORS: Record<string, string> = {
   paper: 'violet',
@@ -17,10 +17,6 @@ function displayPrice(val: number, scaled: boolean): string {
 
 function displaySize(val: number, scaled: boolean): string {
   return scaled ? String(val) : formatUnscaled(unscaleSize(val));
-}
-
-function displayNotional(val: number, scaled: boolean): string {
-  return scaled ? String(val) : formatUnscaled(unscaleNotional(val));
 }
 
 interface PnlSnapshotTableProps {
@@ -102,14 +98,14 @@ export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, titl
         header: 'Unrealized PnL',
         enableSorting: true,
         size: 130,
-        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displayNotional(row.original.unrealizedPnl, scaled),
+        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displayPrice(row.original.unrealizedPnl, scaled),
       },
       {
         accessorKey: 'realizedPnl',
         header: 'Realized PnL',
         enableSorting: true,
         size: 120,
-        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displayNotional(row.original.realizedPnl, scaled),
+        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displayPrice(row.original.realizedPnl, scaled),
       },
       {
         accessorKey: 'totalFees',
@@ -123,7 +119,7 @@ export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, titl
         header: 'Total PnL',
         enableSorting: true,
         size: 120,
-        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displayNotional(row.original.totalPnl, scaled),
+        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => displayPrice(row.original.totalPnl, scaled),
       },
       {
         accessorKey: 'snapshotTime',

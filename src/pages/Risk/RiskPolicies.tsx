@@ -237,6 +237,7 @@ function RiskPolicies() {
           />
           <Textarea
             label="Parameters (JSON)"
+            description={RISK_POLICY_TYPES.find((t) => t.value === policyForm.policyType)?.parametersHint}
             value={policyForm.parametersJson}
             onChange={(e) => setPolicyForm((f) => ({ ...f, parametersJson: e.target.value }))}
             autosize

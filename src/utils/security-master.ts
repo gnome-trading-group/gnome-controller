@@ -2,7 +2,6 @@ import { AssetClass, ContractType, SecurityType } from "../types";
 
 export const PRICE_SCALING_FACTOR = 1_000_000_000;
 export const SIZE_SCALING_FACTOR = 1_000_000;
-export const NOTIONAL_SCALING_FACTOR = PRICE_SCALING_FACTOR * SIZE_SCALING_FACTOR;
 export const CONTRACT_MULTIPLIER_SCALING_FACTOR = 1_000_000_000;
 
 export function formatSecurityType(type: number): string {
@@ -29,10 +28,6 @@ export function unscalePrice(scaledValue: number): number {
 
 export function unscaleSize(scaledValue: number): number {
   return scaledValue / SIZE_SCALING_FACTOR;
-}
-
-export function unscaleNotional(scaledValue: number): number {
-  return scaledValue / NOTIONAL_SCALING_FACTOR;
 }
 
 export function unscaleContractMultiplier(scaledValue: number): number {

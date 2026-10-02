@@ -33,11 +33,12 @@ export interface PnlSnapshot {
 }
 
 export const RISK_POLICY_TYPES = [
-  { value: 'KILL_SWITCH', label: 'Kill Switch', parametersTemplate: '{}' },
-  { value: 'MAX_NOTIONAL', label: 'Max Notional', parametersTemplate: '{"maxNotionalValue": 0}' },
-  { value: 'MAX_ORDER_SIZE', label: 'Max Order Size', parametersTemplate: '{"maxOrderSize": 0}' },
-  { value: 'MAX_POSITION', label: 'Max Position', parametersTemplate: '{"maxPosition": 0}' },
-  { value: 'MAX_PNL_LOSS', label: 'Max PnL Loss', parametersTemplate: '{"maxLoss": 0}' },
+  { value: 'KILL_SWITCH', label: 'Kill Switch', parametersTemplate: '{}', parametersHint: '' },
+  { value: 'MAX_NOTIONAL', label: 'Max Notional', parametersTemplate: '{"maxNotionalValue": 0}', parametersHint: 'maxNotionalValue in price units (1e9 = $1)' },
+  { value: 'MAX_ORDER_SIZE', label: 'Max Order Size', parametersTemplate: '{"maxOrderSize": 0}', parametersHint: 'maxOrderSize in size units (1e6 = 1 unit)' },
+  { value: 'MAX_POSITION', label: 'Max Position', parametersTemplate: '{"maxPosition": 0}', parametersHint: 'maxPosition in size units (1e6 = 1 unit)' },
+  { value: 'MAX_PNL_LOSS', label: 'Max PnL Loss', parametersTemplate: '{"maxLoss": 0}', parametersHint: 'maxLoss in price units (1e9 = $1)' },
+  { value: 'MAX_TOTAL_PNL_LOSS', label: 'Max Total PnL Loss', parametersTemplate: '{"maxLoss": 0}', parametersHint: 'maxLoss in price units (1e9 = $1)' },
 ] as const;
 
 export interface RiskPolicy {

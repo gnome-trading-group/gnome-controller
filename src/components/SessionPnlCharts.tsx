@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { Center, Loader, Stack, Tabs, Text } from '@mantine/core';
 import { PnlSnapshot } from '../types';
-import { unscaleNotional, unscalePrice, unscaleSize } from '../utils/security-master';
+import { unscalePrice, unscaleSize } from '../utils/security-master';
 
 const LINE_COLORS = ['#4c6ef5', '#f76707', '#2f9e44', '#ae3ec9', '#e03131', '#1098ad', '#f59f00', '#74c0fc'];
 
@@ -74,9 +74,9 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
       .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
       .map(d => ({
         ts: new Date(d.time).getTime(),
-        totalPnl: unscaleNotional(d.totalPnl),
-        realizedPnl: unscaleNotional(d.realizedPnl),
-        unrealizedPnl: unscaleNotional(d.unrealizedPnl),
+        totalPnl: unscalePrice(d.totalPnl),
+        realizedPnl: unscalePrice(d.realizedPnl),
+        unrealizedPnl: unscalePrice(d.unrealizedPnl),
       }));
   }, [snapshots]);
 
@@ -85,7 +85,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
     snapshots.forEach(s => {
       const key = bucketTime(s.snapshotTime);
       const existing = grouped.get(key) ?? { time: key };
-      existing[String(s.listingId)] = unscaleNotional(Number(s.totalPnl));
+      existing[String(s.listingId)] = unscalePrice(Number(s.totalPnl));
       grouped.set(key, existing);
     });
     return Array.from(grouped.values())
