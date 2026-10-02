@@ -25,6 +25,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
 import { PnlSnapshot, RiskPolicy, RISK_POLICY_TYPES, Strategy, StrategySession, StrategySessionStatus, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
+import { formatRiskParameters, scaleRiskParameters } from '../../utils/risk-parameters';
 import DeploySessionModal from '../Sessions/DeploySessionModal';
 import StrategyFormModal from './StrategyFormModal';
 import { PnlSnapshotTable } from '../../components/PnlSnapshotTable';
@@ -111,7 +112,7 @@ function StrategyDetail() {
   const handleCreatePolicy = async () => {
     setPolicyError(null);
     try {
-      const parameters = JSON.parse(policyForm.parametersJson);
+      const parameters = scaleRiskParameters(JSON.parse(policyForm.parametersJson));
       await registryApi.createRiskPolicy({
         policyType: policyForm.policyType,
         scope: policyForm.scope,
@@ -211,6 +212,12 @@ function StrategyDetail() {
   const policyColumns = useMemo<MRT_ColumnDef<RiskPolicy>[]>(() => [
     { accessorKey: 'policyId', header: 'ID', enableSorting: true, size: 60 },
     { accessorKey: 'policyType', header: 'Type', enableSorting: true },
+    {
+      id: 'parameters',
+      header: 'Limits',
+      enableSorting: false,
+      Cell: ({ row }: { row: MRT_Row<RiskPolicy> }) => formatRiskParameters(row.original.parameters),
+    },
     {
       accessorKey: 'enabled',
       header: 'Enabled',
@@ -403,7 +410,7 @@ function StrategyDetail() {
             onChange={(v) => setPolicyForm((f) => ({ ...f, scope: Number(v) }))}
           />
           <Textarea
-            label="Parameters (JSON)"
+            label="Parameters (JSON, in dollars and units)"
             description={RISK_POLICY_TYPES.find((t) => t.value === policyForm.policyType)?.parametersHint}
             value={policyForm.parametersJson}
             onChange={(e) => setPolicyForm((f) => ({ ...f, parametersJson: e.target.value }))}

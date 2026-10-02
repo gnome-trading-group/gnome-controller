@@ -21,6 +21,7 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { RiskPolicy, RISK_POLICY_TYPES } from '../../types';
 import { registryApi } from '../../utils/api';
+import { formatRiskParameters, scaleRiskParameters } from '../../utils/risk-parameters';
 
 const KILL_SWITCH_TYPE = 'KILL_SWITCH';
 
@@ -81,7 +82,7 @@ function RiskPolicies() {
   const handleCreate = async () => {
     setCreateError(null);
     try {
-      const parameters = JSON.parse(policyForm.parametersJson);
+      const parameters = scaleRiskParameters(JSON.parse(policyForm.parametersJson));
       await registryApi.createRiskPolicy({
         policyType: policyForm.policyType,
         scope: policyForm.scope,
@@ -120,6 +121,12 @@ function RiskPolicies() {
     { accessorKey: 'scope', header: 'Scope', enableSorting: true, size: 70 },
     { accessorKey: 'strategyId', header: 'Strategy', enableSorting: true, size: 80 },
     { accessorKey: 'listingId', header: 'Listing', enableSorting: true, size: 80 },
+    {
+      id: 'parameters',
+      header: 'Limits',
+      enableSorting: false,
+      Cell: ({ row }: { row: MRT_Row<RiskPolicy> }) => formatRiskParameters(row.original.parameters),
+    },
     {
       accessorKey: 'enabled',
       header: 'Enabled',
@@ -236,7 +243,7 @@ function RiskPolicies() {
             onChange={(v) => setPolicyForm((f) => ({ ...f, listingId: v !== '' ? String(v) : '' }))}
           />
           <Textarea
-            label="Parameters (JSON)"
+            label="Parameters (JSON, in dollars and units)"
             description={RISK_POLICY_TYPES.find((t) => t.value === policyForm.policyType)?.parametersHint}
             value={policyForm.parametersJson}
             onChange={(e) => setPolicyForm((f) => ({ ...f, parametersJson: e.target.value }))}
