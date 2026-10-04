@@ -1,6 +1,6 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
-import { ContractRelationship, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, HedgeKeyword, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, Security, Strategy } from '../types';
+import { ContractRelationship, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, HedgeKeyword, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, RiskPolicyHistory, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse, ResearchArtifactListResponse, ResearchDatasetListResponse } from '../types/research';
 import { PipelineListResponse, PipelineDetailResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
@@ -425,13 +425,13 @@ export const registryApi = {
       preserveKeys: new Set(['args', 'config']),
       body: request,
     }),
-  stopSession: (sessionId: string) =>
+  // Cognito-authenticated (no apiKey) so the registry can attribute the kill-switch audit entry to the operator.
+  stopSession: (sessionId: string, stopGraceMs?: number) =>
     sendApiRequest<StrategySession>('/strategy-sessions/stop', 'POST', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       preserveKeys: new Set(['args', 'config']),
-      body: { sessionId },
+      body: { sessionId, stopGraceMs },
     }),
   getSessionLogs: (sessionId: string) =>
     sendApiRequest<{ logs: Array<{ taskArn: string; logs: Array<{ timestamp: number; message: string }>; consoleUrl: string }> }>(
@@ -618,27 +618,33 @@ export const registryApi = {
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
     }),
-  createRiskPolicy: (policy: Omit<RiskPolicy, 'policyId' | 'dateCreated' | 'dateModified'>) =>
-    sendApiRequest<RiskPolicy>('/risk/policies', 'POST', {
+  listRiskPolicyHistory: (policyId: number) =>
+    sendApiRequest<RiskPolicyHistory[]>('/risk/policies/history', 'GET', {
       apiUrl: REGISTRY_API_URL,
       apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
+      preserveKeys: new Set(['oldParameters', 'newParameters']),
+      queryParams: { policyId },
+    }),
+  // Risk policy mutations are Cognito-authenticated (no apiKey) so the audit log records the operator as actor.
+  createRiskPolicy: (policy: Omit<RiskPolicy, 'policyId' | 'dateCreated' | 'dateModified'> & { reason?: string }) =>
+    sendApiRequest<RiskPolicy>('/risk/policies', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
       body: policy,
     }),
-  updateRiskPolicy: (policyId: number, policy: Partial<RiskPolicy>) =>
+  updateRiskPolicy: (policyId: number, policy: Partial<RiskPolicy> & { reason?: string }) =>
     sendApiRequest<{ message: string }>('/risk/policies', 'PATCH', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body: policy,
       queryParams: { policyId },
     }),
-  deleteRiskPolicy: (policyId: number) =>
+  deleteRiskPolicy: (policyId: number, reason?: string) =>
     sendApiRequest<{ message: string }>('/risk/policies', 'DELETE', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
-      body: { policyId },
+      body: { policyId, reason },
     }),
   listEventsPaginated: (params: PaginationParams) => {
     const queryParams: Record<string, string | number | boolean> = {};

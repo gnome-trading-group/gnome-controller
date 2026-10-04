@@ -5,6 +5,7 @@ import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
+import * as ssm from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 import * as path from "path";
 import { execSync } from "child_process";
@@ -194,6 +195,13 @@ export class FrontendStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ControllerCustomDomainUrl", {
       value: `https://${props.domainName}`,
       description: "Controller UI custom domain URL",
+    });
+
+    // gnome-registry's API authorizer lives in another repo and imports the pool by ARN from here.
+    new ssm.StringParameter(this, "UserPoolArnParameter", {
+      parameterName: "/gnome/cognito/user-pool-arn",
+      stringValue: this.userPool.userPoolArn,
+      description: "Controller Cognito user pool ARN, used by gnome-registry's Cognito authorizer",
     });
 
     new cdk.CfnOutput(this, "UserPoolId", {

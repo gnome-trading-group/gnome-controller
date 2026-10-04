@@ -5,12 +5,10 @@ import {
   Alert,
   Anchor,
   Badge,
-  Button,
   Card,
   Code,
   Container,
   Group,
-  Modal,
   SegmentedControl,
   SimpleGrid,
   Space,
@@ -25,6 +23,7 @@ import ReactTimeAgo from 'react-time-ago';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { PnlSnapshot, StrategySession, StrategySessionStatus, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
+import { StopSessionModal } from './StopSessionModal';
 import { ContainerLogs, TaskLogs } from '../../components/ContainerLogs';
 import { PnlSnapshotTable } from '../../components/PnlSnapshotTable';
 import { SessionPnlCharts } from '../../components/SessionPnlCharts';
@@ -96,7 +95,6 @@ function SessionDetail() {
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [stopOpen, setStopOpen] = useState(false);
-  const [stopping, setStopping] = useState(false);
   const [relaunchOpen, setRelaunchOpen] = useState(false);
   const relaunchSessionRef = useRef<StrategySession | null>(null);
   const [pnlRows, setPnlRows] = useState<PnlSnapshot[]>([]);
@@ -189,20 +187,6 @@ function SessionDetail() {
     const interval = setInterval(loadHistory, 30000);
     return () => clearInterval(interval);
   }, [loadHistory, session?.status]);
-
-  const handleStop = async () => {
-    if (!session) return;
-    setStopping(true);
-    try {
-      await registryApi.stopSession(session.sessionId);
-      setStopOpen(false);
-      refresh();
-    } catch (e) {
-      console.error('Failed to stop session:', e);
-    } finally {
-      setStopping(false);
-    }
-  };
 
   const isStoppable = session?.status === StrategySessionStatus.SUBMITTED || session?.status === StrategySessionStatus.RUNNING;
   const isRelaunchable = session?.status === StrategySessionStatus.STOPPED || session?.status === StrategySessionStatus.FAILED;
@@ -369,15 +353,7 @@ function SessionDetail() {
         preselectedStrategyId={session?.strategyId}
       />
 
-      <Modal opened={stopOpen} onClose={() => setStopOpen(false)} title="Stop Session" size="sm">
-        <Stack>
-          <Text>Stop session <Text span fw={500} style={{ fontFamily: 'monospace' }}>{sessionId?.slice(0, 8)}…</Text>?</Text>
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setStopOpen(false)}>Cancel</Button>
-            <Button color="red" loading={stopping} onClick={handleStop}>Stop</Button>
-          </Group>
-        </Stack>
-      </Modal>
+      <StopSessionModal session={stopOpen ? session : null} onClose={() => setStopOpen(false)} onStopped={() => refresh()} />
     </Container>
   );
 }

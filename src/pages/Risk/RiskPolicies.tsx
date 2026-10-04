@@ -16,14 +16,20 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconAlertTriangle, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconAlertTriangle, IconHistory, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { RiskPolicy, RISK_POLICY_TYPES } from '../../types';
 import { registryApi } from '../../utils/api';
 import { formatRiskParameters, scaleRiskParameters } from '../../utils/risk-parameters';
+import { errorMessage, findKillSwitch, isKillSwitch, RiskScope, setKillSwitch } from '../../utils/kill-switch';
+import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
+import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
+import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal';
+import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
 
-const KILL_SWITCH_TYPE = 'KILL_SWITCH';
+const GLOBAL_KILL_SWITCH = { scope: RiskScope.GLOBAL } as const;
+const POLL_INTERVAL_MS = 5000;
 
 function RiskPolicies() {
   const [policies, setPolicies] = useState<RiskPolicy[]>([]);
@@ -31,7 +37,9 @@ function RiskPolicies() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RiskPolicy | null>(null);
   const [toggleTarget, setToggleTarget] = useState<RiskPolicy | null>(null);
-  const [haltConfirmOpen, setHaltConfirmOpen] = useState(false);
+  const [killSwitchAction, setKillSwitchAction] = useState<'halt' | 'resume' | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<RiskPolicy | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [policyForm, setPolicyForm] = useState({
     policyType: '',
     scope: 1,
@@ -42,41 +50,39 @@ function RiskPolicies() {
   });
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const data = await registryApi.listRiskPolicies();
       setPolicies(data);
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(errorMessage(e, 'Failed to load risk policies'));
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+  // Polled so a kill switch flipped elsewhere (another operator, or the OMS on a risk breach) shows up quickly.
+  useEffect(() => {
+    const interval = setInterval(() => refresh(false), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [refresh]);
 
-  const killSwitch = policies.find((p) => p.policyType === KILL_SWITCH_TYPE && p.scope === 0);
+  const killSwitch = findKillSwitch(policies, GLOBAL_KILL_SWITCH);
   const tradingHalted = killSwitch?.enabled ?? false;
+  const latestKillSwitchEntry = useLatestPolicyHistory(killSwitch);
 
-  const handleToggleKillSwitch = async () => {
-    if (!killSwitch) return;
-    if (!tradingHalted) {
-      setHaltConfirmOpen(true);
-    } else {
-      await registryApi.updateRiskPolicy(killSwitch.policyId, { enabled: false });
-      refresh();
-    }
+  const confirmKillSwitch = async (reason: string | undefined) => {
+    await setKillSwitch(killSwitch, GLOBAL_KILL_SWITCH, killSwitchAction === 'halt', reason);
+    refresh(false);
   };
 
-  const confirmHalt = async () => {
-    if (!killSwitch) return;
-    await registryApi.updateRiskPolicy(killSwitch.policyId, { enabled: true });
-    setHaltConfirmOpen(false);
-    refresh();
-  };
-
-  const handleToggleEnabled = async (policy: RiskPolicy) => {
-    await registryApi.updateRiskPolicy(policy.policyId, { enabled: !policy.enabled });
-    refresh();
+  const confirmToggleEnabled = async (reason: string | undefined) => {
+    if (!toggleTarget) return;
+    await registryApi.updateRiskPolicy(toggleTarget.policyId, { enabled: !toggleTarget.enabled, reason });
+    refresh(false);
   };
 
   const handleCreate = async () => {
@@ -99,19 +105,14 @@ function RiskPolicies() {
     }
   };
 
-  const handleDelete = async () => {
+  const confirmDelete = async (reason: string | undefined) => {
     if (!deleteTarget) return;
-    try {
-      await registryApi.deleteRiskPolicy(deleteTarget.policyId);
-      setDeleteTarget(null);
-      refresh();
-    } catch (e) {
-      console.error('Failed to delete policy:', e);
-    }
+    await registryApi.deleteRiskPolicy(deleteTarget.policyId, reason);
+    refresh(false);
   };
 
   const nonKillSwitchPolicies = useMemo(
-    () => policies.filter((p) => !(p.policyType === KILL_SWITCH_TYPE && p.scope === 0)),
+    () => policies.filter((p) => !isKillSwitch(p, GLOBAL_KILL_SWITCH)),
     [policies],
   );
 
@@ -164,9 +165,16 @@ function RiskPolicies() {
     initialState: { sorting: [{ id: 'policyId', desc: false }], density: 'xs' },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     renderRowActions: ({ row }: { row: MRT_Row<RiskPolicy> }) => (
-      <ActionIcon variant="subtle" color="red" onClick={() => setDeleteTarget(row.original)}>
-        <IconTrash size={16} />
-      </ActionIcon>
+      <Group gap={4} justify="center" wrap="nowrap">
+        <Tooltip label="History" withArrow openDelay={500}>
+          <ActionIcon variant="subtle" color="blue" onClick={() => setHistoryTarget(row.original)}>
+            <IconHistory size={16} />
+          </ActionIcon>
+        </Tooltip>
+        <ActionIcon variant="subtle" color="red" onClick={() => setDeleteTarget(row.original)}>
+          <IconTrash size={16} />
+        </ActionIcon>
+      </Group>
     ),
   });
 
@@ -176,7 +184,7 @@ function RiskPolicies() {
         <Title order={2}>Risk Policies</Title>
         <Group>
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh}>
+            <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()}>
               <IconRefresh size={20} />
             </ActionIcon>
           </Tooltip>
@@ -188,6 +196,8 @@ function RiskPolicies() {
         </Group>
       </Group>
 
+      {loadError && <Alert mb="md" color="red" title="Error">{loadError}</Alert>}
+
       <Alert
         mb="xl"
         color={tradingHalted ? 'red' : 'green'}
@@ -195,20 +205,29 @@ function RiskPolicies() {
         icon={tradingHalted ? <IconAlertTriangle size={20} /> : undefined}
       >
         <Group justify="space-between" align="center">
-          <Text size="sm">
-            {tradingHalted
-              ? 'Kill switch is ACTIVE — all order flow is blocked.'
-              : 'All systems go. Kill switch is inactive (trading allowed).'}
-          </Text>
-          <Button
-            color={tradingHalted ? 'green' : 'red'}
-            variant="filled"
-            size="sm"
-            onClick={handleToggleKillSwitch}
-            disabled={!killSwitch}
-          >
-            {tradingHalted ? 'RESUME TRADING' : 'HALT ALL TRADING'}
-          </Button>
+          <Stack gap={4}>
+            <Text size="sm">
+              {tradingHalted
+                ? 'Kill switch is ACTIVE — all open orders were cancelled and all order flow is blocked.'
+                : 'All systems go. Kill switch is inactive (trading allowed).'}
+            </Text>
+            {killSwitch && <KillSwitchLatestEntry entry={latestKillSwitchEntry} enabled={tradingHalted} />}
+          </Stack>
+          <Group>
+            {killSwitch && (
+              <Button variant="outline" size="sm" leftSection={<IconHistory size={16} />} onClick={() => setHistoryTarget(killSwitch)}>
+                History
+              </Button>
+            )}
+            <Button
+              color={tradingHalted ? 'green' : 'red'}
+              variant="filled"
+              size="sm"
+              onClick={() => setKillSwitchAction(tradingHalted ? 'resume' : 'halt')}
+            >
+              {tradingHalted ? 'RESUME TRADING' : 'HALT ALL TRADING'}
+            </Button>
+          </Group>
         </Group>
       </Alert>
 
@@ -263,42 +282,49 @@ function RiskPolicies() {
         </Stack>
       </Modal>
 
-      <Modal opened={haltConfirmOpen} onClose={() => setHaltConfirmOpen(false)} title="Halt All Trading" size="sm">
-        <Stack>
-          <Text>This will immediately disable the kill switch and block all order flow. Are you sure?</Text>
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setHaltConfirmOpen(false)}>Cancel</Button>
-            <Button color="red" onClick={confirmHalt}>HALT ALL TRADING</Button>
-          </Group>
-        </Stack>
-      </Modal>
+      <ReasonConfirmModal
+        opened={killSwitchAction === 'halt'}
+        onClose={() => setKillSwitchAction(null)}
+        title="Halt All Trading"
+        message="This will immediately cancel all open orders across every strategy and listing and block all new order flow. Trading stays halted until the kill switch is turned off. Are you sure?"
+        confirmLabel="HALT ALL TRADING"
+        onConfirm={confirmKillSwitch}
+      />
 
-      <Modal opened={!!toggleTarget} onClose={() => setToggleTarget(null)} title="Confirm Toggle" size="sm">
-        <Stack>
+      <ReasonConfirmModal
+        opened={killSwitchAction === 'resume'}
+        onClose={() => setKillSwitchAction(null)}
+        title="Resume Trading"
+        message="This will turn off the global kill switch and allow all strategies to send orders again (strategy- and listing-level kill switches still apply). Are you sure?"
+        confirmLabel="RESUME TRADING"
+        confirmColor="green"
+        onConfirm={confirmKillSwitch}
+      />
+
+      <ReasonConfirmModal
+        opened={!!toggleTarget}
+        onClose={() => setToggleTarget(null)}
+        title="Confirm Toggle"
+        message={
           <Text>
             {toggleTarget?.enabled ? 'Disable' : 'Enable'} policy <Text span fw={500}>{toggleTarget?.policyType}</Text>?
           </Text>
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setToggleTarget(null)}>Cancel</Button>
-            <Button
-              color={toggleTarget?.enabled ? 'red' : 'green'}
-              onClick={() => { handleToggleEnabled(toggleTarget!); setToggleTarget(null); }}
-            >
-              {toggleTarget?.enabled ? 'Disable' : 'Enable'}
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+        }
+        confirmLabel={toggleTarget?.enabled ? 'Disable' : 'Enable'}
+        confirmColor={toggleTarget?.enabled ? 'red' : 'green'}
+        onConfirm={confirmToggleEnabled}
+      />
 
-      <Modal opened={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Delete" size="sm">
-        <Stack>
-          <Text>Delete policy <Text span fw={500}>{deleteTarget?.policyType}</Text>?</Text>
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button color="red" onClick={handleDelete}>Delete</Button>
-          </Group>
-        </Stack>
-      </Modal>
+      <ReasonConfirmModal
+        opened={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Confirm Delete"
+        message={<Text>Delete policy <Text span fw={500}>{deleteTarget?.policyType}</Text>?</Text>}
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+      />
+
+      <RiskPolicyHistoryModal policy={historyTarget} onClose={() => setHistoryTarget(null)} />
     </Container>
   );
 }

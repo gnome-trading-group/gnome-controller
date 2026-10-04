@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ActionIcon,
+  Alert,
   Button,
+  Checkbox,
   Divider,
   Group,
   JsonInput,
@@ -15,10 +17,13 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconPlus, IconTrash } from '@tabler/icons-react';
-import { Strategy, ConfigValue, StrategySession } from '../../types';
+import { IconAlertTriangle, IconPlus, IconTrash } from '@tabler/icons-react';
+import ReactTimeAgo from 'react-time-ago';
+import { Strategy, ConfigValue, RiskPolicy, StrategySession } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
+import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
+import { findKillSwitch, formatActor, RiskScope } from '../../utils/kill-switch';
 import { STRATEGY_CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestStrategySizing } from '../../utils/sizing';
 import {
   defaultSimulationState,
@@ -125,6 +130,25 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   const [sizingUserOverridden, setSizingUserOverridden] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [strategyKillSwitch, setStrategyKillSwitch] = useState<RiskPolicy | undefined>(undefined);
+  const [resumeOnLaunch, setResumeOnLaunch] = useState(false);
+
+  const strategyKilled = strategyKillSwitch?.enabled ?? false;
+  const latestKillSwitchEntry = useLatestPolicyHistory(strategyKilled ? strategyKillSwitch : undefined);
+
+  useEffect(() => {
+    setResumeOnLaunch(false);
+    if (!opened || !strategyId) {
+      setStrategyKillSwitch(undefined);
+      return;
+    }
+    let cancelled = false;
+    const target = { scope: RiskScope.STRATEGY, strategyId: parseInt(strategyId) } as const;
+    registryApi.listRiskPolicies()
+      .then((policies) => { if (!cancelled) setStrategyKillSwitch(findKillSwitch(policies, target)); })
+      .catch((e) => console.error('Failed to load risk policies:', e));
+    return () => { cancelled = true; };
+  }, [opened, strategyId]);
 
   const liveListingMergedData = useMemo(() => [
     ...Object.entries(selectedLiveListingItems)
@@ -285,6 +309,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     setMemory(8192);
     setSizingUserOverridden(false);
     setError(null);
+    setResumeOnLaunch(false);
   };
 
   const handleClose = () => { resetForm(); onClose(); };
@@ -309,6 +334,10 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
 
     setSubmitting(true);
     try {
+      if (strategyKillSwitch?.enabled && resumeOnLaunch) {
+        await registryApi.updateRiskPolicy(strategyKillSwitch.policyId, { enabled: false, reason: 'resumed on launch' });
+        setStrategyKillSwitch({ ...strategyKillSwitch, enabled: false });
+      }
       const newSessionId = crypto.randomUUID();
       await registryApi.createSession({
         sessionId: newSessionId,
@@ -437,6 +466,25 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
               onListingsChange={setListings}
             />
           </>
+        )}
+
+        {strategyKilled && strategyKillSwitch && (
+          <Alert color="orange" title="Strategy is killed" icon={<IconAlertTriangle size={20} />}>
+            <Stack gap="xs">
+              <Text size="sm">
+                Strategy {strategyId} is killed (since{' '}
+                <ReactTimeAgo date={new Date(latestKillSwitchEntry?.changedAt ?? strategyKillSwitch.dateModified)} timeStyle="round" />
+                {latestKillSwitchEntry && <>, by {formatActor(latestKillSwitchEntry.actor)}</>}
+                {latestKillSwitchEntry?.reason ? `: ${latestKillSwitchEntry.reason}` : ''}).
+                {' '}A session launched now will not be able to send orders.
+              </Text>
+              <Checkbox
+                label="Resume trading on launch"
+                checked={resumeOnLaunch}
+                onChange={(e) => setResumeOnLaunch(e.currentTarget.checked)}
+              />
+            </Stack>
+          </Alert>
         )}
 
         {error && <Text c="red" size="sm">{error}</Text>}

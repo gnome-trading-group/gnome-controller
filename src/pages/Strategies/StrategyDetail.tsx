@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Checkbox,
@@ -18,7 +19,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconAB2, IconArrowLeft, IconEdit, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconAB2, IconAlertTriangle, IconArrowLeft, IconEdit, IconHistory, IconPlayerPlay, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -29,6 +30,12 @@ import { formatRiskParameters, scaleRiskParameters } from '../../utils/risk-para
 import DeploySessionModal from '../Sessions/DeploySessionModal';
 import StrategyFormModal from './StrategyFormModal';
 import { PnlSnapshotTable } from '../../components/PnlSnapshotTable';
+import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
+import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal';
+import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
+import { StopSessionModal } from '../Sessions/StopSessionModal';
+import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
+import { findKillSwitch, RiskScope, setKillSwitch } from '../../utils/kill-switch';
 
 const SESSION_STATUS_COLORS: Record<string, string> = {
   [StrategySessionStatus.SUBMITTED]: 'blue',
@@ -69,9 +76,11 @@ function StrategyDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [stopTarget, setStopTarget] = useState<StrategySession | null>(null);
   const [relaunchSession, setRelaunchSession] = useState<StrategySession | null>(null);
-  const [stopping, setStopping] = useState(false);
   const [createPolicyOpen, setCreatePolicyOpen] = useState(false);
   const [deletePolicyTarget, setDeletePolicyTarget] = useState<RiskPolicy | null>(null);
+  const [toggleTarget, setToggleTarget] = useState<RiskPolicy | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<RiskPolicy | null>(null);
+  const [killAction, setKillAction] = useState<'kill' | 'resume' | null>(null);
   const [policyForm, setPolicyForm] = useState({
     policyType: '',
     scope: 1,
@@ -104,9 +113,20 @@ function StrategyDetail() {
     return () => clearInterval(interval);
   }, [refresh]);
 
-  const handleToggleEnabled = async (policy: RiskPolicy) => {
-    await registryApi.updateRiskPolicy(policy.policyId, { enabled: !policy.enabled });
-    refresh();
+  const killSwitchTarget = useMemo(() => ({ scope: RiskScope.STRATEGY, strategyId: id }) as const, [id]);
+  const killSwitch = findKillSwitch(policies, killSwitchTarget);
+  const strategyKilled = killSwitch?.enabled ?? false;
+  const latestKillSwitchEntry = useLatestPolicyHistory(killSwitch);
+
+  const confirmKillAction = async (reason: string | undefined) => {
+    await setKillSwitch(killSwitch, killSwitchTarget, killAction === 'kill', reason);
+    refresh(false);
+  };
+
+  const confirmToggleEnabled = async (reason: string | undefined) => {
+    if (!toggleTarget) return;
+    await registryApi.updateRiskPolicy(toggleTarget.policyId, { enabled: !toggleTarget.enabled, reason });
+    refresh(false);
   };
 
   const handleCreatePolicy = async () => {
@@ -128,29 +148,10 @@ function StrategyDetail() {
     }
   };
 
-  const handleDeletePolicy = async () => {
+  const confirmDeletePolicy = async (reason: string | undefined) => {
     if (!deletePolicyTarget) return;
-    try {
-      await registryApi.deleteRiskPolicy(deletePolicyTarget.policyId);
-      setDeletePolicyTarget(null);
-      refresh();
-    } catch (e) {
-      console.error('Failed to delete policy:', e);
-    }
-  };
-
-  const handleStopSession = async () => {
-    if (!stopTarget) return;
-    setStopping(true);
-    try {
-      await registryApi.stopSession(stopTarget.sessionId);
-      setStopTarget(null);
-      refresh();
-    } catch (e) {
-      console.error('Failed to stop session:', e);
-    } finally {
-      setStopping(false);
-    }
+    await registryApi.deleteRiskPolicy(deletePolicyTarget.policyId, reason);
+    refresh(false);
   };
 
   const isStoppable = (s: StrategySession) =>
@@ -225,7 +226,7 @@ function StrategyDetail() {
       Cell: ({ row }: { row: MRT_Row<RiskPolicy> }) => (
         <Switch
           checked={row.original.enabled}
-          onChange={() => handleToggleEnabled(row.original)}
+          onChange={() => setToggleTarget(row.original)}
         />
       ),
     },
@@ -294,9 +295,16 @@ function StrategyDetail() {
     initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 15 } },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     renderRowActions: ({ row }: { row: MRT_Row<RiskPolicy> }) => (
-      <ActionIcon variant="subtle" color="red" onClick={() => setDeletePolicyTarget(row.original)}>
-        <IconTrash size={16} />
-      </ActionIcon>
+      <Group gap={4} justify="center" wrap="nowrap">
+        <Tooltip label="History" withArrow openDelay={500}>
+          <ActionIcon variant="subtle" color="blue" onClick={() => setHistoryTarget(row.original)}>
+            <IconHistory size={16} />
+          </ActionIcon>
+        </Tooltip>
+        <ActionIcon variant="subtle" color="red" onClick={() => setDeletePolicyTarget(row.original)}>
+          <IconTrash size={16} />
+        </ActionIcon>
+      </Group>
     ),
   });
 
@@ -317,6 +325,13 @@ function StrategyDetail() {
           )}
         </Group>
         <Group>
+          <Button
+            color={strategyKilled ? 'green' : 'red'}
+            leftSection={strategyKilled ? <IconPlayerPlay size={16} /> : <IconPlayerStop size={16} />}
+            onClick={() => setKillAction(strategyKilled ? 'resume' : 'kill')}
+          >
+            {strategyKilled ? 'Resume strategy' : 'Kill strategy'}
+          </Button>
           <Tooltip label="Edit Strategy" position="bottom" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setEditOpen(true)}>
               <IconEdit size={20} />
@@ -329,6 +344,24 @@ function StrategyDetail() {
           </Tooltip>
         </Group>
       </Group>
+
+      {strategyKilled && (
+        <Alert mb="xl" color="red" title="Strategy Killed" icon={<IconAlertTriangle size={20} />}>
+          <Group justify="space-between" align="center">
+            <Stack gap={4}>
+              <Text size="sm">
+                Kill switch is ACTIVE — all of this strategy's open orders were cancelled and its sessions cannot send orders until it is resumed.
+              </Text>
+              <KillSwitchLatestEntry entry={latestKillSwitchEntry} enabled />
+            </Stack>
+            {killSwitch && (
+              <Button variant="outline" size="sm" leftSection={<IconHistory size={16} />} onClick={() => setHistoryTarget(killSwitch)}>
+                History
+              </Button>
+            )}
+          </Group>
+        </Alert>
+      )}
 
       <PnlSnapshotTable
         title="PnL Snapshot (latest per listing)"
@@ -381,15 +414,46 @@ function StrategyDetail() {
         strategy={strategy}
       />
 
-      <Modal opened={!!stopTarget} onClose={() => setStopTarget(null)} title="Stop Session" size="sm">
-        <Stack>
-          <Text>Stop session <Text span fw={500} style={{ fontFamily: 'monospace' }}>{stopTarget?.sessionId.slice(0, 8)}…</Text>?</Text>
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setStopTarget(null)}>Cancel</Button>
-            <Button color="red" loading={stopping} onClick={handleStopSession}>Stop</Button>
-          </Group>
-        </Stack>
-      </Modal>
+      <StopSessionModal
+        session={stopTarget}
+        onClose={() => setStopTarget(null)}
+        onStopped={() => refresh(false)}
+      />
+
+      <ReasonConfirmModal
+        opened={killAction === 'kill'}
+        onClose={() => setKillAction(null)}
+        title="Kill Strategy"
+        message={`This will immediately cancel all open orders for strategy ${strategy?.name ?? id} and block all of its sessions from sending orders. The strategy stays killed until resumed. Are you sure?`}
+        confirmLabel="Kill strategy"
+        onConfirm={confirmKillAction}
+      />
+
+      <ReasonConfirmModal
+        opened={killAction === 'resume'}
+        onClose={() => setKillAction(null)}
+        title="Resume Strategy"
+        message={`This will turn off the kill switch for strategy ${strategy?.name ?? id} and allow its running sessions to send orders again. Are you sure?`}
+        confirmLabel="Resume strategy"
+        confirmColor="green"
+        onConfirm={confirmKillAction}
+      />
+
+      <ReasonConfirmModal
+        opened={!!toggleTarget}
+        onClose={() => setToggleTarget(null)}
+        title="Confirm Toggle"
+        message={
+          <Text>
+            {toggleTarget?.enabled ? 'Disable' : 'Enable'} policy <Text span fw={500}>{toggleTarget?.policyType}</Text>?
+          </Text>
+        }
+        confirmLabel={toggleTarget?.enabled ? 'Disable' : 'Enable'}
+        confirmColor={toggleTarget?.enabled ? 'red' : 'green'}
+        onConfirm={confirmToggleEnabled}
+      />
+
+      <RiskPolicyHistoryModal policy={historyTarget} onClose={() => setHistoryTarget(null)} />
 
       <Modal opened={createPolicyOpen} onClose={() => setCreatePolicyOpen(false)} title="Add Risk Policy" size="md">
         <Stack>
@@ -430,15 +494,14 @@ function StrategyDetail() {
         </Stack>
       </Modal>
 
-      <Modal opened={!!deletePolicyTarget} onClose={() => setDeletePolicyTarget(null)} title="Confirm Delete" size="sm">
-        <Stack>
-          <Text>Delete policy <Text span fw={500}>{deletePolicyTarget?.policyType}</Text>?</Text>
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setDeletePolicyTarget(null)}>Cancel</Button>
-            <Button color="red" onClick={handleDeletePolicy}>Delete</Button>
-          </Group>
-        </Stack>
-      </Modal>
+      <ReasonConfirmModal
+        opened={!!deletePolicyTarget}
+        onClose={() => setDeletePolicyTarget(null)}
+        title="Confirm Delete"
+        message={<Text>Delete policy <Text span fw={500}>{deletePolicyTarget?.policyType}</Text>?</Text>}
+        confirmLabel="Delete"
+        onConfirm={confirmDeletePolicy}
+      />
     </Container>
   );
 }

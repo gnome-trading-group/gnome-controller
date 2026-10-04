@@ -52,3 +52,18 @@ export interface RiskPolicy {
   dateCreated: string;
   dateModified: string;
 }
+
+export type RiskPolicyHistoryAction = 'INSERT' | 'UPDATE' | 'DELETE';
+
+export interface RiskPolicyHistory {
+  historyId: number;
+  policyId: number;
+  action: RiskPolicyHistoryAction;
+  oldEnabled: boolean | null;
+  newEnabled: boolean | null;
+  oldParameters: Record<string, unknown> | null;
+  newParameters: Record<string, unknown> | null;
+  actor: string | null;
+  reason: string | null;
+  changedAt: string;
+}

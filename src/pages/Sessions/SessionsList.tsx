@@ -2,13 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ActionIcon,
   Badge,
-  Button,
   Container,
   Group,
-  Modal,
   Select,
-  Stack,
-  Text,
   Title,
   Tooltip,
 } from '@mantine/core';
@@ -18,6 +14,7 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { useNavigate } from 'react-router-dom';
 import { Strategy, StrategySession, StrategySessionStatus } from '../../types';
 import { registryApi } from '../../utils/api';
+import { StopSessionModal } from './StopSessionModal';
 import { navigateRowProps, handleNavigateClick } from '../../utils/navigation';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
@@ -49,7 +46,6 @@ function SessionsList() {
   const [strategyOptions, setStrategyOptions] = useState<{ value: string; label: string }[]>([]);
   const [deployOpen, setDeployOpen] = useState(false);
   const [stopTarget, setStopTarget] = useState<StrategySession | null>(null);
-  const [stopping, setStopping] = useState(false);
   const [relaunchSession, setRelaunchSession] = useState<StrategySession | null>(null);
 
   const urlState = useUrlTableState({ defaultSort: { id: 'dateCreated', desc: true } });
@@ -93,20 +89,6 @@ function SessionsList() {
         setGlobalFilter: urlState.setGlobalFilter,
       },
     });
-
-  const handleStop = async () => {
-    if (!stopTarget) return;
-    setStopping(true);
-    try {
-      await registryApi.stopSession(stopTarget.sessionId);
-      setStopTarget(null);
-      refresh();
-    } catch (e) {
-      console.error('Failed to stop session:', e);
-    } finally {
-      setStopping(false);
-    }
-  };
 
   const columns = useMemo<MRT_ColumnDef<StrategySession>[]>(() => [
     {
@@ -270,15 +252,7 @@ function SessionsList() {
         initialSession={relaunchSession}
       />
 
-      <Modal opened={!!stopTarget} onClose={() => setStopTarget(null)} title="Stop Session" size="sm">
-        <Stack>
-          <Text>Stop session <Text span fw={500} style={{ fontFamily: 'monospace' }}>{stopTarget?.sessionId.slice(0, 8)}…</Text>?</Text>
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setStopTarget(null)}>Cancel</Button>
-            <Button color="red" loading={stopping} onClick={handleStop}>Stop</Button>
-          </Group>
-        </Stack>
-      </Modal>
+      <StopSessionModal session={stopTarget} onClose={() => setStopTarget(null)} onStopped={() => refresh()} />
     </Container>
   );
 }

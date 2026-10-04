@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
+  Alert,
   Anchor,
   Badge,
   Breadcrumbs,
+  Button,
   Container,
   Grid,
   Group,
@@ -15,8 +17,9 @@ import {
   Title,
 } from '@mantine/core';
 import ReactTimeAgo from 'react-time-ago';
+import { IconAlertTriangle, IconHistory, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react';
 import { useGlobalState } from '../../context/GlobalStateContext';
-import { DenormalizedListing, Event, EventContract, Listing, ListingSpec, Security, SecurityType } from '../../types';
+import { DenormalizedListing, Event, EventContract, Listing, ListingSpec, RiskPolicy, Security, SecurityType } from '../../types';
 import { registryApi } from '../../utils/api';
 import {
   formatAssetClass,
@@ -27,6 +30,11 @@ import {
   unscalePrice,
   unscaleSize,
 } from '../../utils/security-master';
+import { errorMessage, findKillSwitch, RiskScope, setKillSwitch } from '../../utils/kill-switch';
+import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
+import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
+import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal';
+import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -52,6 +60,31 @@ function ListingDetail() {
   const [loadingSpecs, setLoadingSpecs] = useState(true);
   const [eventContract, setEventContract] = useState<EventContract | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
+  const [policies, setPolicies] = useState<RiskPolicy[]>([]);
+  const [policiesError, setPoliciesError] = useState<string | null>(null);
+  const [killAction, setKillAction] = useState<'kill' | 'resume' | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<RiskPolicy | null>(null);
+
+  const killSwitchTarget = useMemo(() => ({ scope: RiskScope.LISTING, listingId: id }) as const, [id]);
+  const killSwitch = findKillSwitch(policies, killSwitchTarget);
+  const listingKilled = killSwitch?.enabled ?? false;
+  const latestKillSwitchEntry = useLatestPolicyHistory(killSwitch);
+
+  const loadPolicies = useCallback(async () => {
+    try {
+      setPolicies(await registryApi.listRiskPolicies());
+      setPoliciesError(null);
+    } catch (e) {
+      setPoliciesError(errorMessage(e, 'Failed to load risk policies'));
+    }
+  }, []);
+
+  useEffect(() => { loadPolicies(); }, [loadPolicies]);
+
+  const confirmKillAction = async (reason: string | undefined) => {
+    await setKillSwitch(killSwitch, killSwitchTarget, killAction === 'kill', reason);
+    await loadPolicies();
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -113,12 +146,39 @@ function ListingDetail() {
         <Text size="sm">Listing {id}</Text>
       </Breadcrumbs>
 
-      <Group mb="xl">
+      <Group mb="xl" justify="space-between">
         <div>
           <Title order={2}>{listing.securitySymbol}</Title>
           <Text c="dimmed">{listing.exchangeName} &mdash; {listing.exchangeSecuritySymbol}</Text>
         </div>
+        <Button
+          color={listingKilled ? 'green' : 'red'}
+          leftSection={listingKilled ? <IconPlayerPlay size={16} /> : <IconPlayerStop size={16} />}
+          onClick={() => setKillAction(listingKilled ? 'resume' : 'kill')}
+        >
+          {listingKilled ? 'Resume listing' : 'Kill listing'}
+        </Button>
       </Group>
+
+      {policiesError && <Alert mb="md" color="red" title="Error">{policiesError}</Alert>}
+
+      {listingKilled && (
+        <Alert mb="xl" color="red" title="Listing Killed" icon={<IconAlertTriangle size={20} />}>
+          <Group justify="space-between" align="center">
+            <Stack gap={4}>
+              <Text size="sm">
+                Kill switch is ACTIVE — all open orders on this listing were cancelled and no strategy can send orders to it until it is resumed.
+              </Text>
+              <KillSwitchLatestEntry entry={latestKillSwitchEntry} enabled />
+            </Stack>
+            {killSwitch && (
+              <Button variant="outline" size="sm" leftSection={<IconHistory size={16} />} onClick={() => setHistoryTarget(killSwitch)}>
+                History
+              </Button>
+            )}
+          </Group>
+        </Alert>
+      )}
 
       <Grid gutter="md">
         <Grid.Col span={{ base: 12, md: 4 }}>
@@ -254,6 +314,27 @@ function ListingDetail() {
           </Grid.Col>
         )}
       </Grid>
+
+      <ReasonConfirmModal
+        opened={killAction === 'kill'}
+        onClose={() => setKillAction(null)}
+        title="Kill Listing"
+        message={`This will immediately cancel all open orders on ${listing.exchangeSecuritySymbol} (listing ${id}) across every strategy and block new orders to it. The listing stays killed until resumed. Are you sure?`}
+        confirmLabel="Kill listing"
+        onConfirm={confirmKillAction}
+      />
+
+      <ReasonConfirmModal
+        opened={killAction === 'resume'}
+        onClose={() => setKillAction(null)}
+        title="Resume Listing"
+        message={`This will turn off the kill switch for ${listing.exchangeSecuritySymbol} (listing ${id}) and allow strategies to send orders to it again. Are you sure?`}
+        confirmLabel="Resume listing"
+        confirmColor="green"
+        onConfirm={confirmKillAction}
+      />
+
+      <RiskPolicyHistoryModal policy={historyTarget} onClose={() => setHistoryTarget(null)} />
     </Container>
   );
 }
