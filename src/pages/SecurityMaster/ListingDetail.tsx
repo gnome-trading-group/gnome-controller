@@ -260,6 +260,7 @@ function ListingDetail() {
                   <Table.Tr>
                     <Table.Th>Tick Size</Table.Th>
                     <Table.Th>Lot Size</Table.Th>
+                    <Table.Th>Min Size</Table.Th>
                     <Table.Th>Min Notional</Table.Th>
                     <Table.Th>Contract Multiplier</Table.Th>
                     <Table.Th>Recorded At</Table.Th>
@@ -270,6 +271,7 @@ function ListingDetail() {
                     <Table.Tr key={i}>
                       <Table.Td>{formatUnscaled(unscalePrice(spec.tickSize))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscaleSize(spec.lotSize))}</Table.Td>
+                      <Table.Td>{formatUnscaled(unscaleSize(spec.minSize))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscalePrice(spec.minNotional))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscaleContractMultiplier(spec.contractMultiplier))}</Table.Td>
                       <Table.Td><ReactTimeAgo date={new Date(spec.recordedAt)} timeStyle="round" /></Table.Td>

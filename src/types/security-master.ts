@@ -95,6 +95,7 @@ export interface ListingSpec {
   lotSize: number;
   minNotional: number;
   contractMultiplier: number;
+  minSize: number;
   recordedAt: string;
 }
 
