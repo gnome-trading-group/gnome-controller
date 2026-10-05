@@ -82,6 +82,7 @@ function CollectorDetail() {
   const [redeployModalOpen, setRedeployModalOpen] = useState(false);
   const [redeployVersion, setRedeployVersion] = useState('');
   const [purgeModalOpen, setPurgeModalOpen] = useState(false);
+  const [actionPending, setActionPending] = useState(false);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -144,7 +145,8 @@ function CollectorDetail() {
 
   const handleStopCollector = async () => {
     if (!listingId) return;
-    
+
+    setActionPending(true);
     try {
       setError(null);
       await marketDataApi.deleteCollector(Number(listingId));
@@ -156,6 +158,7 @@ function CollectorDetail() {
         setError('Failed to stop collector');
       }
     } finally {
+      setActionPending(false);
       setStopModalOpen(false);
     }
   };
@@ -163,6 +166,7 @@ function CollectorDetail() {
   const handleRedeployCollector = async () => {
     if (!listingId) return;
 
+    setActionPending(true);
     try {
       setError(null);
       await marketDataApi.redeployCollector(Number(listingId), redeployVersion.trim() || undefined);
@@ -174,6 +178,7 @@ function CollectorDetail() {
         setError('Failed to redeploy collector');
       }
     } finally {
+      setActionPending(false);
       setRedeployModalOpen(false);
       setRedeployVersion('');
     }
@@ -182,6 +187,7 @@ function CollectorDetail() {
   const handlePurgeCollector = async () => {
     if (!listingId) return;
 
+    setActionPending(true);
     try {
       setError(null);
       await marketDataApi.purgeCollector(Number(listingId));
@@ -193,6 +199,7 @@ function CollectorDetail() {
         setError('Failed to delete collector');
       }
     } finally {
+      setActionPending(false);
       setPurgeModalOpen(false);
     }
   };
@@ -468,17 +475,18 @@ function CollectorDetail() {
 
       <Modal
         opened={stopModalOpen}
-        onClose={() => setStopModalOpen(false)}
+        onClose={() => { if (!actionPending) setStopModalOpen(false); }}
         title="Stop Collector"
       >
         <Stack>
           <Text>Are you sure you want to stop this collector?</Text>
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setStopModalOpen(false)}>
+            <Button variant="default" disabled={actionPending} onClick={() => setStopModalOpen(false)}>
               Cancel
             </Button>
-            <Button 
-              color="red" 
+            <Button
+              color="red"
+              loading={actionPending}
               onClick={handleStopCollector}
             >
               Stop Collector
@@ -489,18 +497,19 @@ function CollectorDetail() {
 
       <Modal
         opened={redeployModalOpen}
-        onClose={() => setRedeployModalOpen(false)}
+        onClose={() => { if (!actionPending) setRedeployModalOpen(false); }}
         title="Redeploy Collector"
       >
         <Stack>
           <Text>Are you sure you want to redeploy this collector?</Text>
-          <TextInput label="Orchestrator Version" placeholder="Latest" description="Blank deploys the latest release" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} />
+          <TextInput label="Orchestrator Version" placeholder="Latest" description="Blank deploys the latest release" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} disabled={actionPending} />
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setRedeployModalOpen(false)}>
+            <Button variant="default" disabled={actionPending} onClick={() => setRedeployModalOpen(false)}>
               Cancel
             </Button>
             <Button
               color="blue"
+              loading={actionPending}
               onClick={handleRedeployCollector}
             >
               Redeploy Collector
@@ -511,7 +520,7 @@ function CollectorDetail() {
 
       <Modal
         opened={purgeModalOpen}
-        onClose={() => setPurgeModalOpen(false)}
+        onClose={() => { if (!actionPending) setPurgeModalOpen(false); }}
         title="Delete Collector Record"
       >
         <Stack>
@@ -521,10 +530,10 @@ function CollectorDetail() {
             You will need to create a new collector to resume data collection.
           </Text>
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setPurgeModalOpen(false)}>
+            <Button variant="default" disabled={actionPending} onClick={() => setPurgeModalOpen(false)}>
               Cancel
             </Button>
-            <Button color="red" onClick={handlePurgeCollector}>
+            <Button color="red" loading={actionPending} onClick={handlePurgeCollector}>
               Delete Permanently
             </Button>
           </Group>

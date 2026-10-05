@@ -5,6 +5,7 @@ import { PRICE_SCALING_FACTOR, SIZE_SCALING_FACTOR, formatUnscaled } from './sec
 const PARAMETER_SCALES: Record<string, { factor: number; unit: 'dollars' | 'units' }> = {
   maxNotionalValue: { factor: PRICE_SCALING_FACTOR, unit: 'dollars' },
   maxLoss: { factor: PRICE_SCALING_FACTOR, unit: 'dollars' },
+  maxDeviation: { factor: PRICE_SCALING_FACTOR, unit: 'dollars' },
   maxOrderSize: { factor: SIZE_SCALING_FACTOR, unit: 'units' },
   maxPosition: { factor: SIZE_SCALING_FACTOR, unit: 'units' },
 };
