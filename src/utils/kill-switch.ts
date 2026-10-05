@@ -13,12 +13,13 @@ export interface KillSwitchTarget {
 
 export const GLOBAL_TARGET: KillSwitchTarget = {};
 
-// The registry fills in a session row's strategy, so a session target matches on its session alone.
+// The registry fills in a session row's strategy, so a session target leaves the strategy out; its listing still
+// separates a kill of the whole session from a kill of the session on one listing.
 export function isKillSwitch(policy: RiskPolicy, target: KillSwitchTarget): boolean {
   if (policy.policyType !== KILL_SWITCH_TYPE) return false;
   if ((policy.sessionId ?? undefined) !== target.sessionId) return false;
-  if (target.sessionId != null) return true;
-  return (policy.strategyId ?? undefined) === target.strategyId && (policy.listingId ?? undefined) === target.listingId;
+  if ((policy.listingId ?? undefined) !== target.listingId) return false;
+  return target.sessionId != null || (policy.strategyId ?? undefined) === target.strategyId;
 }
 
 // Enabled kills that stop their strategy or session on one listing only.
