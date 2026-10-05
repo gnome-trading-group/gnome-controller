@@ -83,6 +83,9 @@ export class ControllerPipelineStack extends cdk.Stack {
         input: pipelines.CodePipelineSource.gitHub(GITHUB_REPO, GITHUB_BRANCH),
         commands: [
           'echo "//npm.pkg.github.com/:_authToken=${NPM_TOKEN}" > ~/.npmrc',
+          // Installed once here so FrontendStack builds the UI for every stage on the host instead of in Docker.
+          "npm ci",
+          "npx tsc -b",
           "cd cdk/",
           "npm ci",
           "npx cdk synth"

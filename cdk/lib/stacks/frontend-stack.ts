@@ -7,6 +7,7 @@ import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
+import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
 import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
@@ -153,18 +154,23 @@ export class FrontendStack extends cdk.Stack {
 
     const asset = new cdk.AssetStaging(this, "ControllerUIAsset", {
       sourcePath: uiPath,
+      // Only the UI sources decide the hash: hashing the CDK app and installed dependencies is slow, and would
+      // redeploy the bucket and invalidate CloudFront on every CDK-only change.
+      exclude: ["node_modules", "dist", "cdk", ".git", ".env"],
       bundling: {
         image: cdk.DockerImage.fromRegistry('public.ecr.aws/docker/library/node:20'),
         local: {
+          // Builds on the host from the single `npm ci` the pipeline's Synth step runs. The Docker fallback
+          // reinstalls every dependency per stage in a cold container, which made synth take ~18 minutes.
           tryBundle(outputDir: string): boolean {
-            return false;
-            // try {
-            //   // If you're running locally, make sure to run `npm run build` in the UI beforehand
-            //   execSync(`cp -r ${uiPath}/dist/* ${path.join(outputDir)}`)
-            // } catch {
-            //   return false
-            // }
-            // return true
+            if (!fs.existsSync(path.join(uiPath, "node_modules"))) {
+              return false;
+            }
+            execSync(`npx vite build --mode ${props.stage} --outDir ${outputDir} --emptyOutDir`, {
+              cwd: uiPath,
+              stdio: ["ignore", process.stderr, process.stderr],
+            });
+            return true;
           },
         },
         command: [
