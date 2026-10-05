@@ -2,6 +2,7 @@ export type ConfigValue = string | number | boolean | Record<string, unknown> | 
 
 export enum StrategySessionStatus {
   SUBMITTED = 'SUBMITTED',
+  STARTING = 'STARTING',
   RUNNING = 'RUNNING',
   STOPPED = 'STOPPED',
   FAILED = 'FAILED',
@@ -14,8 +15,12 @@ export interface StrategySession {
   mode: string;
   config: Record<string, ConfigValue>;
   researchCommit: string | null;
-  taskArn: string | null;
-  taskDefinitionArn: string | null;
+  instanceId: string | null;
+  instanceType: string | null;
+  launchRegion: string | null;
+  availabilityZone: string | null;
+  orchestratorVersion: string | null;
+  gnomepyVersion: string | null;
   failureReason: string | null;
   startedAt: string | null;
   stoppedAt: string | null;
@@ -30,6 +35,20 @@ export interface CreateStrategySessionRequest {
   config: Record<string, ConfigValue>;
   researchCommit?: string;
   region?: string;
-  cpu?: number;
-  memory?: number;
+  availabilityZone?: string;
+  instanceType: string;
+  // Blank means the latest release; the launcher records the exact version it resolved.
+  orchestratorVersion?: string;
+  gnomepyVersion?: string;
+}
+
+// A session holds its strategy's slot from the moment it is requested, not only once it reports RUNNING.
+export const ACTIVE_SESSION_STATUSES: StrategySessionStatus[] = [
+  StrategySessionStatus.SUBMITTED,
+  StrategySessionStatus.STARTING,
+  StrategySessionStatus.RUNNING,
+];
+
+export function isActiveSession(status: StrategySessionStatus): boolean {
+  return ACTIVE_SESSION_STATUSES.includes(status);
 }

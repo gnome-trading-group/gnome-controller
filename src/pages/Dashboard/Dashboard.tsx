@@ -34,24 +34,18 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { PnlSnapshot, RiskPolicy, Strategy, StrategySession, StrategySessionStatus, StrategyStatus } from '../../types';
+import { PnlSnapshot, RiskPolicy, Strategy, StrategySession, isActiveSession, StrategyStatus } from '../../types';
 import { BacktestRun } from '../../types/backtests';
 import { ResearchSession } from '../../types/research';
 import { controllerApi, marketDataApi, registryApi } from '../../utils/api';
 import { unscalePrice } from '../../utils/security-master';
+import { SESSION_STATUS_COLORS } from '../../utils/session-status';
 
 interface Collector {
   listingId: number;
   status: string;
   failureReason: string | null;
 }
-
-const SESSION_STATUS_COLORS: Record<string, string> = {
-  [StrategySessionStatus.SUBMITTED]: 'blue',
-  [StrategySessionStatus.RUNNING]: 'green',
-  [StrategySessionStatus.STOPPED]: 'gray',
-  [StrategySessionStatus.FAILED]: 'red',
-};
 
 const MODE_COLORS: Record<string, string> = {
   paper: 'violet',
@@ -131,7 +125,7 @@ function Dashboard() {
   const activeStrategies = useMemo(() => strategies.filter(s => s.status === StrategyStatus.ACTIVE).length, [strategies]);
 
   const activeSessions = useMemo(() =>
-    sessions.filter(s => s.status === StrategySessionStatus.RUNNING || s.status === StrategySessionStatus.SUBMITTED),
+    sessions.filter(s => isActiveSession(s.status)),
     [sessions],
   );
 

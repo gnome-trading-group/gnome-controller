@@ -19,12 +19,10 @@ export interface ServiceConfigResponse {
 }
 
 const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
-const REGISTRY_API_URL = import.meta.env.VITE_REGISTRY_API_URL;
-const REGISTRY_API_KEY = import.meta.env.VITE_REGISTRY_API_KEY;
+// The registry serves people under /cognito and services (with an API key) at the root; the UI must never hold a key.
+const REGISTRY_API_URL = `${import.meta.env.VITE_REGISTRY_API_URL}/cognito`;
 const MARKET_DATA_API_URL = import.meta.env.VITE_MARKET_DATA_API_URL;
-const SERVICE_CONFIG_API_KEY = import.meta.env.VITE_SERVICE_CONFIG_API_KEY;
 const LAUNCHER_API_URL = import.meta.env.VITE_LAUNCHER_API_URL;
-const LAUNCHER_API_KEY = import.meta.env.VITE_LAUNCHER_API_KEY;
 
 export class ApiError extends Error {
   constructor(public statusCode: number, message: string) {
@@ -35,7 +33,6 @@ export class ApiError extends Error {
 
 interface ApiConfig {
   apiUrl: string;
-  apiKey?: string;
   convertToCamelCase?: boolean;
   preserveKeys?: Set<string>;
   queryParams?: Record<string, string | number | boolean>;
@@ -69,19 +66,14 @@ export async function sendApiRequest<T>(
   config: ApiConfig,
 ): Promise<T> {
   try {
-    let headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (config.apiKey) {
-      headers['x-api-key'] = config.apiKey;
-    } else {
-      const { tokens } = await fetchAuthSession();
-      if (!tokens?.idToken) {
-        throw new ApiError(401, 'Not authenticated');
-      }
-      headers['Authorization'] = tokens.idToken.toString();
+    const { tokens } = await fetchAuthSession();
+    if (!tokens?.idToken) {
+      throw new ApiError(401, 'Not authenticated');
     }
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: tokens.idToken.toString(),
+    };
 
     let url = `${config.apiUrl}${endpoint}`;
     if (config.queryParams) {
@@ -98,11 +90,22 @@ export async function sendApiRequest<T>(
       body: config.body ? JSON.stringify(config.body) : undefined,
     });
 
-    const data = await response.json();
+    // Gateway rejections (401/403/502) come back as {message} or non-JSON, not the handlers' {body} shape.
+    const text = await response.text();
+    let data: unknown = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = null;
+    }
     if (response.ok) {
       return (config.convertToCamelCase ? convertObjectToCamelCase(data, config.preserveKeys) : data) as T;
     } else {
-      const error = typeof data.body === 'string' ? data.body : data.body?.error || 'An error occurred';
+      const body = data as { body?: string | { error?: string }; message?: string; error?: string } | null;
+      const error = (typeof body?.body === 'string' ? body.body : body?.body?.error)
+        ?? body?.message
+        ?? body?.error
+        ?? (text || `Request failed with status ${response.status}`);
       throw new ApiError(response.status, error);
     }
   } catch (error) {
@@ -117,10 +120,10 @@ export const marketDataApi = {
   listCollectors: () => sendApiRequest<{ collectors: any[] }>('/collectors/list', 'GET', {
     apiUrl: MARKET_DATA_API_URL,
   }),
-  createCollector: (listingIds: number[], region: string, cpu?: string, memory?: string) =>
+  createCollector: (listingIds: number[], region: string, cpu?: string, memory?: string, orchestratorVersion?: string) =>
     sendApiRequest<{ message: string }>('/collectors/create', 'POST', {
       apiUrl: MARKET_DATA_API_URL,
-      body: { listingIds, region, cpu, memory },
+      body: { listingIds, region, cpu, memory, orchestratorVersion },
     }),
   deleteCollector: (listingId: number) =>
     sendApiRequest<{ message: string }>('/collectors/delete', 'DELETE', {
@@ -132,10 +135,10 @@ export const marketDataApi = {
       apiUrl: MARKET_DATA_API_URL,
       body: { listingId },
     }),
-  redeployCollector: (listingId?: number) =>
+  redeployCollector: (listingId?: number, orchestratorVersion?: string) =>
     sendApiRequest<{ message: string }>('/collectors/redeploy', 'POST', {
       apiUrl: MARKET_DATA_API_URL,
-      body: { listingId },
+      body: { listingId, orchestratorVersion },
     }),
   getCollector: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}`, 'GET', {
     apiUrl: MARKET_DATA_API_URL,
@@ -266,54 +269,45 @@ export const marketDataApi = {
 export const registryApi = {
   listExchanges: () => sendApiRequest<any[]>('/exchanges', 'GET', { 
     apiUrl: REGISTRY_API_URL, 
-    apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true 
   }),
   listSecurities: () => sendApiRequest<any[]>('/securities', 'GET', { 
     apiUrl: REGISTRY_API_URL, 
-    apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true 
   }),
   listListings: () => sendApiRequest<any[]>('/listings', 'GET', { 
     apiUrl: REGISTRY_API_URL, 
-    apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true 
   }),
   deleteExchange: (exchangeId: number) => sendApiRequest<{ message: string }>('/exchanges', 'DELETE', { 
     apiUrl: REGISTRY_API_URL, 
-    apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: { exchangeId },
   }),
   deleteSecurity: (securityId: number) => sendApiRequest<{ message: string }>('/securities', 'DELETE', { 
     apiUrl: REGISTRY_API_URL, 
-    apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: { securityId },
   }),
   deleteListing: (listingId: number) => sendApiRequest<{ message: string }>('/listings', 'DELETE', { 
     apiUrl: REGISTRY_API_URL, 
-    apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: { listingId },
   }),
   updateExchange: (exchangeId: number, exchange: Partial<Exchange>) => sendApiRequest<{ message: string }>('/exchanges', 'PATCH', { 
     apiUrl: REGISTRY_API_URL, 
-    apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: exchange,
     queryParams: { exchangeId },
   }),
   updateSecurity: (securityId: number, security: Partial<Security>) => sendApiRequest<{ message: string }>('/securities', 'PATCH', { 
     apiUrl: REGISTRY_API_URL, 
-    apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: security,
     queryParams: { securityId },
   }),
   updateListing: (listingId: number, listing: Partial<Listing>) => sendApiRequest<{ message: string }>('/listings', 'PATCH', { 
     apiUrl: REGISTRY_API_URL, 
-    apiKey: REGISTRY_API_KEY,
     convertToCamelCase: true,
     body: listing,
     queryParams: { listingId },
@@ -321,19 +315,16 @@ export const registryApi = {
   createExchange: (exchange: Omit<Exchange, 'exchangeId' | 'dateCreated' | 'dateModified'>) => 
     sendApiRequest<Exchange>('/exchanges', 'POST', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       body: exchange,
     }),
   createSecurity: (security: Omit<Security, 'securityId' | 'dateCreated' | 'dateModified'>) => 
     sendApiRequest<Security>('/securities', 'POST', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       body: security,
     }),
   createListing: (listing: Omit<Listing, 'listingId' | 'dateCreated' | 'dateModified'>) =>
     sendApiRequest<Listing>('/listings', 'POST', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       body: listing,
     }),
   listStrategies: (params?: { strategyId?: number; name?: string; status?: number }) => {
@@ -343,7 +334,6 @@ export const registryApi = {
     if (params?.status !== undefined) queryParams.status = params.status;
     return sendApiRequest<Strategy[]>('/strategies', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       preserveKeys: new Set(['args', 'config']),
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
@@ -352,7 +342,6 @@ export const registryApi = {
   createStrategy: (strategy: Omit<Strategy, 'strategyId' | 'dateCreated' | 'dateModified'>) =>
     sendApiRequest<Strategy>('/strategies', 'POST', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       preserveKeys: new Set(['args', 'config']),
       body: strategy,
@@ -360,7 +349,6 @@ export const registryApi = {
   updateStrategy: (strategyId: number, strategy: Partial<Strategy>) =>
     sendApiRequest<{ message: string }>('/strategies', 'PATCH', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body: strategy,
       queryParams: { strategyId },
@@ -368,7 +356,6 @@ export const registryApi = {
   deleteStrategy: (strategyId: number) =>
     sendApiRequest<{ message: string }>('/strategies', 'DELETE', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body: { strategyId },
     }),
@@ -385,7 +372,6 @@ export const registryApi = {
     });
     return sendApiRequest<StrategySession[]>('/strategy-sessions', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       preserveKeys: new Set(['args', 'config']),
       queryParams,
@@ -400,7 +386,6 @@ export const registryApi = {
     });
     return sendApiRequest<{ count: number }>('/strategy-sessions', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       queryParams,
     }).then(r => r.count);
   },
@@ -411,7 +396,6 @@ export const registryApi = {
     if (params?.status) queryParams.status = params.status;
     return sendApiRequest<StrategySession[]>('/strategy-sessions', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       preserveKeys: new Set(['args', 'config']),
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
@@ -420,12 +404,10 @@ export const registryApi = {
   createSession: (request: CreateStrategySessionRequest) =>
     sendApiRequest<StrategySession>('/strategy-sessions/launch', 'POST', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       preserveKeys: new Set(['args', 'config']),
       body: request,
     }),
-  // Cognito-authenticated (no apiKey) so the registry can attribute the kill-switch audit entry to the operator.
   stopSession: (sessionId: string, stopGraceMs?: number) =>
     sendApiRequest<StrategySession>('/strategy-sessions/stop', 'POST', {
       apiUrl: REGISTRY_API_URL,
@@ -434,17 +416,15 @@ export const registryApi = {
       body: { sessionId, stopGraceMs },
     }),
   getSessionLogs: (sessionId: string) =>
-    sendApiRequest<{ logs: Array<{ taskArn: string; logs: Array<{ timestamp: number; message: string }>; consoleUrl: string }> }>(
+    sendApiRequest<{ logs: Array<{ instanceId: string; logs: Array<{ timestamp: number; message: string }>; consoleUrl: string }> }>(
       '/strategy-sessions/logs', 'GET', {
         apiUrl: REGISTRY_API_URL,
-        apiKey: REGISTRY_API_KEY,
         queryParams: { sessionId },
       }
     ),
   listCurrencies: () =>
     sendApiRequest<Currency[]>('/currencies', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
     }),
   listSecuritiesPaginated: (params: PaginationParams) => {
@@ -461,7 +441,6 @@ export const registryApi = {
     });
     return sendApiRequest<Security[]>('/securities', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams,
     });
@@ -476,7 +455,6 @@ export const registryApi = {
     });
     return sendApiRequest<{ count: number }>('/securities', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       queryParams,
     }).then(r => r.count);
   },
@@ -494,7 +472,6 @@ export const registryApi = {
     });
     return sendApiRequest<DenormalizedListing[]>('/listings', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams,
     });
@@ -509,7 +486,6 @@ export const registryApi = {
     });
     return sendApiRequest<{ count: number }>('/listings', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       queryParams,
     }).then(r => r.count);
   },
@@ -522,7 +498,6 @@ export const registryApi = {
     if (params.search) queryParams.search = params.search;
     return sendApiRequest<Currency[]>('/currencies', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams,
     });
@@ -532,28 +507,24 @@ export const registryApi = {
     if (params?.search) queryParams.search = params.search;
     return sendApiRequest<{ count: number }>('/currencies', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       queryParams,
     }).then(r => r.count);
   },
   searchSecurities: (search: string, limit = 50) =>
     sendApiRequest<Security[]>('/securities', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams: { search, limit },
     }),
   searchListings: (search: string, limit = 50) =>
     sendApiRequest<DenormalizedListing[]>('/listings', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams: { search, limit, denormalize: true },
     }),
   searchCurrencies: (search: string, limit = 50) =>
     sendApiRequest<Currency[]>('/currencies', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams: { search, limit },
     }),
@@ -563,7 +534,6 @@ export const registryApi = {
     if (history) queryParams.history = true;
     return sendApiRequest<ListingSpec[]>('/listing-specs', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
@@ -571,14 +541,12 @@ export const registryApi = {
   createListingSpec: (spec: Omit<ListingSpec, 'dateCreated' | 'dateModified'>) =>
     sendApiRequest<ListingSpec>('/listing-specs', 'POST', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body: spec,
     }),
   updateListingSpec: (listingId: number, spec: Partial<ListingSpec>) =>
     sendApiRequest<{ message: string }>('/listing-specs', 'PATCH', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body: spec,
       queryParams: { listingId },
@@ -586,7 +554,6 @@ export const registryApi = {
   deleteListingSpec: (listingId: number) =>
     sendApiRequest<{ message: string }>('/listing-specs', 'DELETE', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body: { listingId },
     }),
@@ -595,7 +562,6 @@ export const registryApi = {
     if (startTime) qp.startTime = startTime;
     return sendApiRequest<PnlSnapshot[]>('/pnl/snapshots', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams: qp,
     });
@@ -607,7 +573,6 @@ export const registryApi = {
     if (sessionId !== undefined) qp.sessionId = sessionId;
     return sendApiRequest<PnlSnapshot[]>('/pnl/latest', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams: Object.keys(qp).length ? qp : undefined,
     });
@@ -615,18 +580,15 @@ export const registryApi = {
   listRiskPolicies: () =>
     sendApiRequest<RiskPolicy[]>('/risk/policies', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
     }),
   listRiskPolicyHistory: (policyId: number) =>
     sendApiRequest<RiskPolicyHistory[]>('/risk/policies/history', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       preserveKeys: new Set(['oldParameters', 'newParameters']),
       queryParams: { policyId },
     }),
-  // Risk policy mutations are Cognito-authenticated (no apiKey) so the audit log records the operator as actor.
   createRiskPolicy: (policy: Omit<RiskPolicy, 'policyId' | 'dateCreated' | 'dateModified'> & { reason?: string }) =>
     sendApiRequest<RiskPolicy>('/risk/policies', 'POST', {
       apiUrl: REGISTRY_API_URL,
@@ -660,7 +622,6 @@ export const registryApi = {
     });
     return sendApiRequest<Event[]>('/events', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams,
     });
@@ -675,7 +636,6 @@ export const registryApi = {
     });
     return sendApiRequest<{ count: number }>('/events', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       queryParams,
     }).then(r => r.count);
   },
@@ -693,7 +653,6 @@ export const registryApi = {
     queryParams.denormalize = true;
     return sendApiRequest<ContractRelationship[]>('/contract-relationships', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams,
     });
@@ -707,7 +666,6 @@ export const registryApi = {
     });
     return sendApiRequest<{ count: number }>('/contract-relationships', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       queryParams,
     }).then(r => r.count);
   },
@@ -718,7 +676,6 @@ export const registryApi = {
     if (params?.resolved !== undefined) queryParams.resolved = params.resolved;
     return sendApiRequest<Event[]>('/events', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
@@ -729,7 +686,6 @@ export const registryApi = {
     if (params?.securityId !== undefined) queryParams.securityId = params.securityId;
     return sendApiRequest<EventContract[]>('/event-contracts', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams,
     });
@@ -742,7 +698,6 @@ export const registryApi = {
     if (params?.eventId !== undefined) queryParams.eventId = params.eventId;
     return sendApiRequest<ContractRelationship[]>('/contract-relationships', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams,
     });
@@ -750,21 +705,18 @@ export const registryApi = {
   createContractRelationship: (body: CreateContractRelationship) =>
     sendApiRequest<{ message: string }>('/contract-relationships', 'POST', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body,
     }),
   createContractRelationshipsBulk: (bodies: CreateContractRelationship[]) =>
     sendApiRequest<any[]>('/contract-relationships', 'POST', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body: bodies,
     }),
   deleteContractRelationship: (relationshipId: number) =>
     sendApiRequest<{ message: string }>('/contract-relationships', 'DELETE', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body: { relationshipId },
     }),
@@ -781,7 +733,6 @@ export const registryApi = {
     });
     return sendApiRequest<HedgeKeyword[]>('/hedge-keywords', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       queryParams,
     });
@@ -795,21 +746,18 @@ export const registryApi = {
     });
     return sendApiRequest<{ count: number }>('/hedge-keywords', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       queryParams,
     }).then(r => r.count);
   },
   createHedgeKeyword: (body: CreateHedgeKeyword) =>
     sendApiRequest<HedgeKeyword>('/hedge-keywords', 'POST', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body,
     }),
   deleteHedgeKeyword: (hedgeKeywordId: number) =>
     sendApiRequest<{ message: string }>('/hedge-keywords', 'DELETE', {
       apiUrl: REGISTRY_API_URL,
-      apiKey: REGISTRY_API_KEY,
       convertToCamelCase: true,
       body: { hedgeKeywordId },
     }),
@@ -914,12 +862,11 @@ export const controllerApi = {
       convertToCamelCase: true,
     }),
   getServiceConfig: (service: string) =>
-    sendApiRequest<ServiceConfigResponse>(`/config/${service}`, 'GET', {
+    sendApiRequest<ServiceConfigResponse>(`/cognito/config/${service}`, 'GET', {
       apiUrl: CONTROLLER_API_URL,
-      apiKey: SERVICE_CONFIG_API_KEY,
     }),
   updateServiceConfig: (service: string, config: Record<string, unknown>, version: number) =>
-    sendApiRequest<ServiceConfigResponse>(`/config/${service}`, 'PUT', {
+    sendApiRequest<ServiceConfigResponse>(`/cognito/config/${service}`, 'PUT', {
       apiUrl: CONTROLLER_API_URL,
       body: { config, version },
     }),
@@ -929,30 +876,25 @@ export const launcherApi = {
   getRuleTypes: () =>
     sendApiRequest<RuleType[]>('/rule-types', 'GET', {
       apiUrl: LAUNCHER_API_URL,
-      apiKey: LAUNCHER_API_KEY,
     }),
 
   listRules: () =>
     sendApiRequest<LaunchRule[]>('/launch-rules', 'GET', {
       apiUrl: LAUNCHER_API_URL,
-      apiKey: LAUNCHER_API_KEY,
     }),
   createRule: (body: Omit<LaunchRule, 'rule_id' | 'date_created' | 'date_modified'>) =>
     sendApiRequest<LaunchRule>('/launch-rules', 'POST', {
       apiUrl: LAUNCHER_API_URL,
-      apiKey: LAUNCHER_API_KEY,
       body,
     }),
   updateRule: (ruleId: string, body: Partial<LaunchRule>) =>
     sendApiRequest<LaunchRule>(`/launch-rules/${ruleId}`, 'PATCH', {
       apiUrl: LAUNCHER_API_URL,
-      apiKey: LAUNCHER_API_KEY,
       body,
     }),
   deleteRule: (ruleId: string) =>
     sendApiRequest<{ deleted: string }>(`/launch-rules/${ruleId}`, 'DELETE', {
       apiUrl: LAUNCHER_API_URL,
-      apiKey: LAUNCHER_API_KEY,
     }),
 
   listRequests: (params?: { status?: string; rule_type?: string; limit?: number }) => {
@@ -962,19 +904,16 @@ export const launcherApi = {
     if (params?.limit) queryParams.limit = params.limit;
     return sendApiRequest<LaunchRequest[]>('/launch-requests', 'GET', {
       apiUrl: LAUNCHER_API_URL,
-      apiKey: LAUNCHER_API_KEY,
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
   },
   getRequest: (requestId: string) =>
     sendApiRequest<LaunchRequest>(`/launch-requests/${requestId}`, 'GET', {
       apiUrl: LAUNCHER_API_URL,
-      apiKey: LAUNCHER_API_KEY,
     }),
   submitTrigger: (body: { rule_type: string; data: Record<string, unknown> }) =>
     sendApiRequest<{ message: string }>('/triggers', 'POST', {
       apiUrl: LAUNCHER_API_URL,
-      apiKey: LAUNCHER_API_KEY,
       body,
     }),
 }

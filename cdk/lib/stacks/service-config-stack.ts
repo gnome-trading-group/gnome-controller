@@ -41,22 +41,19 @@ export class ServiceConfigStack extends cdk.Stack {
     });
     serviceConfigTable.grantWriteData(putLambda.function);
 
-    const configResource = props.apiGateway.root.addResource("config");
-    const serviceResource = configResource.addResource("{service}");
+    const getIntegration = new apigateway.LambdaIntegration(getLambda.function);
+    const cognitoOptions: apigateway.MethodOptions = {
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizer: props.cognitoAuthorizer,
+    };
 
-    serviceResource.addMethod(
-      "GET",
-      new apigateway.LambdaIntegration(getLambda.function),
-      { apiKeyRequired: true },
-    );
+    // Services (the classifier) read config with the API key; people read and write under /cognito so the key never
+    // has to ship in the controller UI bundle. A method takes one authorizer, so the two can't share a route.
+    props.apiGateway.root.resourceForPath("config/{service}")
+      .addMethod("GET", getIntegration, { apiKeyRequired: true });
 
-    serviceResource.addMethod(
-      "PUT",
-      new apigateway.LambdaIntegration(putLambda.function),
-      {
-        authorizationType: apigateway.AuthorizationType.COGNITO,
-        authorizer: props.cognitoAuthorizer,
-      },
-    );
+    const cognitoServiceResource = props.apiGateway.root.resourceForPath("cognito/config/{service}");
+    cognitoServiceResource.addMethod("GET", getIntegration, cognitoOptions);
+    cognitoServiceResource.addMethod("PUT", new apigateway.LambdaIntegration(putLambda.function), cognitoOptions);
   }
 }

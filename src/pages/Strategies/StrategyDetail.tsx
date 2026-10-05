@@ -24,7 +24,7 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
-import { PnlSnapshot, RiskPolicy, RISK_POLICY_TYPES, Strategy, StrategySession, StrategySessionStatus, StrategyStatus } from '../../types';
+import { PnlSnapshot, RiskPolicy, RISK_POLICY_TYPES, Strategy, StrategySession, isActiveSession, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
 import { formatRiskParameters, scaleRiskParameters } from '../../utils/risk-parameters';
 import DeploySessionModal from '../Sessions/DeploySessionModal';
@@ -36,13 +36,7 @@ import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
 import { StopSessionModal } from '../Sessions/StopSessionModal';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { findKillSwitch, RiskScope, setKillSwitch } from '../../utils/kill-switch';
-
-const SESSION_STATUS_COLORS: Record<string, string> = {
-  [StrategySessionStatus.SUBMITTED]: 'blue',
-  [StrategySessionStatus.RUNNING]: 'green',
-  [StrategySessionStatus.STOPPED]: 'gray',
-  [StrategySessionStatus.FAILED]: 'red',
-};
+import { SESSION_STATUS_COLORS } from '../../utils/session-status';
 
 const MODE_COLORS: Record<string, string> = {
   paper: 'violet',
@@ -154,8 +148,7 @@ function StrategyDetail() {
     refresh(false);
   };
 
-  const isStoppable = (s: StrategySession) =>
-    s.status === StrategySessionStatus.SUBMITTED || s.status === StrategySessionStatus.RUNNING;
+  const isStoppable = (s: StrategySession) => isActiveSession(s.status);
 
   const sessionColumns = useMemo<MRT_ColumnDef<StrategySession>[]>(() => [
     {

@@ -7,6 +7,7 @@ import {
   Title,
   Card,
   Text,
+  TextInput,
   Badge,
   Group,
   Stack,
@@ -79,6 +80,7 @@ function CollectorDetail() {
   const [error, setError] = useState<string | null>(null);
   const [stopModalOpen, setStopModalOpen] = useState(false);
   const [redeployModalOpen, setRedeployModalOpen] = useState(false);
+  const [redeployVersion, setRedeployVersion] = useState('');
   const [purgeModalOpen, setPurgeModalOpen] = useState(false);
 
   const getStatusColor = (status: string) => {
@@ -163,7 +165,7 @@ function CollectorDetail() {
 
     try {
       setError(null);
-      await marketDataApi.redeployCollector(Number(listingId));
+      await marketDataApi.redeployCollector(Number(listingId), redeployVersion.trim() || undefined);
       await loadCollector();
     } catch (err) {
       if (err instanceof Error) {
@@ -173,6 +175,7 @@ function CollectorDetail() {
       }
     } finally {
       setRedeployModalOpen(false);
+      setRedeployVersion('');
     }
   };
 
@@ -457,7 +460,7 @@ function CollectorDetail() {
       </Card>
 
       <ContainerLogs
-        logs={logs}
+        logs={logs.map((l, i) => ({ id: l.taskArn, label: `Task ${i + 1}`, logs: l.logs, consoleUrl: l.consoleUrl }))}
         loading={logsLoading}
         initialLoad={initialLogsLoad}
         onRefresh={loadLogs}
@@ -491,6 +494,7 @@ function CollectorDetail() {
       >
         <Stack>
           <Text>Are you sure you want to redeploy this collector?</Text>
+          <TextInput label="Orchestrator Version" placeholder="Latest" description="Blank deploys the latest release" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setRedeployModalOpen(false)}>
               Cancel

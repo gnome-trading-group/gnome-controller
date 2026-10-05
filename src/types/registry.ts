@@ -37,7 +37,6 @@ export const RISK_POLICY_TYPES = [
   { value: 'MAX_NOTIONAL', label: 'Max Notional', parametersTemplate: '{"maxNotionalValue": 0}', parametersHint: 'maxNotionalValue in dollars, e.g. 5000 for $5,000' },
   { value: 'MAX_ORDER_SIZE', label: 'Max Order Size', parametersTemplate: '{"maxOrderSize": 0}', parametersHint: 'maxOrderSize in contracts/units, e.g. 100' },
   { value: 'MAX_POSITION', label: 'Max Position', parametersTemplate: '{"maxPosition": 0}', parametersHint: 'maxPosition in contracts/units, e.g. 100' },
-  { value: 'MAX_PNL_LOSS', label: 'Max PnL Loss', parametersTemplate: '{"maxLoss": 0}', parametersHint: 'maxLoss in dollars, e.g. 500 for $500' },
   { value: 'MAX_TOTAL_PNL_LOSS', label: 'Max Total PnL Loss', parametersTemplate: '{"maxLoss": 0}', parametersHint: 'maxLoss in dollars, e.g. 500 for $500' },
 ] as const;
 

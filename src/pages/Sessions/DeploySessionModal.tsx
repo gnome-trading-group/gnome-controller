@@ -24,7 +24,13 @@ import { registryApi } from '../../utils/api';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { findKillSwitch, formatActor, RiskScope } from '../../utils/kill-switch';
-import { STRATEGY_CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestStrategySizing } from '../../utils/sizing';
+import {
+  LATENCY_PROFILE_OPTIONS,
+  LatencyProfile,
+  instanceTypeOptions,
+  isInstanceTypeValidFor,
+  suggestInstanceType,
+} from '../../utils/sizing';
 import {
   defaultSimulationState,
   ListingProfileRow,
@@ -68,6 +74,7 @@ function flattenToSessionConfig(
   selectedLiveListingIds: string[],
   researchCommit: string,
   region: string,
+  latencyProfile: LatencyProfile,
   params: ParamRow[],
   profiles: ProfilesState,
 ): Record<string, ConfigValue> {
@@ -86,6 +93,7 @@ function flattenToSessionConfig(
   }
   if (researchCommit.trim()) config['research_commit'] = researchCommit.trim();
   if (region.trim()) config['region'] = region.trim();
+  config['latency.profile'] = latencyProfile;
   for (const { key, value, type } of params) {
     if (key.trim()) {
       config[`strategy.args.${key.trim()}`] = type === 'json' ? JSON.parse(value as string) : value;
@@ -125,8 +133,11 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   const [strategyType, setStrategyType] = useState<string | null>(null);
   const [strategyClass, setStrategyClass] = useState('');
   const [params, setParams] = useState<ParamRow[]>([]);
-  const [cpu, setCpu] = useState(4096);
-  const [memory, setMemory] = useState(8192);
+  const [latencyProfile, setLatencyProfile] = useState<LatencyProfile>('low_latency');
+  const [instanceType, setInstanceType] = useState('c7i.4xlarge');
+  const [availabilityZone, setAvailabilityZone] = useState('');
+  const [orchestratorVersion, setOrchestratorVersion] = useState('');
+  const [gnomepyVersion, setGnomepyVersion] = useState('');
   const [sizingUserOverridden, setSizingUserOverridden] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -211,8 +222,11 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     if (p.listings && Array.isArray(p.listings) && String(p.mode) === 'live') {
       setSelectedLiveListingIds((p.listings as number[]).map(String));
     }
-    if (p.cpu) { setCpu(Number(p.cpu)); setSizingUserOverridden(true); }
-    if (p.memory) { setMemory(Number(p.memory)); }
+    if (p.latencyProfile) setLatencyProfile(String(p.latencyProfile) as LatencyProfile);
+    if (p.instanceType) { setInstanceType(String(p.instanceType)); setSizingUserOverridden(true); }
+    if (p.availabilityZone) setAvailabilityZone(String(p.availabilityZone));
+    if (p.orchestratorVersion) setOrchestratorVersion(String(p.orchestratorVersion));
+    if (p.gnomepyVersion) setGnomepyVersion(String(p.gnomepyVersion));
   }, []);
 
   const loadFromSession = useCallback((session: StrategySession) => {
@@ -225,6 +239,14 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     else setStrategyClass('');
     setResearchCommit(config['research_commit'] ? String(config['research_commit']) : '');
     setRegion(config['region'] ? String(config['region']) : '');
+    setLatencyProfile(config['latency.profile'] === 'standard' ? 'standard' : 'low_latency');
+    if (session.instanceType) {
+      setInstanceType(session.instanceType);
+      setSizingUserOverridden(true);
+    }
+    // Relaunching reruns the exact versions the previous session ran; clear a field to take the latest.
+    setOrchestratorVersion(session.orchestratorVersion ?? '');
+    setGnomepyVersion(session.gnomepyVersion ?? '');
 
     const parsedParams: ParamRow[] = [];
     for (const [key, value] of Object.entries(config)) {
@@ -281,16 +303,13 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   }, [opened, initialSession]);
 
   useEffect(() => {
-    if (sizingUserOverridden) return;
     const count = mode === 'paper'
       ? listings.filter(l => l.listingId.trim()).length
       : selectedLiveListingIds.length;
-    if (count > 0) {
-      const suggested = suggestStrategySizing(count);
-      setCpu(suggested.cpu);
-      setMemory(suggested.memory);
+    if (!sizingUserOverridden || !isInstanceTypeValidFor(latencyProfile, instanceType)) {
+      setInstanceType(suggestInstanceType(latencyProfile, mode, count));
     }
-  }, [listings, selectedLiveListingIds, mode, sizingUserOverridden]);
+  }, [listings, selectedLiveListingIds, mode, latencyProfile, instanceType, sizingUserOverridden]);
 
   const resetForm = () => {
     setStrategyId(preselectedStrategyId !== undefined ? String(preselectedStrategyId) : null);
@@ -305,8 +324,11 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     setStrategyType(null);
     setStrategyClass('');
     setParams([]);
-    setCpu(4096);
-    setMemory(8192);
+    setLatencyProfile('low_latency');
+    setInstanceType('c7i.4xlarge');
+    setAvailabilityZone('');
+    setOrchestratorVersion('');
+    setGnomepyVersion('');
     setSizingUserOverridden(false);
     setError(null);
     setResumeOnLaunch(false);
@@ -329,8 +351,9 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
 
     const config = flattenToSessionConfig(
       strategyId, mode, strategyType, strategyClass,
-      listings, selectedLiveListingIds, researchCommit, region, params, profiles,
+      listings, selectedLiveListingIds, researchCommit, region, latencyProfile, params, profiles,
     );
+    const isPython = strategyType === 'python';
 
     setSubmitting(true);
     try {
@@ -344,10 +367,12 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
         strategyId: parseInt(strategyId),
         mode,
         config,
-        researchCommit: researchCommit.trim() || undefined,
+        researchCommit: isPython ? researchCommit.trim() || undefined : undefined,
         region: region.trim() || undefined,
-        cpu,
-        memory,
+        availabilityZone: availabilityZone.trim() || undefined,
+        instanceType,
+        orchestratorVersion: isPython ? undefined : orchestratorVersion.trim() || undefined,
+        gnomepyVersion: isPython ? gnomepyVersion.trim() || undefined : undefined,
       });
       handleClose();
       onCreated(newSessionId);
@@ -374,26 +399,24 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
           searchable
         />
         <Select label="Mode" data={MODE_OPTIONS} value={mode} onChange={v => setMode(v ?? 'paper')} required />
-        <TextInput label="Research Commit" placeholder="git SHA or branch (optional)" value={researchCommit} onChange={e => setResearchCommit(e.currentTarget.value)} />
-        <TextInput label="Region Override" placeholder="e.g. us-east-1 (optional)" value={region} onChange={e => setRegion(e.currentTarget.value)} />
+        <Group grow>
+          <TextInput label="Region Override" placeholder="e.g. us-east-1 (optional)" value={region} onChange={e => setRegion(e.currentTarget.value)} />
+          <TextInput label="Availability Zone" placeholder="Auto, or e.g. us-east-1a" value={availabilityZone} onChange={e => setAvailabilityZone(e.currentTarget.value)} />
+        </Group>
         <Group grow>
           <Select
-            label="CPU"
-            data={STRATEGY_CPU_OPTIONS.map(String)}
-            value={String(cpu)}
-            onChange={(v) => {
-              const newCpu = Number(v ?? '4096');
-              setCpu(newCpu);
-              setMemory(VALID_MEMORY_OPTIONS[newCpu][0]);
-              setSizingUserOverridden(true);
-            }}
+            label="Latency Profile"
+            data={LATENCY_PROFILE_OPTIONS}
+            value={latencyProfile}
+            onChange={(v) => setLatencyProfile((v ?? 'low_latency') as LatencyProfile)}
           />
           <Select
-            label="Memory (MiB)"
-            data={(VALID_MEMORY_OPTIONS[cpu] ?? []).map(String)}
-            value={String(memory)}
+            label="Instance Type"
+            data={instanceTypeOptions(latencyProfile)}
+            value={instanceType}
             onChange={(v) => {
-              setMemory(Number(v ?? '4096'));
+              if (!v) return;
+              setInstanceType(v);
               setSizingUserOverridden(true);
             }}
           />
@@ -403,6 +426,14 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
         <Title order={6} c="dimmed">Strategy Class</Title>
         <Select label="Strategy Type" data={STRATEGY_TYPE_OPTIONS} value={strategyType} onChange={setStrategyType} clearable placeholder="Auto-detect" />
         <TextInput label="Strategy Class" placeholder="com.example.MyStrategy or module:ClassName" value={strategyClass} onChange={e => setStrategyClass(e.currentTarget.value)} />
+        {strategyType === 'python' ? (
+          <Group grow>
+            <TextInput label="Gnomepy Version" placeholder="Latest" value={gnomepyVersion} onChange={e => setGnomepyVersion(e.currentTarget.value)} />
+            <TextInput label="Research Commit" placeholder="git SHA or branch (default main)" value={researchCommit} onChange={e => setResearchCommit(e.currentTarget.value)} />
+          </Group>
+        ) : (
+          <TextInput label="Orchestrator Version" placeholder="Latest" value={orchestratorVersion} onChange={e => setOrchestratorVersion(e.currentTarget.value)} />
+        )}
 
         <Divider />
         <Group justify="space-between">

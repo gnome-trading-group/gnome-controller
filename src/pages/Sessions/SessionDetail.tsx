@@ -21,20 +21,14 @@ import {
 import { IconAB2, IconArrowLeft, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { PnlSnapshot, StrategySession, StrategySessionStatus, ConfigValue } from '../../types';
+import { PnlSnapshot, StrategySession, StrategySessionStatus, ConfigValue, isActiveSession } from '../../types';
 import { registryApi } from '../../utils/api';
 import { StopSessionModal } from './StopSessionModal';
-import { ContainerLogs, TaskLogs } from '../../components/ContainerLogs';
+import { ContainerLogs, LogStream } from '../../components/ContainerLogs';
 import { PnlSnapshotTable } from '../../components/PnlSnapshotTable';
 import { SessionPnlCharts } from '../../components/SessionPnlCharts';
 import DeploySessionModal from './DeploySessionModal';
-
-const STATUS_COLORS: Record<string, string> = {
-  [StrategySessionStatus.SUBMITTED]: 'blue',
-  [StrategySessionStatus.RUNNING]: 'green',
-  [StrategySessionStatus.STOPPED]: 'gray',
-  [StrategySessionStatus.FAILED]: 'red',
-};
+import { SESSION_STATUS_COLORS } from '../../utils/session-status';
 
 const MODE_COLORS: Record<string, string> = {
   paper: 'violet',
@@ -98,7 +92,7 @@ function SessionDetail() {
   const [relaunchOpen, setRelaunchOpen] = useState(false);
   const relaunchSessionRef = useRef<StrategySession | null>(null);
   const [pnlRows, setPnlRows] = useState<PnlSnapshot[]>([]);
-  const [sessionLogs, setSessionLogs] = useState<TaskLogs[]>([]);
+  const [sessionLogs, setSessionLogs] = useState<LogStream[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [initialLogsLoad, setInitialLogsLoad] = useState(true);
   const [historySnapshots, setHistorySnapshots] = useState<PnlSnapshot[]>([]);
@@ -136,26 +130,26 @@ function SessionDetail() {
   }, [refresh, session?.status]);
 
   const loadLogs = useCallback(async (showLoading = true) => {
-    if (!sessionId || !session?.taskArn) return;
+    if (!sessionId || !session?.instanceId) return;
     try {
       if (showLoading) setLogsLoading(true);
       const response = await registryApi.getSessionLogs(sessionId);
-      setSessionLogs(response.logs);
+      setSessionLogs(response.logs.map(l => ({ id: l.instanceId, label: l.instanceId, logs: l.logs, consoleUrl: l.consoleUrl })));
     } catch (err) {
       console.error('Failed to load logs:', err);
     } finally {
       if (showLoading) setLogsLoading(false);
       setInitialLogsLoad(false);
     }
-  }, [sessionId, session?.taskArn]);
+  }, [sessionId, session?.instanceId]);
 
   useEffect(() => {
-    if (!session?.taskArn) return;
+    if (!session?.instanceId) return;
     loadLogs();
     if (isTerminal(session)) return;
     const interval = setInterval(() => loadLogs(false), 5000);
     return () => clearInterval(interval);
-  }, [session?.taskArn, loadLogs, session?.status]);
+  }, [session?.instanceId, loadLogs, session?.status]);
 
   const loadHistory = useCallback(async () => {
     if (!sessionId) return;
@@ -188,7 +182,7 @@ function SessionDetail() {
     return () => clearInterval(interval);
   }, [loadHistory, session?.status]);
 
-  const isStoppable = session?.status === StrategySessionStatus.SUBMITTED || session?.status === StrategySessionStatus.RUNNING;
+  const isStoppable = session ? isActiveSession(session.status) : false;
   const isRelaunchable = session?.status === StrategySessionStatus.STOPPED || session?.status === StrategySessionStatus.FAILED;
 
   const grouped = session ? groupConfig(session.config) : null;
@@ -203,7 +197,7 @@ function SessionDetail() {
           {sessionId}
         </Text>
         {session && (
-          <Badge color={STATUS_COLORS[session.status] ?? 'gray'} variant="light" size="lg">
+          <Badge color={SESSION_STATUS_COLORS[session.status] ?? 'gray'} variant="light" size="lg">
             {session.status}
           </Badge>
         )}
@@ -240,7 +234,7 @@ function SessionDetail() {
               <Badge color={MODE_COLORS[session.mode] ?? 'gray'} variant="light" size="lg">{session.mode}</Badge>
             } />
             <StatCard label="Status" value={
-              <Badge color={STATUS_COLORS[session.status] ?? 'gray'} variant="light" size="lg">{session.status}</Badge>
+              <Badge color={SESSION_STATUS_COLORS[session.status] ?? 'gray'} variant="light" size="lg">{session.status}</Badge>
             } />
             <StatCard label="Started" value={
               session.startedAt
@@ -312,29 +306,43 @@ function SessionDetail() {
             </Accordion.Item>
           </Accordion>
 
-          {(session.taskArn || session.taskDefinitionArn) && (
+          {session.instanceId && (
             <>
-              <Title order={4} mb="xs">ECS Info</Title>
+              <Title order={4} mb="xs">Compute</Title>
               <Card withBorder p="sm" mb="md">
                 <Stack gap="xs">
-                  {session.taskArn && (
-                    <Group gap="xs">
-                      <Text size="xs" c="dimmed" w={140}>Task ARN</Text>
-                      <Code style={{ fontSize: '0.72rem', flex: 1 }}>{session.taskArn}</Code>
-                    </Group>
-                  )}
-                  {session.taskDefinitionArn && (
-                    <Group gap="xs">
-                      <Text size="xs" c="dimmed" w={140}>Task Definition</Text>
-                      <Code style={{ fontSize: '0.72rem', flex: 1 }}>{session.taskDefinitionArn}</Code>
-                    </Group>
-                  )}
+                  <Group gap="xs">
+                    <Text size="xs" c="dimmed" w={140}>Instance</Text>
+                    <Anchor
+                      size="xs"
+                      href={`https://${session.launchRegion}.console.aws.amazon.com/ec2/home?region=${session.launchRegion}#InstanceDetails:instanceId=${session.instanceId}`}
+                      target="_blank"
+                    >
+                      <Code style={{ fontSize: '0.72rem' }}>{session.instanceId}</Code>
+                    </Anchor>
+                  </Group>
+                  <Group gap="xs">
+                    <Text size="xs" c="dimmed" w={140}>Type</Text>
+                    <Code style={{ fontSize: '0.72rem' }}>{session.instanceType ?? '—'}</Code>
+                  </Group>
+                  <Group gap="xs">
+                    <Text size="xs" c="dimmed" w={140}>Region / AZ</Text>
+                    <Code style={{ fontSize: '0.72rem' }}>{session.launchRegion ?? '—'} / {session.availabilityZone ?? '—'}</Code>
+                  </Group>
+                  <Group gap="xs">
+                    <Text size="xs" c="dimmed" w={140}>Orchestrator</Text>
+                    <Code style={{ fontSize: '0.72rem' }}>{session.orchestratorVersion ?? '—'}</Code>
+                  </Group>
+                  <Group gap="xs">
+                    <Text size="xs" c="dimmed" w={140}>Gnomepy</Text>
+                    <Code style={{ fontSize: '0.72rem' }}>{session.gnomepyVersion ?? '—'}</Code>
+                  </Group>
                 </Stack>
               </Card>
             </>
           )}
 
-          {session.taskArn && (
+          {session.instanceId && (
             <ContainerLogs
               logs={sessionLogs}
               loading={logsLoading}

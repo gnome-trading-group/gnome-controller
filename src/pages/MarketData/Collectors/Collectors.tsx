@@ -38,6 +38,7 @@ interface Collector {
   region?: string;
   cpu?: string;
   memory?: string;
+  deploymentVersion?: string;
 }
 
 
@@ -82,6 +83,8 @@ function Collectors() {
   const [redeployModalOpen, setRedeployModalOpen] = useState(false);
   const [collectorToRedeploy, setCollectorToRedeploy] = useState<number | null>(null);
   const [redeployAllModalOpen, setRedeployAllModalOpen] = useState(false);
+  const [redeployVersion, setRedeployVersion] = useState('');
+  const [createVersion, setCreateVersion] = useState('');
   const [purgeModalOpen, setPurgeModalOpen] = useState(false);
   const [collectorToPurge, setCollectorToPurge] = useState<number | null>(null);
   const [restartModalOpen, setRestartModalOpen] = useState(false);
@@ -232,6 +235,7 @@ function Collectors() {
     setSizingUserOverridden(false);
     setCpu(256);
     setMemory(512);
+    setCreateVersion('');
     setListingsRegion(null);
   };
 
@@ -262,7 +266,7 @@ function Collectors() {
     try {
       setError(null);
       setCreating(true);
-      await marketDataApi.createCollector(activeListingIds, effectiveRegion, String(cpu), String(memory));
+      await marketDataApi.createCollector(activeListingIds, effectiveRegion, String(cpu), String(memory), createVersion.trim() || undefined);
       setCreateModalOpen(false);
       resetCreateModal();
       await loadCollectors();
@@ -289,20 +293,22 @@ function Collectors() {
   const handleRedeployCollector = async (listingId?: number) => {
     try {
       setError(null);
-      await marketDataApi.redeployCollector(listingId);
+      await marketDataApi.redeployCollector(listingId, redeployVersion.trim() || undefined);
       await loadCollectors();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to redeploy collector');
     } finally {
       setRedeployModalOpen(false);
       setCollectorToRedeploy(null);
+      setRedeployVersion('');
     }
   };
 
   const handleRestartCollector = async (collector: Collector) => {
     try {
       setError(null);
-      await marketDataApi.createCollector(collector.listingIds, collector.region!, collector.cpu, collector.memory);
+      // Restarting keeps the release the collector last ran.
+      await marketDataApi.createCollector(collector.listingIds, collector.region!, collector.cpu, collector.memory, collector.deploymentVersion);
       await loadCollectors();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to restart collector');
@@ -625,6 +631,14 @@ function Collectors() {
             />
           </Group>
 
+          <TextInput
+            label="Orchestrator Version"
+            placeholder="Latest"
+            description="Blank deploys the latest release"
+            value={createVersion}
+            onChange={e => setCreateVersion(e.currentTarget.value)}
+          />
+
           {effectiveRegion && (
             <Text size="sm" c="dimmed" component="div">
               Region: <Badge size="sm">{effectiveRegion}</Badge>
@@ -667,6 +681,7 @@ function Collectors() {
       >
         <Stack>
           <Text>Are you sure you want to redeploy this collector?</Text>
+          <TextInput label="Orchestrator Version" placeholder="Latest" description="Blank deploys the latest release" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => { setRedeployModalOpen(false); setCollectorToRedeploy(null); }}>
               Cancel
@@ -685,6 +700,7 @@ function Collectors() {
       >
         <Stack>
           <Text>Are you sure you want to redeploy all active collectors?</Text>
+          <TextInput label="Orchestrator Version" placeholder="Latest" description="Blank deploys the latest release" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setRedeployAllModalOpen(false)}>
               Cancel

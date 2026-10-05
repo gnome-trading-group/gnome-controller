@@ -12,20 +12,14 @@ import { IconAB2, IconEye, IconPlayerStop, IconPlus, IconRefresh } from '@tabler
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
-import { Strategy, StrategySession, StrategySessionStatus } from '../../types';
+import { Strategy, StrategySession, isActiveSession } from '../../types';
 import { registryApi } from '../../utils/api';
 import { StopSessionModal } from './StopSessionModal';
 import { navigateRowProps, handleNavigateClick } from '../../utils/navigation';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import DeploySessionModal from './DeploySessionModal';
-
-const STATUS_COLORS: Record<string, string> = {
-  [StrategySessionStatus.SUBMITTED]: 'blue',
-  [StrategySessionStatus.RUNNING]: 'green',
-  [StrategySessionStatus.STOPPED]: 'gray',
-  [StrategySessionStatus.FAILED]: 'red',
-};
+import { SESSION_STATUS_COLORS } from '../../utils/session-status';
 
 const MODE_COLORS: Record<string, string> = {
   paper: 'violet',
@@ -35,6 +29,7 @@ const MODE_COLORS: Record<string, string> = {
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
   { value: 'SUBMITTED', label: 'Submitted' },
+  { value: 'STARTING', label: 'Starting' },
   { value: 'RUNNING', label: 'Running' },
   { value: 'STOPPED', label: 'Stopped' },
   { value: 'FAILED', label: 'Failed' },
@@ -115,7 +110,7 @@ function SessionsList() {
       header: 'Status',
       size: 110,
       Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
-        <Badge color={STATUS_COLORS[row.original.status] ?? 'gray'} variant="light" size="sm">
+        <Badge color={SESSION_STATUS_COLORS[row.original.status] ?? 'gray'} variant="light" size="sm">
           {row.original.status}
         </Badge>
       ),
@@ -155,8 +150,7 @@ function SessionsList() {
     return () => clearInterval(interval);
   }, [silentRefresh]);
 
-  const isStoppable = (s: StrategySession) =>
-    s.status === StrategySessionStatus.SUBMITTED || s.status === StrategySessionStatus.RUNNING;
+  const isStoppable = (s: StrategySession) => isActiveSession(s.status);
 
   const table = useMantineReactTable({
     columns,

@@ -21,14 +21,16 @@ interface LogEntry {
   message: string;
 }
 
-export interface TaskLogs {
-  taskArn: string;
+// One log stream: an ECS task for collectors, an EC2 instance for strategy sessions.
+export interface LogStream {
+  id: string;
+  label: string;
   logs: LogEntry[];
   consoleUrl: string;
 }
 
 interface ContainerLogsProps {
-  logs: TaskLogs[];
+  logs: LogStream[];
   loading: boolean;
   initialLoad: boolean;
   onRefresh: () => void;
@@ -65,17 +67,17 @@ function LogList({ entries }: { entries: LogEntry[] }) {
 }
 
 export function ContainerLogs({ logs, loading, initialLoad, onRefresh }: ContainerLogsProps) {
-  const [selectedTaskArn, setSelectedTaskArn] = useState<string>('');
+  const [selectedId, setSelectedId] = useState<string>('');
 
   useEffect(() => {
-    if (logs.length > 0 && !selectedTaskArn) {
-      setSelectedTaskArn(logs[0].taskArn);
+    if (logs.length > 0 && !selectedId) {
+      setSelectedId(logs[0].id);
     } else if (logs.length === 0) {
-      setSelectedTaskArn('');
+      setSelectedId('');
     }
   }, [logs]);
 
-  const activeTaskLogs = logs.find(l => l.taskArn === selectedTaskArn) ?? logs[0];
+  const activeTaskLogs = logs.find(l => l.id === selectedId) ?? logs[0];
 
   return (
     <Card withBorder mt="md">
@@ -103,16 +105,16 @@ export function ContainerLogs({ logs, loading, initialLoad, onRefresh }: Contain
       </Group>
 
       {logs.length > 1 ? (
-        <Tabs value={selectedTaskArn} onChange={v => setSelectedTaskArn(v ?? '')}>
+        <Tabs value={selectedId} onChange={v => setSelectedId(v ?? '')}>
           <Tabs.List>
-            {logs.map((task, index) => (
-              <Tabs.Tab key={task.taskArn} value={task.taskArn}>
-                Task {index + 1}
+            {logs.map(task => (
+              <Tabs.Tab key={task.id} value={task.id}>
+                {task.label}
               </Tabs.Tab>
             ))}
           </Tabs.List>
           {logs.map(task => (
-            <Tabs.Panel key={task.taskArn} value={task.taskArn} pt="md">
+            <Tabs.Panel key={task.id} value={task.id} pt="md">
               <ScrollArea h={400}>
                 {loading && initialLoad ? (
                   <Center h={350}>

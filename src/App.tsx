@@ -102,103 +102,104 @@ function AppContent() {
     }
   }
 
+  // Mounted only once signed in: the provider loads registry data, which needs the user's Cognito token.
   return (
-    <Router>
-      <PageTitle />
-      <AppShell
-        navbar={{
-          width: 240,
-          breakpoint: 0,
-          collapsed: { desktop: !navbarOpened },
-        }}
-        padding="md"
-      >
-        <Navbar onToggle={toggleNavbar} />
-        <AppShell.Main>
-          {/* Floating logo button when navbar is collapsed */}
-          <Transition mounted={!navbarOpened} transition="fade" duration={200}>
-            {(styles) => (
-              <UnstyledButton
-                onClick={toggleNavbar}
-                style={{
-                  ...styles,
-                  position: 'fixed',
-                  top: 'var(--mantine-spacing-md)',
-                  left: 'var(--mantine-spacing-md)',
-                  zIndex: 100,
-                }}
-              >
-                <Paper
-                  radius="xl"
-                  p="xs"
+    <GlobalStateProvider>
+      <Router>
+        <PageTitle />
+        <AppShell
+          navbar={{
+            width: 240,
+            breakpoint: 0,
+            collapsed: { desktop: !navbarOpened },
+          }}
+          padding="md"
+        >
+          <Navbar onToggle={toggleNavbar} />
+          <AppShell.Main>
+            {/* Floating logo button when navbar is collapsed */}
+            <Transition mounted={!navbarOpened} transition="fade" duration={200}>
+              {(styles) => (
+                <UnstyledButton
+                  onClick={toggleNavbar}
                   style={{
-                    background: 'var(--mantine-primary-color-light-hover)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '2.5rem',
-                    height: '2.5rem',
-                    border: '1px solid var(--mantine-primary-color-light)',
-                    cursor: 'pointer',
+                    ...styles,
+                    position: 'fixed',
+                    top: 'var(--mantine-spacing-md)',
+                    left: 'var(--mantine-spacing-md)',
+                    zIndex: 100,
                   }}
                 >
-                  <img src={logo} alt="Logo" style={{ height: '1.25rem', width: 'auto' }} />
-                </Paper>
-              </UnstyledButton>
-            )}
-          </Transition>
-          <Routes>
-            <Route path="/security-master" element={<SecurityMaster />} />
-            <Route path="/security-master/listings/:listingId" element={<ListingDetail />} />
-            <Route path="/security-master/securities/:securityId" element={<SecurityDetail />} />
-            <Route path="/market-data/collectors" element={<Collectors />} />
-            <Route path="/market-data/collectors/:listingId" element={<CollectorDetail />} />
-            <Route path="/market-data/coverage" element={<CoverageSummary />} />
-            <Route path="/market-data/coverage/:securityId" element={<SecurityCoverage />} />
-            <Route path="/market-data/coverage/:securityId/:exchangeId" element={<SecurityExchangeCoverage />} />
-            <Route path="/market-data/transform-jobs" element={<TransformJobs />} />
-            <Route path="/market-data/gaps" element={<Gaps />} />
-            <Route path="/market-data/quality-issues" element={<QualityIssues />} />
-            <Route path="/market-data/quality-issues/investigate/:listingId/:timestamp" element={<MinuteInvestigation />} />
-            <Route path="/tools/service-config" element={<ServiceConfig />} />
-            <Route path="/tools/latency-probe" element={<LatencyProbe />} />
-            <Route path="/strategies" element={<Strategies />} />
-            <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
-            <Route path="/risk/policies" element={<RiskPolicies />} />
-            <Route path="/backtests" element={<BacktestList />} />
-            <Route path="/backtests/:runId" element={<BacktestDetail />} />
-            <Route path="/research" element={<Navigate to="/research/sessions" replace />} />
-            <Route path="/research/sessions" element={<ResearchList />} />
-            <Route path="/research/sessions/:sessionName" element={<ResearchDetail />} />
-            <Route path="/research/artifacts" element={<ArtifactList />} />
-            <Route path="/research/datasets" element={<DatasetList />} />
-            <Route path="/research/pipelines" element={<PipelineList />} />
-            <Route path="/research/pipelines/:pipelineName" element={<PipelineDetail />} />
-            <Route path="/predictions/events" element={<EventsList />} />
-            <Route path="/predictions/events/:eventId" element={<EventDetail />} />
-            <Route path="/predictions/relationships" element={<ContractRelationships />} />
-            <Route path="/predictions/hedge-keywords" element={<HedgeKeywords />} />
-            <Route path="/sessions" element={<SessionsList />} />
-            <Route path="/sessions/:sessionId" element={<SessionDetail />} />
-            <Route path="/launcher/launch-rules" element={<LaunchRules />} />
-            <Route path="/launcher/launch-history" element={<LaunchHistory />} />
-            <Route path="/launcher/manual-trigger" element={<ManualTrigger />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/logout" element={<Logout />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </AppShell.Main>
-      </AppShell>
-    </Router>
+                  <Paper
+                    radius="xl"
+                    p="xs"
+                    style={{
+                      background: 'var(--mantine-primary-color-light-hover)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '2.5rem',
+                      height: '2.5rem',
+                      border: '1px solid var(--mantine-primary-color-light)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <img src={logo} alt="Logo" style={{ height: '1.25rem', width: 'auto' }} />
+                  </Paper>
+                </UnstyledButton>
+              )}
+            </Transition>
+            <Routes>
+              <Route path="/security-master" element={<SecurityMaster />} />
+              <Route path="/security-master/listings/:listingId" element={<ListingDetail />} />
+              <Route path="/security-master/securities/:securityId" element={<SecurityDetail />} />
+              <Route path="/market-data/collectors" element={<Collectors />} />
+              <Route path="/market-data/collectors/:listingId" element={<CollectorDetail />} />
+              <Route path="/market-data/coverage" element={<CoverageSummary />} />
+              <Route path="/market-data/coverage/:securityId" element={<SecurityCoverage />} />
+              <Route path="/market-data/coverage/:securityId/:exchangeId" element={<SecurityExchangeCoverage />} />
+              <Route path="/market-data/transform-jobs" element={<TransformJobs />} />
+              <Route path="/market-data/gaps" element={<Gaps />} />
+              <Route path="/market-data/quality-issues" element={<QualityIssues />} />
+              <Route path="/market-data/quality-issues/investigate/:listingId/:timestamp" element={<MinuteInvestigation />} />
+              <Route path="/tools/service-config" element={<ServiceConfig />} />
+              <Route path="/tools/latency-probe" element={<LatencyProbe />} />
+              <Route path="/strategies" element={<Strategies />} />
+              <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
+              <Route path="/risk/policies" element={<RiskPolicies />} />
+              <Route path="/backtests" element={<BacktestList />} />
+              <Route path="/backtests/:runId" element={<BacktestDetail />} />
+              <Route path="/research" element={<Navigate to="/research/sessions" replace />} />
+              <Route path="/research/sessions" element={<ResearchList />} />
+              <Route path="/research/sessions/:sessionName" element={<ResearchDetail />} />
+              <Route path="/research/artifacts" element={<ArtifactList />} />
+              <Route path="/research/datasets" element={<DatasetList />} />
+              <Route path="/research/pipelines" element={<PipelineList />} />
+              <Route path="/research/pipelines/:pipelineName" element={<PipelineDetail />} />
+              <Route path="/predictions/events" element={<EventsList />} />
+              <Route path="/predictions/events/:eventId" element={<EventDetail />} />
+              <Route path="/predictions/relationships" element={<ContractRelationships />} />
+              <Route path="/predictions/hedge-keywords" element={<HedgeKeywords />} />
+              <Route path="/sessions" element={<SessionsList />} />
+              <Route path="/sessions/:sessionId" element={<SessionDetail />} />
+              <Route path="/launcher/launch-rules" element={<LaunchRules />} />
+              <Route path="/launcher/launch-history" element={<LaunchHistory />} />
+              <Route path="/launcher/manual-trigger" element={<ManualTrigger />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/logout" element={<Logout />} />
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </AppShell.Main>
+        </AppShell>
+      </Router>
+    </GlobalStateProvider>
   );
 }
 
 function App() {
   return (
     <Authenticator.Provider>
-      <GlobalStateProvider>
-        <AppContent />
-      </GlobalStateProvider>
+      <AppContent />
     </Authenticator.Provider>
   );
 }

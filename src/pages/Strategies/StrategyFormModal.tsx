@@ -19,7 +19,13 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { Strategy, StrategyStatus, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
-import { STRATEGY_CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestStrategySizing } from '../../utils/sizing';
+import {
+  LATENCY_PROFILE_OPTIONS,
+  LatencyProfile,
+  instanceTypeOptions,
+  isInstanceTypeValidFor,
+  suggestInstanceType,
+} from '../../utils/sizing';
 import {
   defaultSimulationState,
   ListingProfileRow,
@@ -45,8 +51,11 @@ function defaultForm() {
     strategyClass: '',
     region: '',
     researchCommit: '',
-    cpu: 4096,
-    memory: 8192,
+    latencyProfile: 'low_latency' as LatencyProfile,
+    instanceType: 'c7i.4xlarge',
+    availabilityZone: '',
+    orchestratorVersion: '',
+    gnomepyVersion: '',
     args: [] as { key: string; value: string | number | boolean; type: 'string' | 'number' | 'boolean' | 'json' }[],
   };
 }
@@ -100,15 +109,14 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
   }, [liveListingItems, liveListingSearchOptions]);
 
   useEffect(() => {
-    if (sizingUserOverridden) return;
     const count = form.mode === 'paper'
       ? listings.filter(l => l.listingId.trim()).length
       : liveListingIds.length;
-    if (count > 0) {
-      const suggested = suggestStrategySizing(count);
-      setForm(f => ({ ...f, cpu: suggested.cpu, memory: suggested.memory }));
+    if (!sizingUserOverridden || !isInstanceTypeValidFor(form.latencyProfile, form.instanceType)) {
+      const suggested = suggestInstanceType(form.latencyProfile, form.mode, count);
+      setForm(f => (f.instanceType === suggested ? f : { ...f, instanceType: suggested }));
     }
-  }, [listings, liveListingIds, form.mode, sizingUserOverridden]);
+  }, [listings, liveListingIds, form.mode, form.latencyProfile, form.instanceType, sizingUserOverridden]);
 
   useEffect(() => {
     if (!opened) return;
@@ -135,9 +143,7 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
         })
       : [];
 
-    const loadedCpu = p.cpu ? Number(p.cpu) : 4096;
-    const loadedMemory = p.memory ? Number(p.memory) : 8192;
-    setSizingUserOverridden(!!p.cpu);
+    setSizingUserOverridden(!!p.instanceType);
     setForm({
       name: strategy.name ?? '',
       description: strategy.description ?? '',
@@ -147,8 +153,11 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
       strategyClass: p.strategyClass ? String(p.strategyClass) : '',
       region: p.region ? String(p.region) : '',
       researchCommit: p.researchCommit ? String(p.researchCommit) : '',
-      cpu: loadedCpu,
-      memory: loadedMemory,
+      latencyProfile: p.latencyProfile === 'standard' ? 'standard' : 'low_latency',
+      instanceType: p.instanceType ? String(p.instanceType) : 'c7i.4xlarge',
+      availabilityZone: p.availabilityZone ? String(p.availabilityZone) : '',
+      orchestratorVersion: p.orchestratorVersion ? String(p.orchestratorVersion) : '',
+      gnomepyVersion: p.gnomepyVersion ? String(p.gnomepyVersion) : '',
       args,
     });
     if (Array.isArray(p.listings)) {
@@ -188,11 +197,17 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
       };
       if (form.mode === 'live') parameters.listings = liveListingIds.map(Number);
       if (form.region.trim()) parameters.region = form.region.trim();
-      if (form.researchCommit.trim()) parameters.research_commit = form.researchCommit.trim();
       if (Object.keys(args).length > 0) parameters.args = args;
       if (form.mode === 'paper') parameters.simulation = simulationProfilesToConfig(profiles, listings);
-      parameters.cpu = form.cpu;
-      parameters.memory = form.memory;
+      parameters.latency_profile = form.latencyProfile;
+      parameters.instance_type = form.instanceType;
+      if (form.availabilityZone.trim()) parameters.availability_zone = form.availabilityZone.trim();
+      if (form.strategyType === 'python') {
+        if (form.researchCommit.trim()) parameters.research_commit = form.researchCommit.trim();
+        if (form.gnomepyVersion.trim()) parameters.gnomepy_version = form.gnomepyVersion.trim();
+      } else if (form.orchestratorVersion.trim()) {
+        parameters.orchestrator_version = form.orchestratorVersion.trim();
+      }
 
       if (strategy) {
         await registryApi.updateStrategy(strategy.strategyId, {
@@ -246,26 +261,34 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
         )}
         <Group grow>
           <TextInput label="Region (optional)" placeholder="us-east-1" value={form.region} onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))} />
-          <TextInput label="Research Commit (optional)" placeholder="main" value={form.researchCommit} onChange={(e) => setForm((f) => ({ ...f, researchCommit: e.target.value }))} />
+          <TextInput label="Availability Zone (optional)" placeholder="Auto" value={form.availabilityZone} onChange={(e) => setForm((f) => ({ ...f, availabilityZone: e.target.value }))} />
         </Group>
         <Group grow>
           <Select
-            label="CPU"
-            data={STRATEGY_CPU_OPTIONS.map(String)}
-            value={String(form.cpu)}
+            label="Latency Profile"
+            data={LATENCY_PROFILE_OPTIONS}
+            value={form.latencyProfile}
+            onChange={(v) => setForm((f) => ({ ...f, latencyProfile: (v ?? 'low_latency') as LatencyProfile }))}
+          />
+          <Select
+            label="Instance Type"
+            data={instanceTypeOptions(form.latencyProfile)}
+            value={form.instanceType}
             onChange={(v) => {
-              const newCpu = Number(v ?? '4096');
-              setForm((f) => ({ ...f, cpu: newCpu, memory: VALID_MEMORY_OPTIONS[newCpu][0] }));
+              if (!v) return;
+              setForm((f) => ({ ...f, instanceType: v }));
               setSizingUserOverridden(true);
             }}
           />
-          <Select
-            label="Memory (MiB)"
-            data={(VALID_MEMORY_OPTIONS[form.cpu] ?? []).map(String)}
-            value={String(form.memory)}
-            onChange={(v) => { setForm((f) => ({ ...f, memory: Number(v ?? '8192') })); setSizingUserOverridden(true); }}
-          />
         </Group>
+        {form.strategyType === 'python' ? (
+          <Group grow>
+            <TextInput label="Gnomepy Version (optional)" placeholder="Latest" value={form.gnomepyVersion} onChange={(e) => setForm((f) => ({ ...f, gnomepyVersion: e.target.value }))} />
+            <TextInput label="Research Commit (optional)" placeholder="main" value={form.researchCommit} onChange={(e) => setForm((f) => ({ ...f, researchCommit: e.target.value }))} />
+          </Group>
+        ) : (
+          <TextInput label="Orchestrator Version (optional)" placeholder="Latest" value={form.orchestratorVersion} onChange={(e) => setForm((f) => ({ ...f, orchestratorVersion: e.target.value }))} />
+        )}
 
         <Divider />
         <Group justify="space-between">
