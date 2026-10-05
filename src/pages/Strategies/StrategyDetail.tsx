@@ -4,17 +4,13 @@ import {
   Alert,
   Badge,
   Button,
-  Checkbox,
   Container,
   Group,
-  Modal,
   SegmentedControl,
-  Select,
   Space,
   Stack,
   Switch,
   Text,
-  Textarea,
   Title,
   Tooltip,
 } from '@mantine/core';
@@ -23,9 +19,9 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
-import { PnlSnapshot, RiskPolicy, RISK_POLICY_TYPES, Strategy, StrategySession, isActiveSession, StrategyStatus } from '../../types';
+import { PnlSnapshot, RiskPolicy, Strategy, StrategySession, isActiveSession, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
-import { formatRiskParameters, scaleRiskParameters } from '../../utils/risk-parameters';
+import { formatRiskParameters } from '../../utils/risk-parameters';
 import DeploySessionModal from '../Sessions/DeploySessionModal';
 import StrategyFormModal from './StrategyFormModal';
 import { PnlSnapshotTable } from '../../components/PnlSnapshotTable';
@@ -38,7 +34,8 @@ import { findKillSwitch, listingKills, setKillSwitch } from '../../utils/kill-sw
 import { KillOnListingModal } from '../../components/KillOnListingModal';
 import { ListingKillList } from '../../components/ListingKillList';
 import { describeTarget, policiesForStrategy, policyLevel, withoutEndedSessions } from '../../utils/policy-target';
-import { useListingLabels, useListingSearch } from '../../hooks/useAsyncSearch';
+import { useListingLabels } from '../../hooks/useAsyncSearch';
+import { AddRiskPolicyModal } from '../../components/AddRiskPolicyModal';
 import { SESSION_STATUS_COLORS } from '../../utils/session-status';
 
 const MODE_COLORS: Record<string, string> = {
@@ -79,15 +76,6 @@ function StrategyDetail() {
   const [historyTarget, setHistoryTarget] = useState<RiskPolicy | null>(null);
   const [killAction, setKillAction] = useState<'kill' | 'resume' | null>(null);
   const [killOnListingOpen, setKillOnListingOpen] = useState(false);
-  const [listingSearch, setListingSearch] = useState('');
-  const { options: listingOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearch);
-  const [policyForm, setPolicyForm] = useState({
-    policyType: '',
-    listingId: '',
-    parametersJson: '{}',
-    enabled: true,
-  });
-  const [policyError, setPolicyError] = useState<string | null>(null);
 
   const refresh = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -128,25 +116,6 @@ function StrategyDetail() {
     if (!toggleTarget) return;
     await registryApi.updateRiskPolicy(toggleTarget.policyId, { enabled: !toggleTarget.enabled, reason });
     refresh(false);
-  };
-
-  const handleCreatePolicy = async () => {
-    setPolicyError(null);
-    try {
-      const parameters = scaleRiskParameters(JSON.parse(policyForm.parametersJson));
-      await registryApi.createRiskPolicy({
-        policyType: policyForm.policyType,
-        strategyId: id,
-        listingId: policyForm.listingId ? parseInt(policyForm.listingId) : undefined,
-        parameters,
-        enabled: policyForm.enabled,
-      });
-      setCreatePolicyOpen(false);
-      setPolicyForm({ policyType: '', listingId: '', parametersJson: '{}', enabled: true });
-      refresh();
-    } catch (e) {
-      setPolicyError(e instanceof Error ? e.message : 'Failed to create policy');
-    }
   };
 
   const confirmDeletePolicy = async (reason: string | undefined) => {
@@ -497,51 +466,13 @@ function StrategyDetail() {
 
       <RiskPolicyHistoryModal policy={historyTarget} onClose={() => setHistoryTarget(null)} />
 
-      <Modal opened={createPolicyOpen} onClose={() => setCreatePolicyOpen(false)} title="Add Risk Policy" size="md">
-        <Stack>
-          <Select
-            label="Policy Type"
-            data={RISK_POLICY_TYPES.map((t) => ({ value: t.value, label: t.label }))}
-            value={policyForm.policyType}
-            onChange={(v) => {
-              const template = RISK_POLICY_TYPES.find((t) => t.value === v)?.parametersTemplate ?? '{}';
-              setPolicyForm((f) => ({ ...f, policyType: v ?? '', parametersJson: template }));
-            }}
-            required
-          />
-          <Select
-            label="Listing"
-            description="Leave empty for all of this strategy's listings"
-            placeholder="Search listings..."
-            data={listingOptions}
-            value={policyForm.listingId || null}
-            onChange={(v) => setPolicyForm((f) => ({ ...f, listingId: v ?? '' }))}
-            searchable
-            clearable
-            searchValue={listingSearch}
-            onSearchChange={setListingSearch}
-            nothingFoundMessage={listingSearchLoading ? 'Loading...' : 'No listings found'}
-          />
-          <Textarea
-            label="Parameters (JSON, in dollars and units)"
-            description={RISK_POLICY_TYPES.find((t) => t.value === policyForm.policyType)?.parametersHint}
-            value={policyForm.parametersJson}
-            onChange={(e) => setPolicyForm((f) => ({ ...f, parametersJson: e.target.value }))}
-            autosize
-            minRows={3}
-          />
-          <Checkbox
-            label="Enabled"
-            checked={policyForm.enabled}
-            onChange={(e) => setPolicyForm((f) => ({ ...f, enabled: e.currentTarget.checked }))}
-          />
-          {policyError && <Text c="red" size="sm">{policyError}</Text>}
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setCreatePolicyOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreatePolicy}>Add</Button>
-          </Group>
-        </Stack>
-      </Modal>
+      <AddRiskPolicyModal
+        opened={createPolicyOpen}
+        onClose={() => setCreatePolicyOpen(false)}
+        target={{ strategyId: id }}
+        targetLabel="this strategy"
+        onCreated={() => refresh()}
+      />
 
       <ReasonConfirmModal
         opened={!!deletePolicyTarget}

@@ -31,8 +31,10 @@ interface InstanceType {
   isolatedCpus: number;
 }
 
-// 4 vCPU is the floor: JVM + JPype JIT warmup saturates 2 vCPU and crashes before the strategy starts.
+// c7i.large is offered to measure whether 2 vCPU is now enough for standard sessions: the old 4 vCPU floor came
+// from JIT warmup crashing on Fargate while every agent busy-spun, which agents no longer do.
 export const INSTANCE_TYPES: InstanceType[] = [
+  { value: 'c7i.large', vcpus: 2, memoryGb: 4, isolatedCpus: 0 },
   { value: 'c7i.xlarge', vcpus: 4, memoryGb: 8, isolatedCpus: 0 },
   { value: 'c7i.4xlarge', vcpus: 16, memoryGb: 32, isolatedCpus: 12 },
   { value: 'c7i.8xlarge', vcpus: 32, memoryGb: 64, isolatedCpus: 28 },

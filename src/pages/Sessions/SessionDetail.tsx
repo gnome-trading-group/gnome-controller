@@ -19,7 +19,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconAB2, IconArrowLeft, IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
+import { IconAB2, IconArrowLeft, IconPlayerPlay, IconPlayerStop, IconPlus, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { PnlSnapshot, RiskPolicy, StrategySession, StrategySessionStatus, ConfigValue, isActiveSession } from '../../types';
@@ -28,6 +28,7 @@ import { describeTarget, policiesForSession, policyLevel } from '../../utils/pol
 import { formatRiskParameters } from '../../utils/risk-parameters';
 import { useListingLabels } from '../../hooks/useAsyncSearch';
 import { KillOnListingModal } from '../../components/KillOnListingModal';
+import { AddRiskPolicyModal } from '../../components/AddRiskPolicyModal';
 import { ListingKillList } from '../../components/ListingKillList';
 import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { registryApi } from '../../utils/api';
@@ -100,6 +101,7 @@ function SessionDetail() {
   const [policies, setPolicies] = useState<RiskPolicy[]>([]);
   const [killAction, setKillAction] = useState<'kill' | 'resume' | null>(null);
   const [killOnListingOpen, setKillOnListingOpen] = useState(false);
+  const [addPolicyOpen, setAddPolicyOpen] = useState(false);
   const [relaunchOpen, setRelaunchOpen] = useState(false);
   const relaunchSessionRef = useRef<StrategySession | null>(null);
   const [pnlRows, setPnlRows] = useState<PnlSnapshot[]>([]);
@@ -321,9 +323,16 @@ function SessionDetail() {
           <Group justify="space-between" mb="xs">
             <Title order={4}>Risk Policies</Title>
             {isStoppable && (
-              <Button size="xs" variant="light" color="red" onClick={() => setKillOnListingOpen(true)}>
-                Kill on listing
-              </Button>
+              <Group gap="xs">
+                <Button size="xs" variant="light" color="red" onClick={() => setKillOnListingOpen(true)}>
+                  Kill on listing
+                </Button>
+                <Tooltip label="Add a policy for this session" withArrow openDelay={500}>
+                  <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setAddPolicyOpen(true)}>
+                    <IconPlus size={20} />
+                  </ActionIcon>
+                </Tooltip>
+              </Group>
             )}
           </Group>
           <Card withBorder p="sm" mb="md">
@@ -458,6 +467,16 @@ function SessionDetail() {
       />
 
       <StopSessionModal session={stopOpen ? session : null} onClose={() => setStopOpen(false)} onStopped={() => refresh()} />
+
+      {sessionId && (
+        <AddRiskPolicyModal
+          opened={addPolicyOpen}
+          onClose={() => setAddPolicyOpen(false)}
+          target={{ sessionId }}
+          targetLabel="this session"
+          onCreated={() => refresh(false)}
+        />
+      )}
 
       {sessionId && (
         <KillOnListingModal

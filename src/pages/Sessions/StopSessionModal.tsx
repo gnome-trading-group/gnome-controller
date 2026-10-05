@@ -41,11 +41,10 @@ export function StopSessionModal({ session, onClose, onStopped }: StopSessionMod
           {' '}(strategy {session?.strategyId})? This will:
         </Text>
         <List size="sm" spacing={4}>
-          <List.Item>Kill the strategy — <Text span fw={500}>all</Text> of its running sessions stop trading and their open orders are cancelled.</List.Item>
+          <List.Item>Kill this session: it stops trading and its open orders are cancelled. Other sessions of the strategy keep trading.</List.Item>
           <List.Item>Wait a few seconds for the cancels to go out.</List.Item>
           <List.Item>Shut this session down.</List.Item>
         </List>
-        <Text size="sm" c="dimmed">The strategy stays killed until it is resumed from the strategy page.</Text>
         {stopping && <Text size="sm" c="dimmed">Cancelling orders and stopping the session — this takes about 5 seconds…</Text>}
         {error && <Alert color="red" title="Error">{error}</Alert>}
         <Group justify="flex-end">
