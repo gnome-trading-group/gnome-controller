@@ -202,11 +202,10 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
       parameters.latency_profile = form.latencyProfile;
       parameters.instance_type = form.instanceType;
       if (form.availabilityZone.trim()) parameters.availability_zone = form.availabilityZone.trim();
+      if (form.orchestratorVersion.trim()) parameters.orchestrator_version = form.orchestratorVersion.trim();
       if (form.strategyType === 'python') {
         if (form.researchCommit.trim()) parameters.research_commit = form.researchCommit.trim();
         if (form.gnomepyVersion.trim()) parameters.gnomepy_version = form.gnomepyVersion.trim();
-      } else if (form.orchestratorVersion.trim()) {
-        parameters.orchestrator_version = form.orchestratorVersion.trim();
       }
 
       if (strategy) {
@@ -281,14 +280,16 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
             }}
           />
         </Group>
-        {form.strategyType === 'python' ? (
-          <Group grow>
-            <TextInput label="Gnomepy Version (optional)" placeholder="Latest" value={form.gnomepyVersion} onChange={(e) => setForm((f) => ({ ...f, gnomepyVersion: e.target.value }))} />
-            <TextInput label="Research Commit (optional)" placeholder="main" value={form.researchCommit} onChange={(e) => setForm((f) => ({ ...f, researchCommit: e.target.value }))} />
-          </Group>
-        ) : (
+        {/* Python strategies run inside the orchestrator JVM too, so they take its version as well. */}
+        <Group grow>
           <TextInput label="Orchestrator Version (optional)" placeholder="Latest" value={form.orchestratorVersion} onChange={(e) => setForm((f) => ({ ...f, orchestratorVersion: e.target.value }))} />
-        )}
+          {form.strategyType === 'python' && (
+            <>
+              <TextInput label="Gnomepy Version (optional)" placeholder="Latest" value={form.gnomepyVersion} onChange={(e) => setForm((f) => ({ ...f, gnomepyVersion: e.target.value }))} />
+              <TextInput label="Research Commit (optional)" placeholder="main" value={form.researchCommit} onChange={(e) => setForm((f) => ({ ...f, researchCommit: e.target.value }))} />
+            </>
+          )}
+        </Group>
 
         <Divider />
         <Group justify="space-between">

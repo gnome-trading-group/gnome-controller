@@ -371,7 +371,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
         region: region.trim() || undefined,
         availabilityZone: availabilityZone.trim() || undefined,
         instanceType,
-        orchestratorVersion: isPython ? undefined : orchestratorVersion.trim() || undefined,
+        orchestratorVersion: orchestratorVersion.trim() || undefined,
         gnomepyVersion: isPython ? gnomepyVersion.trim() || undefined : undefined,
       });
       handleClose();
@@ -426,14 +426,16 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
         <Title order={6} c="dimmed">Strategy Class</Title>
         <Select label="Strategy Type" data={STRATEGY_TYPE_OPTIONS} value={strategyType} onChange={setStrategyType} clearable placeholder="Auto-detect" />
         <TextInput label="Strategy Class" placeholder="com.example.MyStrategy or module:ClassName" value={strategyClass} onChange={e => setStrategyClass(e.currentTarget.value)} />
-        {strategyType === 'python' ? (
-          <Group grow>
-            <TextInput label="Gnomepy Version" placeholder="Latest" value={gnomepyVersion} onChange={e => setGnomepyVersion(e.currentTarget.value)} />
-            <TextInput label="Research Commit" placeholder="git SHA or branch (default main)" value={researchCommit} onChange={e => setResearchCommit(e.currentTarget.value)} />
-          </Group>
-        ) : (
+        {/* Python strategies run inside the orchestrator JVM too, so they take its version as well. */}
+        <Group grow>
           <TextInput label="Orchestrator Version" placeholder="Latest" value={orchestratorVersion} onChange={e => setOrchestratorVersion(e.currentTarget.value)} />
-        )}
+          {strategyType === 'python' && (
+            <>
+              <TextInput label="Gnomepy Version" placeholder="Latest" value={gnomepyVersion} onChange={e => setGnomepyVersion(e.currentTarget.value)} />
+              <TextInput label="Research Commit" placeholder="git SHA or branch (default main)" value={researchCommit} onChange={e => setResearchCommit(e.currentTarget.value)} />
+            </>
+          )}
+        </Group>
 
         <Divider />
         <Group justify="space-between">
