@@ -23,7 +23,7 @@ import { Strategy, ConfigValue, RiskPolicy, StrategySession } from '../../types'
 import { registryApi } from '../../utils/api';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
-import { findKillSwitch, formatActor, RiskScope } from '../../utils/kill-switch';
+import { findKillSwitch, formatActor } from '../../utils/kill-switch';
 import {
   LATENCY_PROFILE_OPTIONS,
   LatencyProfile,
@@ -154,7 +154,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
       return;
     }
     let cancelled = false;
-    const target = { scope: RiskScope.STRATEGY, strategyId: parseInt(strategyId) } as const;
+    const target = { strategyId: parseInt(strategyId) };
     registryApi.listRiskPolicies()
       .then((policies) => { if (!cancelled) setStrategyKillSwitch(findKillSwitch(policies, target)); })
       .catch((e) => console.error('Failed to load risk policies:', e));

@@ -7,7 +7,6 @@ import {
   Container,
   Group,
   Modal,
-  NumberInput,
   Select,
   Stack,
   Switch,
@@ -22,17 +21,23 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { RiskPolicy, RISK_POLICY_TYPES } from '../../types';
 import { registryApi } from '../../utils/api';
 import { formatRiskParameters, scaleRiskParameters } from '../../utils/risk-parameters';
-import { errorMessage, findKillSwitch, isKillSwitch, RiskScope, setKillSwitch } from '../../utils/kill-switch';
+import { errorMessage, findKillSwitch, GLOBAL_TARGET, isKillSwitch, setKillSwitch } from '../../utils/kill-switch';
+import { describeTarget, withoutEndedSessions } from '../../utils/policy-target';
+import { useListingLabels, useListingSearch } from '../../hooks/useAsyncSearch';
+import { StrategySession } from '../../types/strategy-sessions';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal';
 import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
 
-const GLOBAL_KILL_SWITCH = { scope: RiskScope.GLOBAL } as const;
 const POLL_INTERVAL_MS = 5000;
 
 function RiskPolicies() {
   const [policies, setPolicies] = useState<RiskPolicy[]>([]);
+  const [sessions, setSessions] = useState<StrategySession[]>([]);
+  const [strategyNames, setStrategyNames] = useState<Record<number, string>>({});
+  const [listingSearch, setListingSearch] = useState('');
+  const { options: listingOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearch);
   const [loading, setLoading] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RiskPolicy | null>(null);
@@ -42,7 +47,6 @@ function RiskPolicies() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [policyForm, setPolicyForm] = useState({
     policyType: '',
-    scope: 1,
     strategyId: '',
     listingId: '',
     parametersJson: '{}',
@@ -53,8 +57,9 @@ function RiskPolicies() {
   const refresh = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const data = await registryApi.listRiskPolicies();
+      const [data, sessionList] = await Promise.all([registryApi.listRiskPolicies(), registryApi.listSessions()]);
       setPolicies(data);
+      setSessions(sessionList);
       setLoadError(null);
     } catch (e) {
       setLoadError(errorMessage(e, 'Failed to load risk policies'));
@@ -64,18 +69,24 @@ function RiskPolicies() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    registryApi.listStrategies()
+      .then((strategies: { strategyId: number; name: string }[]) =>
+        setStrategyNames(Object.fromEntries(strategies.map((s) => [s.strategyId, s.name]))))
+      .catch(() => setStrategyNames({}));
+  }, []);
   // Polled so a kill switch flipped elsewhere (another operator, or the OMS on a risk breach) shows up quickly.
   useEffect(() => {
     const interval = setInterval(() => refresh(false), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [refresh]);
 
-  const killSwitch = findKillSwitch(policies, GLOBAL_KILL_SWITCH);
+  const killSwitch = findKillSwitch(policies, GLOBAL_TARGET);
   const tradingHalted = killSwitch?.enabled ?? false;
   const latestKillSwitchEntry = useLatestPolicyHistory(killSwitch);
 
   const confirmKillSwitch = async (reason: string | undefined) => {
-    await setKillSwitch(killSwitch, GLOBAL_KILL_SWITCH, killSwitchAction === 'halt', reason);
+    await setKillSwitch(killSwitch, GLOBAL_TARGET, killSwitchAction === 'halt', reason);
     refresh(false);
   };
 
@@ -91,14 +102,13 @@ function RiskPolicies() {
       const parameters = scaleRiskParameters(JSON.parse(policyForm.parametersJson));
       await registryApi.createRiskPolicy({
         policyType: policyForm.policyType,
-        scope: policyForm.scope,
         strategyId: policyForm.strategyId ? parseInt(policyForm.strategyId) : undefined,
         listingId: policyForm.listingId ? parseInt(policyForm.listingId) : undefined,
         parameters,
         enabled: policyForm.enabled,
       });
       setCreateModalOpen(false);
-      setPolicyForm({ policyType: '', scope: 1, strategyId: '', listingId: '', parametersJson: '{}', enabled: true });
+      setPolicyForm({ policyType: '', strategyId: '', listingId: '', parametersJson: '{}', enabled: true });
       refresh();
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Failed to create policy');
@@ -112,16 +122,23 @@ function RiskPolicies() {
   };
 
   const nonKillSwitchPolicies = useMemo(
-    () => policies.filter((p) => !isKillSwitch(p, GLOBAL_KILL_SWITCH)),
-    [policies],
+    () => withoutEndedSessions(policies, sessions).filter((p) => !isKillSwitch(p, GLOBAL_TARGET)),
+    [policies, sessions],
+  );
+  const listingLabels = useListingLabels(
+    nonKillSwitchPolicies.flatMap((p) => (p.listingId != null ? [p.listingId] : [])),
   );
 
   const columns = useMemo<MRT_ColumnDef<RiskPolicy>[]>(() => [
     { accessorKey: 'policyId', header: 'ID', enableSorting: true, size: 60 },
     { accessorKey: 'policyType', header: 'Type', enableSorting: true },
-    { accessorKey: 'scope', header: 'Scope', enableSorting: true, size: 70 },
-    { accessorKey: 'strategyId', header: 'Strategy', enableSorting: true, size: 80 },
-    { accessorKey: 'listingId', header: 'Listing', enableSorting: true, size: 80 },
+    {
+      id: 'appliesTo',
+      header: 'Applies to',
+      enableSorting: false,
+      Cell: ({ row }: { row: MRT_Row<RiskPolicy> }) =>
+        describeTarget(row.original, (id) => strategyNames[id], (id) => listingLabels[id]),
+    },
     {
       id: 'parameters',
       header: 'Limits',
@@ -148,7 +165,7 @@ function RiskPolicies() {
           ? <ReactTimeAgo date={new Date(row.original.dateModified)} timeStyle="round" />
           : '-',
     },
-  ], []);
+  ], [strategyNames, listingLabels]);
 
   const table = useMantineReactTable({
     columns,
@@ -245,22 +262,38 @@ function RiskPolicies() {
             }}
             required
           />
-          <NumberInput
-            label="Scope"
-            description="0 = global, 1 = per-strategy, 2 = per-listing"
-            value={policyForm.scope}
-            onChange={(v) => setPolicyForm((f) => ({ ...f, scope: Number(v) }))}
+          <Select
+            label="Strategy"
+            description="Leave empty for every strategy"
+            placeholder="Every strategy"
+            data={Object.entries(strategyNames).map(([id, name]) => ({ value: id, label: `${id} - ${name}` }))}
+            value={policyForm.strategyId || null}
+            onChange={(v) => setPolicyForm((f) => ({ ...f, strategyId: v ?? '' }))}
+            searchable
+            clearable
           />
-          <NumberInput
-            label="Strategy ID (optional)"
-            value={policyForm.strategyId}
-            onChange={(v) => setPolicyForm((f) => ({ ...f, strategyId: v !== '' ? String(v) : '' }))}
+          <Select
+            label="Listing"
+            description="Leave empty for every listing"
+            placeholder="Search listings..."
+            data={listingOptions}
+            value={policyForm.listingId || null}
+            onChange={(v) => setPolicyForm((f) => ({ ...f, listingId: v ?? '' }))}
+            searchable
+            clearable
+            searchValue={listingSearch}
+            onSearchChange={setListingSearch}
+            nothingFoundMessage={listingSearchLoading ? 'Loading...' : 'No listings found'}
           />
-          <NumberInput
-            label="Listing ID (optional)"
-            value={policyForm.listingId}
-            onChange={(v) => setPolicyForm((f) => ({ ...f, listingId: v !== '' ? String(v) : '' }))}
-          />
+          <Text size="xs" c="dimmed">
+            Applies to {describeTarget(
+              {
+                strategyId: policyForm.strategyId ? parseInt(policyForm.strategyId) : null,
+                listingId: policyForm.listingId ? parseInt(policyForm.listingId) : null,
+              },
+              (id) => strategyNames[id],
+            )}
+          </Text>
           <Textarea
             label="Parameters (JSON, in dollars and units)"
             description={RISK_POLICY_TYPES.find((t) => t.value === policyForm.policyType)?.parametersHint}

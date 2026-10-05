@@ -3,29 +3,35 @@ import { registryApi } from './api';
 
 export const KILL_SWITCH_TYPE = 'KILL_SWITCH';
 
-export const RiskScope = {
-  GLOBAL: 0,
-  STRATEGY: 1,
-  LISTING: 2,
-} as const;
+// A policy applies to exactly the ids it carries: none is global, a strategy covers every session of it, a listing
+// covers every strategy on it, a session narrows a strategy to one running instance.
+export interface KillSwitchTarget {
+  sessionId?: string;
+  strategyId?: number;
+  listingId?: number;
+}
 
-export type KillSwitchTarget =
-  | { scope: typeof RiskScope.GLOBAL }
-  | { scope: typeof RiskScope.STRATEGY; strategyId: number }
-  | { scope: typeof RiskScope.LISTING; listingId: number };
+export const GLOBAL_TARGET: KillSwitchTarget = {};
 
+// The registry fills in a session row's strategy, so a session target matches on its session alone.
 export function isKillSwitch(policy: RiskPolicy, target: KillSwitchTarget): boolean {
-  if (policy.policyType !== KILL_SWITCH_TYPE || policy.scope !== target.scope) return false;
-  if (target.scope === RiskScope.STRATEGY) return policy.strategyId === target.strategyId;
-  if (target.scope === RiskScope.LISTING) return policy.listingId === target.listingId;
-  return true;
+  if (policy.policyType !== KILL_SWITCH_TYPE) return false;
+  if ((policy.sessionId ?? undefined) !== target.sessionId) return false;
+  if (target.sessionId != null) return true;
+  return (policy.strategyId ?? undefined) === target.strategyId && (policy.listingId ?? undefined) === target.listingId;
+}
+
+// Enabled kills that stop their strategy or session on one listing only.
+export function listingKills(policies: RiskPolicy[]): RiskPolicy[] {
+  return policies.filter((p) => p.policyType === KILL_SWITCH_TYPE && p.enabled && p.listingId != null
+    && (p.strategyId != null || p.sessionId != null));
 }
 
 export function findKillSwitch(policies: RiskPolicy[], target: KillSwitchTarget): RiskPolicy | undefined {
   return policies.find((p) => isKillSwitch(p, target));
 }
 
-// The kill-switch row may not exist yet for a strategy/listing, so the first kill creates it.
+// The kill-switch row may not exist yet for a target, so the first kill creates it.
 export async function setKillSwitch(
   existing: RiskPolicy | undefined,
   target: KillSwitchTarget,
@@ -39,9 +45,9 @@ export async function setKillSwitch(
   if (!enabled) return;
   await registryApi.createRiskPolicy({
     policyType: KILL_SWITCH_TYPE,
-    scope: target.scope,
-    strategyId: target.scope === RiskScope.STRATEGY ? target.strategyId : undefined,
-    listingId: target.scope === RiskScope.LISTING ? target.listingId : undefined,
+    sessionId: target.sessionId,
+    strategyId: target.strategyId,
+    listingId: target.listingId,
     parameters: {},
     enabled: true,
     reason,

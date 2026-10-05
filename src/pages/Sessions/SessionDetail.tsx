@@ -5,6 +5,7 @@ import {
   Alert,
   Anchor,
   Badge,
+  Button,
   Card,
   Code,
   Container,
@@ -18,10 +19,17 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconAB2, IconArrowLeft, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
+import { IconAB2, IconArrowLeft, IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { PnlSnapshot, StrategySession, StrategySessionStatus, ConfigValue, isActiveSession } from '../../types';
+import { PnlSnapshot, RiskPolicy, StrategySession, StrategySessionStatus, ConfigValue, isActiveSession } from '../../types';
+import { findKillSwitch, listingKills, setKillSwitch } from '../../utils/kill-switch';
+import { describeTarget, policiesForSession, policyLevel } from '../../utils/policy-target';
+import { formatRiskParameters } from '../../utils/risk-parameters';
+import { useListingLabels } from '../../hooks/useAsyncSearch';
+import { KillOnListingModal } from '../../components/KillOnListingModal';
+import { ListingKillList } from '../../components/ListingKillList';
+import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { registryApi } from '../../utils/api';
 import { StopSessionModal } from './StopSessionModal';
 import { ContainerLogs, LogStream } from '../../components/ContainerLogs';
@@ -89,6 +97,9 @@ function SessionDetail() {
   const [loading, setLoading] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
   const [stopOpen, setStopOpen] = useState(false);
+  const [policies, setPolicies] = useState<RiskPolicy[]>([]);
+  const [killAction, setKillAction] = useState<'kill' | 'resume' | null>(null);
+  const [killOnListingOpen, setKillOnListingOpen] = useState(false);
   const [relaunchOpen, setRelaunchOpen] = useState(false);
   const relaunchSessionRef = useRef<StrategySession | null>(null);
   const [pnlRows, setPnlRows] = useState<PnlSnapshot[]>([]);
@@ -103,13 +114,15 @@ function SessionDetail() {
     if (!sessionId) return;
     if (showLoading) setLoading(true);
     try {
-      const [sessions, pnl] = await Promise.all([
+      const [sessions, pnl, allPolicies] = await Promise.all([
         registryApi.listSessions({ sessionId }),
         registryApi.listPnlLatest(undefined, undefined, sessionId),
+        registryApi.listRiskPolicies(),
       ]);
       const s = sessions[0] ?? null;
       setSession(s);
       setPnlRows(pnl);
+      setPolicies(allPolicies);
       if (s) {
         registryApi.listStrategies().then(list => {
           const match = list.find((st: { strategyId: number; name: string }) => st.strategyId === s.strategyId);
@@ -183,6 +196,23 @@ function SessionDetail() {
   }, [loadHistory, session?.status]);
 
   const isStoppable = session ? isActiveSession(session.status) : false;
+  // Only this session: other sessions of the strategy keep trading.
+  const sessionKillSwitch = sessionId ? findKillSwitch(policies, { sessionId }) : undefined;
+  const sessionKilled = sessionKillSwitch?.enabled ?? false;
+  const strategyKilled = session ? findKillSwitch(policies, { strategyId: session.strategyId })?.enabled ?? false : false;
+
+  const sessionPolicies = session && sessionId ? policiesForSession(policies, sessionId, session.strategyId) : [];
+  const listingLabels = useListingLabels(
+    sessionPolicies.flatMap((p) => (p.listingId != null ? [p.listingId] : [])),
+  );
+  const describePolicy = (p: RiskPolicy) =>
+    describeTarget(p, () => strategyName ?? undefined, (listingId) => listingLabels[listingId]);
+
+  const confirmKillAction = async (reason: string | undefined) => {
+    if (!sessionId) return;
+    await setKillSwitch(sessionKillSwitch, { sessionId }, killAction === 'kill', reason);
+    refresh(false);
+  };
   const isRelaunchable = session?.status === StrategySessionStatus.STOPPED || session?.status === StrategySessionStatus.FAILED;
 
   const grouped = session ? groupConfig(session.config) : null;
@@ -214,6 +244,16 @@ function SessionDetail() {
           </Tooltip>
         )}
         {isStoppable && (
+          <Button
+            color={sessionKilled ? 'green' : 'red'}
+            variant="light"
+            leftSection={sessionKilled ? <IconPlayerPlay size={16} /> : <IconPlayerStop size={16} />}
+            onClick={() => setKillAction(sessionKilled ? 'resume' : 'kill')}
+          >
+            {sessionKilled ? 'Resume session' : 'Kill session'}
+          </Button>
+        )}
+        {isStoppable && (
           <Tooltip label="Stop Session" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="red" onClick={() => setStopOpen(true)}>
               <IconPlayerStop size={20} />
@@ -221,6 +261,14 @@ function SessionDetail() {
           </Tooltip>
         )}
       </Group>
+
+      {isStoppable && (sessionKilled || strategyKilled) && (
+        <Alert color="red" title={sessionKilled ? 'Session killed' : 'Strategy killed'} mb="md">
+          {sessionKilled
+            ? 'This session cannot send orders and its open orders have been cancelled. Other sessions of the strategy are unaffected.'
+            : 'The strategy is killed, so every session of it, including this one, is blocked from sending orders.'}
+        </Alert>
+      )}
 
       {session && (
         <>
@@ -269,6 +317,54 @@ function SessionDetail() {
           <PnlSnapshotTable title="PnL Snapshot (latest per listing)" data={pnlRows} isLoading={initialLoad} />
 
           <Space h="xl" />
+
+          <Group justify="space-between" mb="xs">
+            <Title order={4}>Risk Policies</Title>
+            {isStoppable && (
+              <Button size="xs" variant="light" color="red" onClick={() => setKillOnListingOpen(true)}>
+                Kill on listing
+              </Button>
+            )}
+          </Group>
+          <Card withBorder p="sm" mb="md">
+            <ListingKillList
+              kills={listingKills(sessionPolicies)}
+              describe={describePolicy}
+              level={policyLevel}
+              onResumed={() => refresh(false)}
+            />
+            {sessionPolicies.length === 0 ? (
+              <Text size="sm" c="dimmed">No risk policies apply to this session.</Text>
+            ) : (
+              <Table striped>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Level</Table.Th>
+                    <Table.Th>Type</Table.Th>
+                    <Table.Th>Applies to</Table.Th>
+                    <Table.Th>Limits</Table.Th>
+                    <Table.Th>Enabled</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {sessionPolicies.map((p) => {
+                    const level = policyLevel(p);
+                    return (
+                      <Table.Tr key={p.policyId}>
+                        <Table.Td><Badge color={level.color} variant="outline">{level.label}</Badge></Table.Td>
+                        <Table.Td>{p.policyType}</Table.Td>
+                        <Table.Td>{describePolicy(p)}</Table.Td>
+                        <Table.Td>{formatRiskParameters(p.parameters)}</Table.Td>
+                        <Table.Td>
+                          <Badge color={p.enabled ? 'green' : 'gray'} variant="light">{p.enabled ? 'On' : 'Off'}</Badge>
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
+                </Table.Tbody>
+              </Table>
+            )}
+          </Card>
 
           {session.failureReason && (
             <Alert color="red" title="Failure Reason" mb="md">
@@ -362,6 +458,36 @@ function SessionDetail() {
       />
 
       <StopSessionModal session={stopOpen ? session : null} onClose={() => setStopOpen(false)} onStopped={() => refresh()} />
+
+      {sessionId && (
+        <KillOnListingModal
+          opened={killOnListingOpen}
+          onClose={() => setKillOnListingOpen(false)}
+          target={{ sessionId }}
+          targetLabel={`session ${sessionId}`}
+          policies={policies}
+          onKilled={() => refresh(false)}
+        />
+      )}
+
+      <ReasonConfirmModal
+        opened={killAction === 'kill'}
+        onClose={() => setKillAction(null)}
+        title="Kill Session"
+        message={`This will immediately cancel all open orders for session ${sessionId} and block it from sending orders, without stopping its instance. Other sessions of the strategy keep trading. Are you sure?`}
+        confirmLabel="Kill session"
+        onConfirm={confirmKillAction}
+      />
+
+      <ReasonConfirmModal
+        opened={killAction === 'resume'}
+        onClose={() => setKillAction(null)}
+        title="Resume Session"
+        message={`This will turn off the kill switch for session ${sessionId} and allow it to send orders again. Are you sure?`}
+        confirmLabel="Resume session"
+        confirmColor="green"
+        onConfirm={confirmKillAction}
+      />
     </Container>
   );
 }

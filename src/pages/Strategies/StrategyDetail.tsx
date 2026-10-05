@@ -8,7 +8,6 @@ import {
   Container,
   Group,
   Modal,
-  NumberInput,
   SegmentedControl,
   Select,
   Space,
@@ -35,7 +34,11 @@ import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal'
 import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
 import { StopSessionModal } from '../Sessions/StopSessionModal';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
-import { findKillSwitch, RiskScope, setKillSwitch } from '../../utils/kill-switch';
+import { findKillSwitch, listingKills, setKillSwitch } from '../../utils/kill-switch';
+import { KillOnListingModal } from '../../components/KillOnListingModal';
+import { ListingKillList } from '../../components/ListingKillList';
+import { describeTarget, policiesForStrategy, policyLevel, withoutEndedSessions } from '../../utils/policy-target';
+import { useListingLabels, useListingSearch } from '../../hooks/useAsyncSearch';
 import { SESSION_STATUS_COLORS } from '../../utils/session-status';
 
 const MODE_COLORS: Record<string, string> = {
@@ -75,9 +78,12 @@ function StrategyDetail() {
   const [toggleTarget, setToggleTarget] = useState<RiskPolicy | null>(null);
   const [historyTarget, setHistoryTarget] = useState<RiskPolicy | null>(null);
   const [killAction, setKillAction] = useState<'kill' | 'resume' | null>(null);
+  const [killOnListingOpen, setKillOnListingOpen] = useState(false);
+  const [listingSearch, setListingSearch] = useState('');
+  const { options: listingOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearch);
   const [policyForm, setPolicyForm] = useState({
     policyType: '',
-    scope: 1,
+    listingId: '',
     parametersJson: '{}',
     enabled: true,
   });
@@ -94,7 +100,7 @@ function StrategyDetail() {
       ]);
       setStrategy(allStrategies[0] ?? null);
       setPnlRows(pnl);
-      setPolicies(allPolicies.filter((p) => p.scope === 0 ? false : p.strategyId === id));
+      setPolicies(withoutEndedSessions(policiesForStrategy(allPolicies, id), sessionList));
       setSessions(sessionList);
     } finally {
       if (showLoading) setLoading(false);
@@ -107,7 +113,8 @@ function StrategyDetail() {
     return () => clearInterval(interval);
   }, [refresh]);
 
-  const killSwitchTarget = useMemo(() => ({ scope: RiskScope.STRATEGY, strategyId: id }) as const, [id]);
+  const listingLabels = useListingLabels(policies.flatMap((p) => (p.listingId != null ? [p.listingId] : [])));
+  const killSwitchTarget = useMemo(() => ({ strategyId: id }), [id]);
   const killSwitch = findKillSwitch(policies, killSwitchTarget);
   const strategyKilled = killSwitch?.enabled ?? false;
   const latestKillSwitchEntry = useLatestPolicyHistory(killSwitch);
@@ -129,13 +136,13 @@ function StrategyDetail() {
       const parameters = scaleRiskParameters(JSON.parse(policyForm.parametersJson));
       await registryApi.createRiskPolicy({
         policyType: policyForm.policyType,
-        scope: policyForm.scope,
         strategyId: id,
+        listingId: policyForm.listingId ? parseInt(policyForm.listingId) : undefined,
         parameters,
         enabled: policyForm.enabled,
       });
       setCreatePolicyOpen(false);
-      setPolicyForm({ policyType: '', scope: 1, parametersJson: '{}', enabled: true });
+      setPolicyForm({ policyType: '', listingId: '', parametersJson: '{}', enabled: true });
       refresh();
     } catch (e) {
       setPolicyError(e instanceof Error ? e.message : 'Failed to create policy');
@@ -205,7 +212,23 @@ function StrategyDetail() {
 
   const policyColumns = useMemo<MRT_ColumnDef<RiskPolicy>[]>(() => [
     { accessorKey: 'policyId', header: 'ID', enableSorting: true, size: 60 },
+    {
+      id: 'level',
+      header: 'Level',
+      size: 90,
+      Cell: ({ row }: { row: MRT_Row<RiskPolicy> }) => {
+        const level = policyLevel(row.original);
+        return <Badge color={level.color} variant="outline">{level.label}</Badge>;
+      },
+    },
     { accessorKey: 'policyType', header: 'Type', enableSorting: true },
+    {
+      id: 'appliesTo',
+      header: 'Applies to',
+      enableSorting: false,
+      Cell: ({ row }: { row: MRT_Row<RiskPolicy> }) =>
+        describeTarget(row.original, () => strategy?.name, (listingId) => listingLabels[listingId]),
+    },
     {
       id: 'parameters',
       header: 'Limits',
@@ -219,6 +242,8 @@ function StrategyDetail() {
       Cell: ({ row }: { row: MRT_Row<RiskPolicy> }) => (
         <Switch
           checked={row.original.enabled}
+          // Global and listing-wide policies cover other strategies too; they're changed from the Risk page.
+          disabled={row.original.strategyId == null}
           onChange={() => setToggleTarget(row.original)}
         />
       ),
@@ -232,7 +257,7 @@ function StrategyDetail() {
           ? <ReactTimeAgo date={new Date(row.original.dateModified)} timeStyle="round" />
           : '-',
     },
-  ], []);
+  ], [strategy?.name, listingLabels]);
 
   const sessionTable = useMantineReactTable({
     columns: sessionColumns,
@@ -294,7 +319,12 @@ function StrategyDetail() {
             <IconHistory size={16} />
           </ActionIcon>
         </Tooltip>
-        <ActionIcon variant="subtle" color="red" onClick={() => setDeletePolicyTarget(row.original)}>
+        <ActionIcon
+          variant="subtle"
+          color="red"
+          disabled={row.original.strategyId == null}
+          onClick={() => setDeletePolicyTarget(row.original)}
+        >
           <IconTrash size={16} />
         </ActionIcon>
       </Group>
@@ -380,11 +410,30 @@ function StrategyDetail() {
 
       <Group justify="space-between" mb="xs">
         <Title order={4}>Risk Policies</Title>
-        <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setCreatePolicyOpen(true)}>
-          <IconPlus size={20} />
-        </ActionIcon>
+        <Group gap="xs">
+          <Button size="xs" variant="light" color="red" onClick={() => setKillOnListingOpen(true)}>
+            Kill on listing
+          </Button>
+          <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setCreatePolicyOpen(true)}>
+            <IconPlus size={20} />
+          </ActionIcon>
+        </Group>
       </Group>
+      <ListingKillList
+        kills={listingKills(policies)}
+        describe={(p) => describeTarget(p, () => strategy?.name, (listingId) => listingLabels[listingId])}
+        level={policyLevel}
+        onResumed={() => refresh(false)}
+      />
       <MantineReactTable table={policyTable} />
+      <KillOnListingModal
+        opened={killOnListingOpen}
+        onClose={() => setKillOnListingOpen(false)}
+        target={{ strategyId: id }}
+        targetLabel={`every session of strategy ${strategy?.name ?? id}`}
+        policies={policies}
+        onKilled={() => refresh(false)}
+      />
 
       <DeploySessionModal
         opened={deployOpen || !!relaunchSession}
@@ -460,11 +509,18 @@ function StrategyDetail() {
             }}
             required
           />
-          <NumberInput
-            label="Scope"
-            description="1 = per-strategy, 2 = per-listing"
-            value={policyForm.scope}
-            onChange={(v) => setPolicyForm((f) => ({ ...f, scope: Number(v) }))}
+          <Select
+            label="Listing"
+            description="Leave empty for all of this strategy's listings"
+            placeholder="Search listings..."
+            data={listingOptions}
+            value={policyForm.listingId || null}
+            onChange={(v) => setPolicyForm((f) => ({ ...f, listingId: v ?? '' }))}
+            searchable
+            clearable
+            searchValue={listingSearch}
+            onSearchChange={setListingSearch}
+            nothingFoundMessage={listingSearchLoading ? 'Loading...' : 'No listings found'}
           />
           <Textarea
             label="Parameters (JSON, in dollars and units)"

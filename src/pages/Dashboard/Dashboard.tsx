@@ -40,6 +40,7 @@ import { ResearchSession } from '../../types/research';
 import { controllerApi, marketDataApi, registryApi } from '../../utils/api';
 import { unscalePrice } from '../../utils/security-master';
 import { SESSION_STATUS_COLORS } from '../../utils/session-status';
+import { findKillSwitch, GLOBAL_TARGET } from '../../utils/kill-switch';
 
 interface Collector {
   listingId: number;
@@ -118,7 +119,7 @@ function Dashboard() {
   }, [strategies]);
 
   const tradingHalted = useMemo(() =>
-    riskPolicies.find(p => p.policyType === 'KILL_SWITCH' && p.scope === 0)?.enabled ?? false,
+    findKillSwitch(riskPolicies, GLOBAL_TARGET)?.enabled ?? false,
     [riskPolicies],
   );
 

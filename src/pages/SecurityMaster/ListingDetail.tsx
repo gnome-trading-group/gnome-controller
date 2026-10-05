@@ -30,7 +30,7 @@ import {
   unscalePrice,
   unscaleSize,
 } from '../../utils/security-master';
-import { errorMessage, findKillSwitch, RiskScope, setKillSwitch } from '../../utils/kill-switch';
+import { errorMessage, findKillSwitch, setKillSwitch } from '../../utils/kill-switch';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal';
@@ -65,7 +65,7 @@ function ListingDetail() {
   const [killAction, setKillAction] = useState<'kill' | 'resume' | null>(null);
   const [historyTarget, setHistoryTarget] = useState<RiskPolicy | null>(null);
 
-  const killSwitchTarget = useMemo(() => ({ scope: RiskScope.LISTING, listingId: id }) as const, [id]);
+  const killSwitchTarget = useMemo(() => ({ listingId: id }), [id]);
   const killSwitch = findKillSwitch(policies, killSwitchTarget);
   const listingKilled = killSwitch?.enabled ?? false;
   const latestKillSwitchEntry = useLatestPolicyHistory(killSwitch);
