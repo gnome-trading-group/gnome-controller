@@ -2,23 +2,28 @@ import { ActionIcon, Accordion, Button, Divider, Group, NumberInput, Select, Sta
 import { ConfigValue } from '../types';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 
+// Measured from recorded Polymarket and Kalshi market data with the venues' publish batching taken out.
+const LOGNORMAL_DEFAULTS = { floor: 5_000_000, median: 12_000_000, p99: 200_000_000 };
+
 export interface SimulationState {
   feeModel: 'static' | 'parametric';
   feeTaker: number | string;
   feeMaker: number | string;
   feeTakerRate: number | string;
   feeMakerRate: number | string;
-  networkLatencyModel: 'static' | 'gaussian' | 'maker_taker';
+  networkLatencyModel: 'static' | 'lognormal' | 'maker_taker';
   networkLatencyNanos: number | string;
-  networkLatencyMu: number | string;
-  networkLatencySigma: number | string;
+  networkLatencyFloorNanos: number | string;
+  networkLatencyMedianNanos: number | string;
+  networkLatencyP99Nanos: number | string;
   networkLatencyBaseNanos: number | string;
   networkLatencyTakerDelayNanos: number | string;
   networkLatencyMakerDelayNanos: number | string;
-  orderLatencyModel: 'static' | 'gaussian' | 'maker_taker';
+  orderLatencyModel: 'static' | 'lognormal' | 'maker_taker';
   orderLatencyNanos: number | string;
-  orderLatencyMu: number | string;
-  orderLatencySigma: number | string;
+  orderLatencyFloorNanos: number | string;
+  orderLatencyMedianNanos: number | string;
+  orderLatencyP99Nanos: number | string;
   orderLatencyBaseNanos: number | string;
   orderLatencyTakerDelayNanos: number | string;
   orderLatencyMakerDelayNanos: number | string;
@@ -36,17 +41,19 @@ export const defaultSimulationState = (): SimulationState => ({
   feeMaker: 0,
   feeTakerRate: 0.07,
   feeMakerRate: 0,
-  networkLatencyModel: 'static',
+  networkLatencyModel: 'lognormal',
   networkLatencyNanos: 0,
-  networkLatencyMu: 0,
-  networkLatencySigma: 0,
+  networkLatencyFloorNanos: LOGNORMAL_DEFAULTS.floor,
+  networkLatencyMedianNanos: LOGNORMAL_DEFAULTS.median,
+  networkLatencyP99Nanos: LOGNORMAL_DEFAULTS.p99,
   networkLatencyBaseNanos: 0,
   networkLatencyTakerDelayNanos: 0,
   networkLatencyMakerDelayNanos: 0,
   orderLatencyModel: 'static',
   orderLatencyNanos: 0,
-  orderLatencyMu: 0,
-  orderLatencySigma: 0,
+  orderLatencyFloorNanos: LOGNORMAL_DEFAULTS.floor,
+  orderLatencyMedianNanos: LOGNORMAL_DEFAULTS.median,
+  orderLatencyP99Nanos: LOGNORMAL_DEFAULTS.p99,
   orderLatencyBaseNanos: 0,
   orderLatencyTakerDelayNanos: 0,
   orderLatencyMakerDelayNanos: 0,
@@ -84,9 +91,10 @@ export function simulationStateToConfig(sim: SimulationState): Record<string, Co
     cfg['fee.maker'] = requireNumber('fee.maker', sim.feeMaker);
   }
   cfg['network.latency.model'] = sim.networkLatencyModel;
-  if (sim.networkLatencyModel === 'gaussian') {
-    cfg['network.latency.mu'] = requireNumber('network.latency.mu', sim.networkLatencyMu);
-    cfg['network.latency.sigma'] = requireNumber('network.latency.sigma', sim.networkLatencySigma);
+  if (sim.networkLatencyModel === 'lognormal') {
+    cfg['network.latency.floor.nanos'] = requireNumber('network.latency.floor.nanos', sim.networkLatencyFloorNanos);
+    cfg['network.latency.median.nanos'] = requireNumber('network.latency.median.nanos', sim.networkLatencyMedianNanos);
+    cfg['network.latency.p99.nanos'] = requireNumber('network.latency.p99.nanos', sim.networkLatencyP99Nanos);
     const seed = optionalSeed('network.latency.seed', sim.networkLatencySeed);
     if (seed !== undefined) cfg['network.latency.seed'] = seed;
   } else if (sim.networkLatencyModel === 'maker_taker') {
@@ -97,9 +105,10 @@ export function simulationStateToConfig(sim: SimulationState): Record<string, Co
     cfg['network.latency.nanos'] = requireNumber('network.latency.nanos', sim.networkLatencyNanos);
   }
   cfg['order.latency.model'] = sim.orderLatencyModel;
-  if (sim.orderLatencyModel === 'gaussian') {
-    cfg['order.latency.mu'] = requireNumber('order.latency.mu', sim.orderLatencyMu);
-    cfg['order.latency.sigma'] = requireNumber('order.latency.sigma', sim.orderLatencySigma);
+  if (sim.orderLatencyModel === 'lognormal') {
+    cfg['order.latency.floor.nanos'] = requireNumber('order.latency.floor.nanos', sim.orderLatencyFloorNanos);
+    cfg['order.latency.median.nanos'] = requireNumber('order.latency.median.nanos', sim.orderLatencyMedianNanos);
+    cfg['order.latency.p99.nanos'] = requireNumber('order.latency.p99.nanos', sim.orderLatencyP99Nanos);
     const seed = optionalSeed('order.latency.seed', sim.orderLatencySeed);
     if (seed !== undefined) cfg['order.latency.seed'] = seed;
   } else if (sim.orderLatencyModel === 'maker_taker') {
@@ -131,9 +140,10 @@ export function simulationStateFromConfig(sim: Record<string, ConfigValue>): Sim
   }
   const netModel = (sim['network.latency.model'] ?? 'static') as SimulationState['networkLatencyModel'];
   s.networkLatencyModel = netModel;
-  if (netModel === 'gaussian') {
-    s.networkLatencyMu = Number(sim['network.latency.mu'] ?? 0);
-    s.networkLatencySigma = Number(sim['network.latency.sigma'] ?? 0);
+  if (netModel === 'lognormal') {
+    s.networkLatencyFloorNanos = Number(sim['network.latency.floor.nanos'] ?? LOGNORMAL_DEFAULTS.floor);
+    s.networkLatencyMedianNanos = Number(sim['network.latency.median.nanos'] ?? LOGNORMAL_DEFAULTS.median);
+    s.networkLatencyP99Nanos = Number(sim['network.latency.p99.nanos'] ?? LOGNORMAL_DEFAULTS.p99);
     s.networkLatencySeed = sim['network.latency.seed'] != null ? Number(sim['network.latency.seed']) : '';
   } else if (netModel === 'maker_taker') {
     s.networkLatencyBaseNanos = Number(sim['network.latency.base.nanos'] ?? 0);
@@ -144,9 +154,10 @@ export function simulationStateFromConfig(sim: Record<string, ConfigValue>): Sim
   }
   const ordModel = (sim['order.latency.model'] ?? 'static') as SimulationState['orderLatencyModel'];
   s.orderLatencyModel = ordModel;
-  if (ordModel === 'gaussian') {
-    s.orderLatencyMu = Number(sim['order.latency.mu'] ?? 0);
-    s.orderLatencySigma = Number(sim['order.latency.sigma'] ?? 0);
+  if (ordModel === 'lognormal') {
+    s.orderLatencyFloorNanos = Number(sim['order.latency.floor.nanos'] ?? LOGNORMAL_DEFAULTS.floor);
+    s.orderLatencyMedianNanos = Number(sim['order.latency.median.nanos'] ?? LOGNORMAL_DEFAULTS.median);
+    s.orderLatencyP99Nanos = Number(sim['order.latency.p99.nanos'] ?? LOGNORMAL_DEFAULTS.p99);
     s.orderLatencySeed = sim['order.latency.seed'] != null ? Number(sim['order.latency.seed']) : '';
   } else if (ordModel === 'maker_taker') {
     s.orderLatencyBaseNanos = Number(sim['order.latency.base.nanos'] ?? 0);
@@ -378,7 +389,7 @@ const FEE_MODEL_OPTIONS = [
 
 const LATENCY_MODEL_OPTIONS = [
   { value: 'static', label: 'Static' },
-  { value: 'gaussian', label: 'Gaussian' },
+  { value: 'lognormal', label: 'Log-normal (floor + tail)' },
   { value: 'maker_taker', label: 'Maker/Taker' },
 ];
 
@@ -403,16 +414,18 @@ function LatencyFields({
   prefix,
   model,
   nanos,
-  mu,
-  sigma,
+  floorNanos,
+  medianNanos,
+  p99Nanos,
   baseNanos,
   takerDelayNanos,
   makerDelayNanos,
   seed,
   onModelChange,
   onNanosChange,
-  onMuChange,
-  onSigmaChange,
+  onFloorChange,
+  onMedianChange,
+  onP99Change,
   onBaseNanosChange,
   onTakerDelayChange,
   onMakerDelayChange,
@@ -421,16 +434,18 @@ function LatencyFields({
   prefix: string;
   model: string;
   nanos: number | string;
-  mu: number | string;
-  sigma: number | string;
+  floorNanos: number | string;
+  medianNanos: number | string;
+  p99Nanos: number | string;
   baseNanos: number | string;
   takerDelayNanos: number | string;
   makerDelayNanos: number | string;
   seed: number | string;
   onModelChange: (v: string) => void;
   onNanosChange: (v: number | string) => void;
-  onMuChange: (v: number | string) => void;
-  onSigmaChange: (v: number | string) => void;
+  onFloorChange: (v: number | string) => void;
+  onMedianChange: (v: number | string) => void;
+  onP99Change: (v: number | string) => void;
   onBaseNanosChange: (v: number | string) => void;
   onTakerDelayChange: (v: number | string) => void;
   onMakerDelayChange: (v: number | string) => void;
@@ -442,10 +457,11 @@ function LatencyFields({
       {model === 'static' && (
         <NumberInput label="Latency (ns)" value={nanos} onChange={onNanosChange} step={1000} />
       )}
-      {model === 'gaussian' && (
+      {model === 'lognormal' && (
         <Group grow>
-          <NumberInput label="Mu (ns)" value={mu} onChange={onMuChange} step={1000} />
-          <NumberInput label="Sigma (ns)" value={sigma} onChange={onSigmaChange} step={1000} />
+          <NumberInput label="Floor (ns)" value={floorNanos} onChange={onFloorChange} step={1000} />
+          <NumberInput label="Median (ns)" value={medianNanos} onChange={onMedianChange} step={1000} />
+          <NumberInput label="p99 (ns)" value={p99Nanos} onChange={onP99Change} step={1000} />
           <NumberInput label="Seed (optional)" placeholder="Session seed" value={seed} onChange={onSeedChange} allowDecimal={false} />
         </Group>
       )}
@@ -487,16 +503,18 @@ function SimulationConfigForm({ sim, onChange }: SimulationConfigFormProps) {
         prefix="Network Latency"
         model={sim.networkLatencyModel}
         nanos={sim.networkLatencyNanos}
-        mu={sim.networkLatencyMu}
-        sigma={sim.networkLatencySigma}
+        floorNanos={sim.networkLatencyFloorNanos}
+        medianNanos={sim.networkLatencyMedianNanos}
+        p99Nanos={sim.networkLatencyP99Nanos}
         baseNanos={sim.networkLatencyBaseNanos}
         takerDelayNanos={sim.networkLatencyTakerDelayNanos}
         makerDelayNanos={sim.networkLatencyMakerDelayNanos}
         seed={sim.networkLatencySeed}
         onModelChange={v => set('networkLatencyModel', v as SimulationState['networkLatencyModel'])}
         onNanosChange={v => set('networkLatencyNanos', v)}
-        onMuChange={v => set('networkLatencyMu', v)}
-        onSigmaChange={v => set('networkLatencySigma', v)}
+        onFloorChange={v => set('networkLatencyFloorNanos', v)}
+        onMedianChange={v => set('networkLatencyMedianNanos', v)}
+        onP99Change={v => set('networkLatencyP99Nanos', v)}
         onBaseNanosChange={v => set('networkLatencyBaseNanos', v)}
         onTakerDelayChange={v => set('networkLatencyTakerDelayNanos', v)}
         onMakerDelayChange={v => set('networkLatencyMakerDelayNanos', v)}
@@ -506,16 +524,18 @@ function SimulationConfigForm({ sim, onChange }: SimulationConfigFormProps) {
         prefix="Order Latency"
         model={sim.orderLatencyModel}
         nanos={sim.orderLatencyNanos}
-        mu={sim.orderLatencyMu}
-        sigma={sim.orderLatencySigma}
+        floorNanos={sim.orderLatencyFloorNanos}
+        medianNanos={sim.orderLatencyMedianNanos}
+        p99Nanos={sim.orderLatencyP99Nanos}
         baseNanos={sim.orderLatencyBaseNanos}
         takerDelayNanos={sim.orderLatencyTakerDelayNanos}
         makerDelayNanos={sim.orderLatencyMakerDelayNanos}
         seed={sim.orderLatencySeed}
         onModelChange={v => set('orderLatencyModel', v as SimulationState['orderLatencyModel'])}
         onNanosChange={v => set('orderLatencyNanos', v)}
-        onMuChange={v => set('orderLatencyMu', v)}
-        onSigmaChange={v => set('orderLatencySigma', v)}
+        onFloorChange={v => set('orderLatencyFloorNanos', v)}
+        onMedianChange={v => set('orderLatencyMedianNanos', v)}
+        onP99Change={v => set('orderLatencyP99Nanos', v)}
         onBaseNanosChange={v => set('orderLatencyBaseNanos', v)}
         onTakerDelayChange={v => set('orderLatencyTakerDelayNanos', v)}
         onMakerDelayChange={v => set('orderLatencyMakerDelayNanos', v)}

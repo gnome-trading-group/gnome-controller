@@ -214,7 +214,7 @@ function SessionDetail() {
     const isCurrent = beginHistory();
     setHistoryLoading(true);
     try {
-      const result = await registryApi.listPnlSnapshots(sessionId, startTime);
+      const result = await registryApi.listPnlSeries(sessionId, startTime);
       if (!isCurrent()) return;
       setHistorySnapshots(result);
     } catch (err) {

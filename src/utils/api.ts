@@ -601,10 +601,11 @@ export const registryApi = {
       convertToCamelCase: true,
       body: { listingId },
     }),
-  listPnlSnapshots: (sessionId: string, startTime?: string) => {
+  // A session's PnL over time, derived from its fills and the listings' marks.
+  listPnlSeries: (sessionId: string, startTime?: string) => {
     const qp: Record<string, string> = { sessionId };
     if (startTime) qp.startTime = startTime;
-    return sendApiRequest<PnlSnapshot[]>('/pnl/snapshots', 'GET', {
+    return sendApiRequest<PnlSnapshot[]>('/pnl/series', 'GET', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
       queryParams: qp,
