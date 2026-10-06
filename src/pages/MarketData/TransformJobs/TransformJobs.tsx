@@ -25,6 +25,7 @@ import { marketDataApi, registryApi } from '../../../utils/api';
 import { useListingSearch, useListingLabels } from '../../../hooks/useAsyncSearch';
 import { TransformJob, TransformJobStatus } from '../../../types/transform-jobs';
 import { SchemaType } from '../../../types/schema';
+import { useLatestRequest } from '../../../hooks/useLatestRequest';
 
 const STATUS_CONFIG: Record<TransformJobStatus, { color: string; icon: React.ReactNode; label: string }> = {
   PENDING: { color: 'blue', icon: <IconClock size={14} />, label: 'Pending' },
@@ -57,6 +58,7 @@ function TransformJobs() {
 
   const [lastEvaluatedKey, setLastEvaluatedKey] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const beginRequest = useLatestRequest();
 
   // Update URL when listing selection changes
   const handleListingChange = useCallback((listingId: string | null) => {
@@ -87,6 +89,7 @@ function TransformJobs() {
   }, [listingSearchOptions, selectedListingOption]);
 
   const loadJobs = useCallback(async (append = false) => {
+    const isCurrent = beginRequest();
     try {
       setLoading(true);
       setError(null);
@@ -107,6 +110,7 @@ function TransformJobs() {
           lastEvaluatedKey: append ? lastEvaluatedKey || undefined : undefined,
         });
       }
+      if (!isCurrent()) return;
 
       if (response.error) {
         setApiError(response.error);
@@ -121,14 +125,16 @@ function TransformJobs() {
       setLastEvaluatedKey(response.lastEvaluatedKey || null);
       setHasMore(!!response.lastEvaluatedKey);
     } catch (err) {
+      if (!isCurrent()) return;
       setError(err instanceof Error ? err.message : 'Failed to load transform jobs');
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [selectedStatus, selectedListingId, selectedSchemaType, lastEvaluatedKey]);
+  }, [selectedStatus, selectedListingId, selectedSchemaType, lastEvaluatedKey, beginRequest]);
 
   useEffect(() => {
     setLastEvaluatedKey(null);
+    setHasMore(false);
     loadJobs(false);
   }, [selectedStatus, selectedListingId, selectedSchemaType]);
 
@@ -349,12 +355,15 @@ function TransformJobs() {
               <Paper key={status} withBorder p="sm" radius="md">
                 <Group justify="space-between">
                   <Text size="xs" c="dimmed" tt="uppercase" fw={700}>{config.label}</Text>
-                  <Badge color={config.color} size="lg">{statusCounts[status]}</Badge>
+                  <Badge color={config.color} size="lg">{statusCounts[status]}{hasMore ? '+' : ''}</Badge>
                 </Group>
               </Paper>
             );
           })}
         </SimpleGrid>
+      )}
+      {selectedListingId && statusCounts && hasMore && (
+        <Text size="xs" c="dimmed" mt={-8} mb="md">Counts cover the {jobs.length} jobs loaded so far; load more for full totals.</Text>
       )}
 
       <Paper withBorder>

@@ -28,6 +28,8 @@ import { useGlobalState } from '../../../context/GlobalStateContext';
 import { useListingSearch, useListingLabels, useSecuritySearch } from '../../../hooks/useAsyncSearch';
 import { DenormalizedListing } from '../../../types';
 import { QualityIssue, QualityIssueStatus, QualityBackfillMode, formatRuleType, getRuleTypeColor } from '../../../types/quality-issues';
+import { useLatestRequest } from '../../../hooks/useLatestRequest';
+import { LastUpdated } from '../../../components/LastUpdated';
 
 const STATUS_CONFIG: Record<QualityIssueStatus, { color: string; icon: React.ReactNode; label: string }> = {
   UNREVIEWED: { color: 'yellow', icon: <IconEyeOff size={14} />, label: 'Unreviewed' },
@@ -35,6 +37,8 @@ const STATUS_CONFIG: Record<QualityIssueStatus, { color: string; icon: React.Rea
 };
 
 const ALL_STATUSES: QualityIssueStatus[] = ['UNREVIEWED', 'REVIEWED'];
+
+const POLL_INTERVAL_MS = 60000;
 
 interface TableRow extends QualityIssue {
   listingLabel: string;
@@ -79,6 +83,10 @@ function QualityIssues() {
   const [error, setError] = useState<string | null>(null);
   const [lastEvaluatedKey, setLastEvaluatedKey] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [failing, setFailing] = useState(false);
+  const [pagedBeyondFirst, setPagedBeyondFirst] = useState(false);
+  const beginRequest = useLatestRequest();
 
   const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
 
@@ -124,9 +132,11 @@ function QualityIssues() {
       setBackfillListing(null);
       return;
     }
+    let cancelled = false;
     registryApi.listListingsPaginated({ exchangeId: parseInt(backfillExchangeId), securityId: parseInt(backfillSecurityId), limit: 1 })
-      .then(rows => setBackfillListing(rows[0] ?? null))
-      .catch(() => setBackfillListing(null));
+      .then(rows => { if (!cancelled) setBackfillListing(rows[0] ?? null); })
+      .catch(() => { if (!cancelled) setBackfillListing(null); });
+    return () => { cancelled = true; };
   }, [backfillExchangeId, backfillSecurityId]);
 
   const exchangeOptions = useMemo(() =>
@@ -141,9 +151,12 @@ function QualityIssues() {
     return listingSearchOptions;
   }, [listingSearchOptions, selectedListingOption]);
 
-  const fetchIssues = useCallback(async (append = false) => {
-    setLoading(true);
-    setError(null);
+  const fetchIssues = useCallback(async (append = false, silent = false) => {
+    const isCurrent = beginRequest();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
       let response;
@@ -159,7 +172,9 @@ function QualityIssues() {
           lastEvaluatedKey: append ? lastEvaluatedKey || undefined : undefined,
         });
       }
+      if (!isCurrent()) return;
 
+      if (silent) setError(null);
       if (append) {
         setIssues((prev) => [...prev, ...response.issues]);
       } else {
@@ -167,18 +182,32 @@ function QualityIssues() {
       }
       setLastEvaluatedKey(response.lastEvaluatedKey || null);
       setHasMore(!!response.lastEvaluatedKey);
+      setPagedBeyondFirst(append);
+      setLastUpdated(new Date());
+      setFailing(false);
     } catch (err) {
+      if (!isCurrent()) return;
       setError(err instanceof Error ? err.message : 'Failed to fetch quality issues');
+      setFailing(true);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [selectedListingId, selectedStatus, selectedRuleType, lastEvaluatedKey]);
+  }, [selectedListingId, selectedStatus, selectedRuleType, lastEvaluatedKey, beginRequest]);
 
   useEffect(() => {
     setRowSelection({});
     setLastEvaluatedKey(null);
+    setHasMore(false);
     fetchIssues(false);
   }, [selectedStatus, selectedListingId, selectedRuleType]);
+
+  // A refresh replaces the list with page one, which would drop Load More pages and the review selection.
+  const canAutoRefresh = !pagedBeyondFirst && Object.keys(rowSelection).length === 0 && !reviewModalOpen && !updating;
+  useEffect(() => {
+    if (!canAutoRefresh) return;
+    const interval = setInterval(() => fetchIssues(false, true), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [canAutoRefresh, fetchIssues]);
 
   const handleRefresh = () => {
     setRowSelection({});
@@ -359,6 +388,7 @@ function QualityIssues() {
         <Group justify="space-between">
           <Title order={2}>Quality Issues</Title>
           <Group>
+            <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={failing} />
             {backfillSuccess && (
               <Notification color="green" onClose={() => setBackfillSuccess(null)} withCloseButton>
                 {backfillSuccess}

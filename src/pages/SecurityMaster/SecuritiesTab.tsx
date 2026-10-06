@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import {
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Group,
   Modal,
   Select,
   Stack,
+  Text,
   TextInput,
   Tooltip,
 } from '@mantine/core';
@@ -17,6 +19,7 @@ import { useNavigate } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
 import { Security, SecurityType } from '../../types';
 import { registryApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
 import { formatAssetClass, formatSecurityType } from '../../utils/security-master';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
@@ -30,6 +33,8 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
   const navigate = useNavigate();
 
   const [createSecurityOpen, setCreateSecurityOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [newSecurityForm, setNewSecurityForm] = useState({
     symbol: '',
     type: SecurityType.SPOT as number,
@@ -42,6 +47,7 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
     data: securities,
     total,
     isLoading,
+    error,
     pagination,
     sorting,
     globalFilter,
@@ -64,13 +70,17 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
   });
 
   const handleCreateSecurity = async () => {
+    setCreating(true);
+    setCreateError(null);
     try {
       await registryApi.createSecurity(newSecurityForm as any);
       await refresh();
       setCreateSecurityOpen(false);
       setNewSecurityForm({ symbol: '', type: SecurityType.SPOT, description: '' });
     } catch (err) {
-      console.error('Failed to create security:', err);
+      setCreateError(errorMessage(err, 'Failed to create security'));
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -177,7 +187,7 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
           size="lg"
           variant="filled"
           color="green"
-          onClick={() => setCreateSecurityOpen(true)}
+          onClick={() => { setCreateError(null); setCreateSecurityOpen(true); }}
         >
           <IconPlus size={20} />
         </ActionIcon>
@@ -189,7 +199,7 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
     <>
       <Modal
         opened={createSecurityOpen}
-        onClose={() => setCreateSecurityOpen(false)}
+        onClose={() => { if (creating) return; setCreateSecurityOpen(false); }}
         title="Create Security"
         size="sm"
       >
@@ -217,12 +227,14 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
             value={newSecurityForm.description}
             onChange={(e) => setNewSecurityForm(prev => ({ ...prev, description: e.target.value }))}
           />
+          {createError && <Text c="red" size="sm">{createError}</Text>}
           <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setCreateSecurityOpen(false)}>Cancel</Button>
-            <Button color="green" onClick={handleCreateSecurity}>Create</Button>
+            <Button variant="outline" disabled={creating} onClick={() => setCreateSecurityOpen(false)}>Cancel</Button>
+            <Button color="green" loading={creating} onClick={handleCreateSecurity}>Create</Button>
           </Group>
         </Stack>
       </Modal>
+      {error && <Alert color="red" title="Error" mb="md">{error}</Alert>}
       <MantineReactTable table={table} />
     </>
   );

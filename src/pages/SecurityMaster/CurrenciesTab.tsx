@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Alert } from '@mantine/core';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { Currency } from '../../types';
@@ -13,6 +14,7 @@ function CurrenciesTab() {
     data: currencies,
     total,
     isLoading,
+    error,
     pagination,
     sorting,
     globalFilter,
@@ -92,7 +94,12 @@ function CurrenciesTab() {
     },
   });
 
-  return <MantineReactTable table={table} />;
+  return (
+    <>
+      {error && <Alert color="red" title="Error" mb="md">{error}</Alert>}
+      <MantineReactTable table={table} />
+    </>
+  );
 }
 
 export default React.memo(CurrenciesTab);

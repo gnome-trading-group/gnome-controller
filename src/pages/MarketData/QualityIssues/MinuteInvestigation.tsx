@@ -81,7 +81,9 @@ function formatMetricValue(metricName: string, value: number | null): string {
     return value.toExponential(3);
   }
   if (metricName === 'midPrice') {
-    return value.toFixed(2);
+    // Significant figures, not fixed decimals: Polymarket ticks at 0.001 and some coins trade below 0.0001,
+    // which two decimals would flatten to 0.00.
+    return Number(value.toPrecision(6)).toString();
   }
   return value.toFixed(1);
 }

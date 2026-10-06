@@ -13,7 +13,7 @@ interface LinksGroupProps {
   links?: { label: string; link: string }[];
 }
 
-function createExpandableLinks({ icon: Icon, label, initiallyOpened, activePath, links }: LinksGroupProps) {
+function ExpandableLinks({ icon: Icon, label, initiallyOpened, activePath, links }: LinksGroupProps) {
   const [opened, setOpened] = useState(initiallyOpened || false);
   const items = (links || []).map((link) => (
     <UnstyledButton
@@ -50,7 +50,7 @@ function createExpandableLinks({ icon: Icon, label, initiallyOpened, activePath,
   );
 }
 
-function createSingleLink({ icon: Icon, label, activePath, link }: LinksGroupProps) {
+function SingleLink({ icon: Icon, label, activePath, link }: LinksGroupProps) {
   return (
     <UnstyledButton
       component={Link}
@@ -68,13 +68,8 @@ function createSingleLink({ icon: Icon, label, activePath, link }: LinksGroupPro
       </Group>
     </UnstyledButton>
   );
-} 
+}
 
-export function LinksGroup({ icon: Icon, label, initiallyOpened, activePath, links, link }: LinksGroupProps) {
-  const hasLinks = Array.isArray(links);
-  if (hasLinks) {
-    return createExpandableLinks({ icon: Icon, label, initiallyOpened, activePath, links });
-  } else {
-    return createSingleLink({ icon: Icon, label, activePath, link });
-  }
+export function LinksGroup(props: LinksGroupProps) {
+  return Array.isArray(props.links) ? <ExpandableLinks {...props} /> : <SingleLink {...props} />;
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   ActionIcon,
+  Alert,
   Anchor,
   Badge,
   Breadcrumbs,
@@ -12,6 +13,7 @@ import {
   Grid,
   Group,
   Loader,
+  Modal,
   Notification,
   Paper,
   SimpleGrid,
@@ -44,6 +46,8 @@ import { ContractRelationship, ContractRelationshipType, DenormalizedListing, Ev
 import { BboDataPoint } from '../../types/bbo-timeline';
 import { marketDataApi, registryApi } from '../../utils/api';
 import { useGlobalState } from '../../context/GlobalStateContext';
+import { useLatestRequest } from '../../hooks/useLatestRequest';
+import { errorMessage } from '../../utils/kill-switch';
 import RelationshipGraph from './RelationshipGraph';
 import BulkCreateRelationshipModal from './BulkCreateRelationshipModal';
 
@@ -98,6 +102,13 @@ function EventDetail() {
   const [contracts, setContracts] = useState<EnrichedContract[]>([]);
   const [relationships, setRelationships] = useState<ContractRelationship[]>([]);
   const [loading, setLoading] = useState(true);
+  const [eventError, setEventError] = useState<string | null>(null);
+  const [listingsError, setListingsError] = useState<string | null>(null);
+  const [relationshipsError, setRelationshipsError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ContractRelationship | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const beginRelationshipsRequest = useLatestRequest();
   const [listingsBySecurityId, setListingsBySecurityId] = useState<Record<number, DenormalizedListing[]>>({});
   const [showGraph, setShowGraph] = useState(false);
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
@@ -117,29 +128,49 @@ function EventDetail() {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
+    // Invalidates a relationships refresh still in flight for the previous event.
+    beginRelationshipsRequest();
     setLoading(true);
+    setEventError(null);
+    setListingsError(null);
+    setRelationshipsError(null);
 
     Promise.all([
       registryApi.listEvents({ eventId: id }),
       registryApi.listEventContracts({ eventId: id }),
       registryApi.listContractRelationships({ eventId: id }),
     ]).then(async ([evts, ecs, rels]) => {
+      if (cancelled) return;
       setEvent((evts as Event[])[0] ?? null);
       setContracts(ecs as EventContract[]);
       setRelationships(rels as ContractRelationship[]);
 
       const eventContracts = ecs as EventContract[];
       const uniqueSecurityIds = [...new Set(eventContracts.map(c => c.securityId))];
+      let failedListingLoads = 0;
       const listingResults = await Promise.all(
         uniqueSecurityIds.map(secId =>
           registryApi.listListingsPaginated({ securityId: secId })
             .then(listings => [secId, listings] as const)
-            .catch(() => [secId, []] as const)
+            .catch(() => {
+              failedListingLoads++;
+              return [secId, []] as const;
+            })
         )
       );
+      if (cancelled) return;
       setListingsBySecurityId(Object.fromEntries(listingResults));
-    }).catch(console.error).finally(() => setLoading(false));
-  }, [id]);
+      if (failedListingLoads > 0) {
+        setListingsError(`Failed to load listings for ${failedListingLoads} of ${uniqueSecurityIds.length} securities.`);
+      }
+    }).catch(e => {
+      if (!cancelled) setEventError(errorMessage(e, 'Failed to load event'));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [id, beginRelationshipsRequest]);
 
   const contractColumns = useMemo<MRT_ColumnDef<EnrichedContract>[]>(() => [
     {
@@ -187,20 +218,39 @@ function EventDetail() {
     },
   ], []);
 
-  const handleDelete = useCallback(async (relationshipId: number) => {
+  const requestDelete = (relationship: ContractRelationship) => {
+    setDeleteError(null);
+    setDeleteTarget(relationship);
+  };
+
+  const requestDeleteById = (relationshipId: number) => {
+    const relationship = relationships.find(r => r.relationshipId === relationshipId);
+    if (relationship) requestDelete(relationship);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const relationshipId = deleteTarget.relationshipId;
+    setDeletePending(true);
+    setDeleteError(null);
     try {
       await registryApi.deleteContractRelationship(relationshipId);
       setRelationships(prev => prev.filter(r => r.relationshipId !== relationshipId));
+      setDeleteTarget(null);
     } catch (err) {
-      console.error('Failed to delete:', err);
+      setDeleteError(errorMessage(err, 'Failed to delete relationship'));
+    } finally {
+      setDeletePending(false);
     }
-  }, []);
+  };
 
   const refreshRelationships = useCallback(() => {
+    const isCurrent = beginRelationshipsRequest();
+    setRelationshipsError(null);
     registryApi.listContractRelationships({ eventId: id })
-      .then(rels => setRelationships(rels as ContractRelationship[]))
-      .catch(console.error);
-  }, [id]);
+      .then(rels => { if (isCurrent()) setRelationships(rels as ContractRelationship[]); })
+      .catch(e => { if (isCurrent()) setRelationshipsError(errorMessage(e, 'Failed to refresh relationships')); });
+  }, [id, beginRelationshipsRequest]);
 
   const handleLoadTimeline = useCallback(async () => {
     if (!timelineStart || !timelineEnd) return;
@@ -400,7 +450,7 @@ function EventDetail() {
     initialState: { density: 'xs', sorting: [{ id: 'confidence', desc: true }] },
     renderRowActions: ({ row }: { row: MRT_Row<ContractRelationship> }) => (
       <Tooltip label="Delete" position="left" withArrow openDelay={500}>
-        <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); handleDelete(row.original.relationshipId); }}>
+        <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); requestDelete(row.original); }}>
           <IconTrash size={16} />
         </ActionIcon>
       </Tooltip>
@@ -430,6 +480,14 @@ function EventDetail() {
 
   if (loading) {
     return <Container size="xl" py="xl"><Loader /></Container>;
+  }
+
+  if (eventError) {
+    return (
+      <Container size="xl" py="xl">
+        <Alert color="red" title="Error">{eventError}</Alert>
+      </Container>
+    );
   }
 
   if (!event) {
@@ -533,6 +591,7 @@ function EventDetail() {
             <Badge color="orange" variant="light" size="sm">Multi-Outcome · All mutually exclusive</Badge>
           )}
         </Group>
+        {listingsError && <Alert color="red" title="Error" mb="sm">{listingsError}</Alert>}
         <MantineReactTable table={contractTable} />
       </Paper>
 
@@ -545,6 +604,7 @@ function EventDetail() {
             </ActionIcon>
           </Tooltip>
         </Group>
+        {relationshipsError && <Alert color="red" title="Error" mb="sm">{relationshipsError}</Alert>}
         {relationships.length === 0 ? (
           <Text size="sm" c="dimmed">No relationships found for this event's contracts.</Text>
         ) : (
@@ -561,6 +621,27 @@ function EventDetail() {
         currentContracts={contracts}
       />
 
+      <Modal
+        opened={deleteTarget !== null}
+        onClose={() => { if (deletePending) return; setDeleteTarget(null); }}
+        title="Delete Relationship"
+        size="sm"
+      >
+        <Stack>
+          <Text>Are you sure you want to delete this relationship?</Text>
+          {deleteTarget && (
+            <Text fw={500}>
+              {deleteTarget.symbolA ?? `#${deleteTarget.securityIdA}`} {deleteTarget.relationshipType.replace(/_/g, ' ')} {deleteTarget.symbolB ?? `#${deleteTarget.securityIdB}`}
+            </Text>
+          )}
+          {deleteError && <Text c="red" size="sm">{deleteError}</Text>}
+          <Group justify="flex-end">
+            <Button variant="default" disabled={deletePending} onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button color="red" loading={deletePending} onClick={confirmDelete}>Delete</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {relationships.length > 0 && (
         <Paper withBorder p="md" mb="md">
           <Group justify="space-between" mb={showGraph ? 'sm' : undefined}>
@@ -576,7 +657,7 @@ function EventDetail() {
               eventContracts={contracts}
               events={[event]}
               height={400}
-              onDelete={handleDelete}
+              onDelete={requestDeleteById}
             />
           )}
         </Paper>

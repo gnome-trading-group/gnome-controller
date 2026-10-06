@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Box, Container, Group, SimpleGrid, Text, TextInput, Title, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Box, Container, Group, SimpleGrid, Text, TextInput, Title, Tooltip } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { ResearchDataset } from '../../types/research';
 import { controllerApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
+import { useLatestRequest } from '../../hooks/useLatestRequest';
 
 function formatBytes(bytes: number | undefined): string {
   if (bytes == null || isNaN(bytes)) return '—';
@@ -96,16 +98,24 @@ function DatasetList() {
   const [datasets, setDatasets] = useState<ResearchDataset[]>([]);
   const [loading, setLoading] = useState(false);
   const [nameFilter, setNameFilter] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const beginRequest = useLatestRequest();
 
   const refresh = useCallback(async () => {
+    const isCurrent = beginRequest();
     setLoading(true);
     try {
       const result = await controllerApi.listDatasets({ name: nameFilter || undefined });
+      if (!isCurrent()) return;
       setDatasets(result.datasets);
+      setError(null);
+    } catch (e) {
+      if (!isCurrent()) return;
+      setError(errorMessage(e, 'Failed to load datasets'));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [nameFilter]);
+  }, [nameFilter, beginRequest]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -225,6 +235,12 @@ function DatasetList() {
           </Tooltip>
         </Group>
       </Group>
+
+      {error && (
+        <Alert color="red" title="Error" mb="md">
+          {error}
+        </Alert>
+      )}
 
       <MantineReactTable table={table} />
     </Container>

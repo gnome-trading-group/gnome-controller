@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -19,7 +19,7 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle, IconPlus, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
-import { Strategy, ConfigValue, RiskPolicy, StrategySession } from '../../types';
+import { Strategy, ConfigValue, RiskPolicy, StrategySession, StrategySessionStatus } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
@@ -30,6 +30,7 @@ import {
   instanceTypeOptions,
   isInstanceTypeValidFor,
   suggestInstanceType,
+  defaultLatencyProfile,
 } from '../../utils/sizing';
 import {
   defaultSimulationState,
@@ -96,7 +97,15 @@ function flattenToSessionConfig(
   config['latency.profile'] = latencyProfile;
   for (const { key, value, type } of params) {
     if (key.trim()) {
-      config[`strategy.args.${key.trim()}`] = type === 'json' ? JSON.parse(value as string) : value;
+      let parsed: ConfigValue = value;
+      if (type === 'json') {
+        try {
+          parsed = JSON.parse(value as string);
+        } catch {
+          throw new Error(`Parameter "${key.trim()}" is not valid JSON`);
+        }
+      }
+      config[`strategy.args.${key.trim()}`] = parsed;
     }
   }
   if (mode === 'paper') {
@@ -133,22 +142,30 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   const [strategyType, setStrategyType] = useState<string | null>(null);
   const [strategyClass, setStrategyClass] = useState('');
   const [params, setParams] = useState<ParamRow[]>([]);
-  const [latencyProfile, setLatencyProfile] = useState<LatencyProfile>('low_latency');
-  const [instanceType, setInstanceType] = useState('c7i.4xlarge');
+  const [latencyProfile, setLatencyProfile] = useState<LatencyProfile>(defaultLatencyProfile('paper'));
+  // Until someone picks a profile, it follows the mode, the way the instance type follows the listing count.
+  const [profileUserChosen, setProfileUserChosen] = useState(false);
+  const [instanceType, setInstanceType] = useState(suggestInstanceType(defaultLatencyProfile('paper'), 'paper', 1));
   const [availabilityZone, setAvailabilityZone] = useState('');
   const [orchestratorVersion, setOrchestratorVersion] = useState('');
   const [gnomepyVersion, setGnomepyVersion] = useState('');
   const [sizingUserOverridden, setSizingUserOverridden] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [liveConfirmText, setLiveConfirmText] = useState('');
+  // One id per deploy attempt, reused on retry: if a launch timed out after the registry recorded it, the retry hits
+  // the duplicate id instead of starting a second session.
+  const sessionIdRef = useRef<string | null>(null);
   const [strategyKillSwitch, setStrategyKillSwitch] = useState<RiskPolicy | undefined>(undefined);
   const [resumeOnLaunch, setResumeOnLaunch] = useState(false);
+  const [killCheckFailed, setKillCheckFailed] = useState(false);
 
   const strategyKilled = strategyKillSwitch?.enabled ?? false;
   const latestKillSwitchEntry = useLatestPolicyHistory(strategyKilled ? strategyKillSwitch : undefined);
 
   useEffect(() => {
     setResumeOnLaunch(false);
+    setKillCheckFailed(false);
     if (!opened || !strategyId) {
       setStrategyKillSwitch(undefined);
       return;
@@ -157,7 +174,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     const target = { strategyId: parseInt(strategyId) };
     registryApi.listRiskPolicies()
       .then((policies) => { if (!cancelled) setStrategyKillSwitch(findKillSwitch(policies, target)); })
-      .catch((e) => console.error('Failed to load risk policies:', e));
+      .catch(() => { if (!cancelled) setKillCheckFailed(true); });
     return () => { cancelled = true; };
   }, [opened, strategyId]);
 
@@ -222,7 +239,10 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     if (p.listings && Array.isArray(p.listings) && String(p.mode) === 'live') {
       setSelectedLiveListingIds((p.listings as number[]).map(String));
     }
-    if (p.latencyProfile) setLatencyProfile(String(p.latencyProfile) as LatencyProfile);
+    if (p.latencyProfile) {
+      setLatencyProfile(String(p.latencyProfile) as LatencyProfile);
+      setProfileUserChosen(true);
+    }
     if (p.instanceType) { setInstanceType(String(p.instanceType)); setSizingUserOverridden(true); }
     if (p.availabilityZone) setAvailabilityZone(String(p.availabilityZone));
     if (p.orchestratorVersion) setOrchestratorVersion(String(p.orchestratorVersion));
@@ -239,7 +259,10 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     else setStrategyClass('');
     setResearchCommit(config['research_commit'] ? String(config['research_commit']) : '');
     setRegion(config['region'] ? String(config['region']) : '');
-    setLatencyProfile(config['latency.profile'] === 'standard' ? 'standard' : 'low_latency');
+    if (config['latency.profile']) {
+      setLatencyProfile(config['latency.profile'] === 'standard' ? 'standard' : 'low_latency');
+      setProfileUserChosen(true);
+    }
     if (session.instanceType) {
       setInstanceType(session.instanceType);
       setSizingUserOverridden(true);
@@ -303,6 +326,10 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   }, [opened, initialSession]);
 
   useEffect(() => {
+    if (!profileUserChosen) setLatencyProfile(defaultLatencyProfile(mode));
+  }, [mode, profileUserChosen]);
+
+  useEffect(() => {
     const count = mode === 'paper'
       ? listings.filter(l => l.listingId.trim()).length
       : selectedLiveListingIds.length;
@@ -312,6 +339,8 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   }, [listings, selectedLiveListingIds, mode, latencyProfile, instanceType, sizingUserOverridden]);
 
   const resetForm = () => {
+    sessionIdRef.current = null;
+    setLiveConfirmText('');
     setStrategyId(preselectedStrategyId !== undefined ? String(preselectedStrategyId) : null);
     setMode('paper');
     setProfiles(defaultProfiles());
@@ -324,8 +353,9 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     setStrategyType(null);
     setStrategyClass('');
     setParams([]);
-    setLatencyProfile('low_latency');
-    setInstanceType('c7i.4xlarge');
+    setLatencyProfile(defaultLatencyProfile('paper'));
+    setProfileUserChosen(false);
+    setInstanceType(suggestInstanceType(defaultLatencyProfile('paper'), 'paper', 1));
     setAvailabilityZone('');
     setOrchestratorVersion('');
     setGnomepyVersion('');
@@ -335,6 +365,9 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   };
 
   const handleClose = () => { resetForm(); onClose(); };
+
+  const selectedStrategyName = strategies.find(s => String(s.strategyId) === strategyId)?.name ?? strategyId ?? '';
+  const isLive = mode === 'live';
 
   const handleSubmit = async () => {
     setError(null);
@@ -349,31 +382,57 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
       if (selectedLiveListingIds.length === 0) { setError('Listings are required'); return; }
     }
 
-    const config = flattenToSessionConfig(
-      strategyId, mode, strategyType, strategyClass,
-      listings, selectedLiveListingIds, researchCommit, region, latencyProfile, params, profiles,
-    );
+    if (mode === 'live' && liveConfirmText.trim() !== selectedStrategyName) {
+      setError(`Type the strategy name "${selectedStrategyName}" to confirm a live deploy`);
+      return;
+    }
+
+    let config: Record<string, ConfigValue>;
+    try {
+      config = flattenToSessionConfig(
+        strategyId, mode, strategyType, strategyClass,
+        listings, selectedLiveListingIds, researchCommit, region, latencyProfile, params, profiles,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Invalid session config');
+      return;
+    }
     const isPython = strategyType === 'python';
 
     setSubmitting(true);
+    const newSessionId = sessionIdRef.current ?? crypto.randomUUID();
+    sessionIdRef.current = newSessionId;
     try {
-      if (strategyKillSwitch?.enabled && resumeOnLaunch) {
-        await registryApi.updateRiskPolicy(strategyKillSwitch.policyId, { enabled: false, reason: 'resumed on launch' });
-        setStrategyKillSwitch({ ...strategyKillSwitch, enabled: false });
+      try {
+        await registryApi.createSession({
+          sessionId: newSessionId,
+          strategyId: parseInt(strategyId),
+          mode,
+          config,
+          researchCommit: isPython ? researchCommit.trim() || undefined : undefined,
+          region: region.trim() || undefined,
+          availabilityZone: availabilityZone.trim() || undefined,
+          instanceType,
+          orchestratorVersion: orchestratorVersion.trim() || undefined,
+          gnomepyVersion: isPython ? gnomepyVersion.trim() || undefined : undefined,
+        });
+      } catch (launchError) {
+        // The request can fail after the registry recorded the session (e.g. a gateway timeout), so check before
+        // reporting a failure the user would retry.
+        const existing = await registryApi.listSessions({ sessionId: newSessionId }).then(rows => rows[0]).catch(() => undefined);
+        if (!existing) throw launchError;
+        if (existing.status === StrategySessionStatus.FAILED) {
+          sessionIdRef.current = null;
+          throw launchError;
+        }
       }
-      const newSessionId = crypto.randomUUID();
-      await registryApi.createSession({
-        sessionId: newSessionId,
-        strategyId: parseInt(strategyId),
-        mode,
-        config,
-        researchCommit: isPython ? researchCommit.trim() || undefined : undefined,
-        region: region.trim() || undefined,
-        availabilityZone: availabilityZone.trim() || undefined,
-        instanceType,
-        orchestratorVersion: orchestratorVersion.trim() || undefined,
-        gnomepyVersion: isPython ? gnomepyVersion.trim() || undefined : undefined,
-      });
+      // Resume only once the launch succeeded: resuming first and then failing to launch would leave every other
+      // running session of the strategy trading again for nothing. If the resume fails the new session simply stays
+      // blocked, and its page shows the strategy as killed.
+      if (strategyKillSwitch?.enabled && resumeOnLaunch) {
+        await registryApi.updateRiskPolicy(strategyKillSwitch.policyId, { enabled: false, reason: 'resumed on launch' })
+          .catch((e) => console.error('Session launched but resuming the strategy failed:', e));
+      }
       handleClose();
       onCreated(newSessionId);
     } catch (e) {
@@ -398,7 +457,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
           disabled={preselectedStrategyId !== undefined || !!initialSession}
           searchable
         />
-        <Select label="Mode" data={MODE_OPTIONS} value={mode} onChange={v => setMode(v ?? 'paper')} required />
+        <Select label="Mode" data={MODE_OPTIONS} value={mode} onChange={v => { setMode(v ?? 'paper'); setLiveConfirmText(''); }} required />
         <Group grow>
           <TextInput label="Region Override" placeholder="e.g. us-east-1 (optional)" value={region} onChange={e => setRegion(e.currentTarget.value)} />
           <TextInput label="Availability Zone" placeholder="Auto, or e.g. us-east-1a" value={availabilityZone} onChange={e => setAvailabilityZone(e.currentTarget.value)} />
@@ -408,7 +467,11 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
             label="Latency Profile"
             data={LATENCY_PROFILE_OPTIONS}
             value={latencyProfile}
-            onChange={(v) => setLatencyProfile((v ?? 'low_latency') as LatencyProfile)}
+            onChange={(v) => {
+              if (!v) return;
+              setLatencyProfile(v as LatencyProfile);
+              setProfileUserChosen(true);
+            }}
           />
           <Select
             label="Instance Type"
@@ -512,9 +575,37 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
                 {' '}A session launched now will not be able to send orders.
               </Text>
               <Checkbox
-                label="Resume trading on launch"
+                label="Resume the strategy after launching"
+                description="Unblocks every running session of this strategy, not just the new one"
                 checked={resumeOnLaunch}
                 onChange={(e) => setResumeOnLaunch(e.currentTarget.checked)}
+              />
+            </Stack>
+          </Alert>
+        )}
+
+        {killCheckFailed && (
+          <Alert color="gray" title="Couldn't check the kill switch" icon={<IconAlertTriangle size={20} />}>
+            <Text size="sm">
+              Risk policies didn't load, so it's unknown whether strategy {strategyId} is killed. If it is, the new
+              session won't be able to send orders.
+            </Text>
+          </Alert>
+        )}
+
+        {isLive && (
+          // Mode can arrive from the strategy's saved defaults or the session being relaunched, so a live deploy
+          // must be spelled out here rather than rely on the user having noticed the Mode field.
+          <Alert color="red" title="LIVE session — trades real money" icon={<IconAlertTriangle size={20} />}>
+            <Stack gap="xs">
+              <Text size="sm">
+                This session will send real orders to the exchange. Type the strategy name to confirm.
+              </Text>
+              <TextInput
+                placeholder={selectedStrategyName}
+                value={liveConfirmText}
+                onChange={e => setLiveConfirmText(e.currentTarget.value)}
+                disabled={submitting}
               />
             </Stack>
           </Alert>
@@ -523,7 +614,14 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
         {error && <Text c="red" size="sm">{error}</Text>}
         <Group justify="flex-end">
           <Button variant="outline" onClick={handleClose}>Cancel</Button>
-          <Button color="green" loading={submitting} onClick={handleSubmit}>{initialSession ? 'Relaunch' : 'Deploy'}</Button>
+          <Button
+            color={isLive ? 'red' : 'green'}
+            loading={submitting}
+            disabled={isLive && liveConfirmText.trim() !== selectedStrategyName}
+            onClick={handleSubmit}
+          >
+            {initialSession ? 'Relaunch' : 'Deploy'}{isLive ? ' LIVE' : ''}
+          </Button>
         </Group>
       </Stack>
     </Modal>

@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import {
   ActionIcon,
+  Alert,
   Button,
   Group,
   Modal,
   Select,
   Stack,
+  Text,
   TextInput,
   Tooltip,
 } from '@mantine/core';
@@ -15,6 +17,7 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { AWS_REGIONS, Exchange, SchemaType } from '../../types';
 import { registryApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
 
 interface ExchangesTabProps {
   onDelete: (type: 'exchange', id: number, name: string) => void;
@@ -24,6 +27,9 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
   const { exchanges, loading, refreshExchanges } = useGlobalState();
 
   const [createExchangeOpen, setCreateExchangeOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const [newExchangeForm, setNewExchangeForm] = useState({
     exchangeCode: '',
     exchangeName: '',
@@ -32,13 +38,17 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
   });
 
   const handleCreateExchange = async () => {
+    setCreating(true);
+    setCreateError(null);
     try {
       await registryApi.createExchange(newExchangeForm);
       await refreshExchanges();
       setCreateExchangeOpen(false);
       setNewExchangeForm({ exchangeCode: '', exchangeName: '', region: '', schemaType: '' });
     } catch (err) {
-      console.error('Failed to create exchange:', err);
+      setCreateError(errorMessage(err, 'Failed to create exchange'));
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -172,7 +182,13 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
       </Group>
     ),
     onEditingRowSave: async ({ row, table: t }: { row: MRT_Row<Exchange>; table: MRT_TableInstance<Exchange> }) => {
-      await registryApi.updateExchange(row.original.exchangeId, row.original);
+      setEditError(null);
+      try {
+        await registryApi.updateExchange(row.original.exchangeId, row.original);
+      } catch (err) {
+        setEditError(errorMessage(err, 'Failed to update exchange'));
+        return;
+      }
       t.setEditingRow(null);
       refreshExchanges();
     },
@@ -182,7 +198,7 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
           size="lg"
           variant="filled"
           color="green"
-          onClick={() => setCreateExchangeOpen(true)}
+          onClick={() => { setCreateError(null); setCreateExchangeOpen(true); }}
         >
           <IconPlus size={20} />
         </ActionIcon>
@@ -194,7 +210,7 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
     <>
       <Modal
         opened={createExchangeOpen}
-        onClose={() => setCreateExchangeOpen(false)}
+        onClose={() => { if (creating) return; setCreateExchangeOpen(false); }}
         title="Create Exchange"
         size="sm"
       >
@@ -227,12 +243,18 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
             onChange={(value) => setNewExchangeForm(prev => ({ ...prev, schemaType: value || '' }))}
             required
           />
+          {createError && <Text c="red" size="sm">{createError}</Text>}
           <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setCreateExchangeOpen(false)}>Cancel</Button>
-            <Button color="green" onClick={handleCreateExchange}>Create</Button>
+            <Button variant="outline" disabled={creating} onClick={() => setCreateExchangeOpen(false)}>Cancel</Button>
+            <Button color="green" loading={creating} onClick={handleCreateExchange}>Create</Button>
           </Group>
         </Stack>
       </Modal>
+      {editError && (
+        <Alert color="red" title="Error" mb="md" withCloseButton onClose={() => setEditError(null)}>
+          {editError}
+        </Alert>
+      )}
       <MantineReactTable table={table} />
     </>
   );

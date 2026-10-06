@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Container,
@@ -18,6 +19,7 @@ import { useNavigate } from 'react-router-dom';
 import { Strategy, StrategyStatus } from '../../types';
 import { registryApi } from '../../utils/api';
 import { navigateRowProps } from '../../utils/navigation';
+import { errorMessage } from '../../utils/kill-switch';
 import StrategyFormModal from './StrategyFormModal';
 
 const STATUS_LABELS: Record<number, string> = {
@@ -40,12 +42,17 @@ function Strategies() {
   const [editTarget, setEditTarget] = useState<Strategy | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Strategy | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const data = await registryApi.listStrategies();
       setStrategies(data);
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(errorMessage(e, 'Failed to load strategies'));
     } finally {
       setLoading(false);
     }
@@ -55,13 +62,14 @@ function Strategies() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    setDeleteError(null);
     try {
       await registryApi.deleteStrategy(deleteTarget.strategyId);
       setDeleteModalOpen(false);
       setDeleteTarget(null);
       refresh();
     } catch (e) {
-      console.error('Failed to delete strategy:', e);
+      setDeleteError(errorMessage(e, 'Failed to delete strategy'));
     }
   };
 
@@ -122,7 +130,7 @@ function Strategies() {
         <ActionIcon variant="subtle" color="blue" onClick={(e) => { e.stopPropagation(); setEditTarget(row.original); setModalOpen(true); }}>
           <IconEdit size={16} />
         </ActionIcon>
-        <ActionIcon variant="subtle" color="red" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row.original); setDeleteModalOpen(true); }}>
+        <ActionIcon variant="subtle" color="red" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row.original); setDeleteError(null); setDeleteModalOpen(true); }}>
           <IconTrash size={16} />
         </ActionIcon>
       </Group>
@@ -147,6 +155,12 @@ function Strategies() {
         </Group>
       </Group>
 
+      {loadError && (
+        <Alert color="red" title="Error" mb="md">
+          {loadError}
+        </Alert>
+      )}
+
       <MantineReactTable table={table} />
 
       <StrategyFormModal
@@ -159,6 +173,7 @@ function Strategies() {
       <Modal opened={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} title="Confirm Delete" size="sm">
         <Stack>
           <Text>Delete strategy <Text span fw={500}>{deleteTarget?.name}</Text>?</Text>
+          {deleteError && <Text c="red" size="sm">{deleteError}</Text>}
           <Group justify="flex-end">
             <Button variant="outline" onClick={() => setDeleteModalOpen(false)}>Cancel</Button>
             <Button color="red" onClick={handleDelete}>Delete</Button>

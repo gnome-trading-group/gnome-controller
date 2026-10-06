@@ -33,6 +33,7 @@ import {
 } from 'recharts';
 import { ResearchArtifact, ResearchIteration, ResearchNote, ResearchSession, SessionStatus } from '../../types/research';
 import { controllerApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
 
 const STATUS_COLORS: Record<SessionStatus, string> = {
   running: 'blue',
@@ -58,6 +59,7 @@ function ResearchDetail() {
   const [error, setError] = useState<string | null>(null);
   const [newNote, setNewNote] = useState('');
   const [submittingNote, setSubmittingNote] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState<ResearchArtifact[]>([]);
 
   const refresh = useCallback(async () => {
@@ -83,12 +85,13 @@ function ResearchDetail() {
   const handleAddNote = async () => {
     if (!sessionName || !newNote.trim()) return;
     setSubmittingNote(true);
+    setNoteError(null);
     try {
       await controllerApi.addResearchNote(sessionName, newNote.trim());
       setNewNote('');
       await refresh();
     } catch (e) {
-      console.error('Failed to add note:', e);
+      setNoteError(errorMessage(e, 'Failed to add note'));
     } finally {
       setSubmittingNote(false);
     }
@@ -370,6 +373,7 @@ function ResearchDetail() {
             minRows={2}
             maxRows={8}
           />
+          {noteError && <Text c="red" size="sm">{noteError}</Text>}
           <Group justify="flex-end">
             <Button
               size="sm"

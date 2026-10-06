@@ -1,7 +1,24 @@
 import { RiskPolicy } from '../types';
 import { StrategySession, StrategySessionStatus } from '../types/strategy-sessions';
 
+const ACTIVE_SESSION_STATUSES = new Set<StrategySessionStatus>([
+  StrategySessionStatus.SUBMITTED,
+  StrategySessionStatus.STARTING,
+  StrategySessionStatus.RUNNING,
+]);
+
+export function isActiveSessionStatus(status: StrategySessionStatus): boolean {
+  return ACTIVE_SESSION_STATUSES.has(status);
+}
+
 // Names what a policy applies to, from exactly the ids it carries.
+export function targetPageLink(policy: Pick<RiskPolicy, 'sessionId' | 'strategyId' | 'listingId'>): string {
+  if (policy.sessionId != null) return `/sessions/${policy.sessionId}`;
+  if (policy.strategyId != null) return `/strategies/${policy.strategyId}`;
+  if (policy.listingId != null) return `/security-master/listings/${policy.listingId}`;
+  return '/risk/policies';
+}
+
 export function describeTarget(
   policy: Pick<RiskPolicy, 'sessionId' | 'strategyId' | 'listingId'>,
   strategyName?: (strategyId: number) => string | undefined,
@@ -20,15 +37,10 @@ export function describeTarget(
   return 'Global';
 }
 
-const ACTIVE_SESSION_STATUSES = new Set<StrategySessionStatus>([
-  StrategySessionStatus.SUBMITTED,
-  StrategySessionStatus.STARTING,
-  StrategySessionStatus.RUNNING,
-]);
 
 // Every Stop leaves a kill row for its session; once the session has ended that row can never apply again.
 export function withoutEndedSessions(policies: RiskPolicy[], sessions: StrategySession[]): RiskPolicy[] {
-  const active = new Set(sessions.filter((s) => ACTIVE_SESSION_STATUSES.has(s.status)).map((s) => s.sessionId));
+  const active = new Set(sessions.filter((s) => isActiveSessionStatus(s.status)).map((s) => s.sessionId));
   return policies.filter((p) => p.sessionId == null || active.has(p.sessionId));
 }
 
@@ -62,4 +74,25 @@ export function policiesForSession(policies: RiskPolicy[], sessionId: string, st
 function isIdleGlobalKill(policy: RiskPolicy): boolean {
   return policy.policyType === 'KILL_SWITCH' && !policy.enabled && policy.strategyId == null
     && policy.listingId == null && policy.sessionId == null;
+}
+
+// The listings these sessions trade, as recorded in their launch config.
+export function configuredListings(sessions: StrategySession[]): Set<number> {
+  const listings = new Set<number>();
+  for (const session of sessions) {
+    const configured = session.config?.listings;
+    if (!Array.isArray(configured)) continue;
+    for (const id of configured) {
+      const listingId = Number(id);
+      if (Number.isInteger(listingId)) listings.add(listingId);
+    }
+  }
+  return listings;
+}
+
+// A listing-wide policy (every strategy on one listing) only matters here if that listing is traded. Display only:
+// the OMS still applies every row.
+export function isUnrelatedListingPolicy(policy: RiskPolicy, tradedListings: Set<number>): boolean {
+  return policy.sessionId == null && policy.strategyId == null && policy.listingId != null
+    && !tradedListings.has(policy.listingId);
 }

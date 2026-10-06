@@ -3,6 +3,7 @@ import { Alert, Button, Container, Group, Select, Stack, Text, Title } from '@ma
 import { IconCheck } from '@tabler/icons-react';
 import { RuleType } from '../../types/launcher';
 import { launcherApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
 import { SchemaFormFields } from '../../components/SchemaFormFields';
 
 function ManualTrigger() {
@@ -13,12 +14,13 @@ function ManualTrigger() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     launcherApi.getRuleTypes()
       .then(setRuleTypes)
-      .catch(console.error)
+      .catch(e => setLoadError(errorMessage(e, 'Failed to load rule types')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -62,6 +64,11 @@ function ManualTrigger() {
       </Group>
 
       <Stack gap="sm">
+        {loadError && (
+          <Alert color="red" title="Error">
+            {loadError}
+          </Alert>
+        )}
         {success && (
           <Alert color="green" icon={<IconCheck size={16} />} onClose={() => setSuccess(null)} withCloseButton>
             {success}

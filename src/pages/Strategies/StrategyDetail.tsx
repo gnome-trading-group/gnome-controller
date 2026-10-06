@@ -14,7 +14,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconAB2, IconAlertTriangle, IconArrowLeft, IconEdit, IconHistory, IconPlayerPlay, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconAB2, IconAlertTriangle, IconArrowLeft, IconEdit, IconHistory, IconPencil, IconPlayerPlay, IconPlayerStop, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -30,12 +30,23 @@ import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal'
 import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
 import { StopSessionModal } from '../Sessions/StopSessionModal';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
-import { findKillSwitch, listingKills, setKillSwitch } from '../../utils/kill-switch';
+import { useLatestRequest } from '../../hooks/useLatestRequest';
+import { errorMessage, findKillSwitch, isKilled, KILL_SWITCH_TYPE, listingKills, setKillSwitch } from '../../utils/kill-switch';
 import { KillOnListingModal } from '../../components/KillOnListingModal';
 import { ListingKillList } from '../../components/ListingKillList';
-import { describeTarget, policiesForStrategy, policyLevel, withoutEndedSessions } from '../../utils/policy-target';
+import { LastUpdated } from '../../components/LastUpdated';
+import {
+  configuredListings,
+  describeTarget,
+  isActiveSessionStatus,
+  isUnrelatedListingPolicy,
+  policiesForStrategy,
+  policyLevel,
+  withoutEndedSessions,
+} from '../../utils/policy-target';
 import { useListingLabels } from '../../hooks/useAsyncSearch';
 import { AddRiskPolicyModal } from '../../components/AddRiskPolicyModal';
+import { EditRiskPolicyModal } from '../../components/EditRiskPolicyModal';
 import { SESSION_STATUS_COLORS } from '../../utils/session-status';
 
 const MODE_COLORS: Record<string, string> = {
@@ -55,6 +66,8 @@ const STATUS_COLORS: Record<number, string> = {
   [StrategyStatus.PAUSED]: 'yellow',
 };
 
+const POLL_INTERVAL_MS = 10000;
+
 function StrategyDetail() {
   const { strategyId } = useParams<{ strategyId: string }>();
   const navigate = useNavigate();
@@ -64,6 +77,9 @@ function StrategyDetail() {
   const [pnlRows, setPnlRows] = useState<PnlSnapshot[]>([]);
   const [pnlMode, setPnlMode] = useState<string>('All');
   const [policies, setPolicies] = useState<RiskPolicy[]>([]);
+  const [policiesLoaded, setPoliciesLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [sessions, setSessions] = useState<StrategySession[]>([]);
   const [loading, setLoading] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
@@ -73,11 +89,16 @@ function StrategyDetail() {
   const [createPolicyOpen, setCreatePolicyOpen] = useState(false);
   const [deletePolicyTarget, setDeletePolicyTarget] = useState<RiskPolicy | null>(null);
   const [toggleTarget, setToggleTarget] = useState<RiskPolicy | null>(null);
+  const [editPolicyTarget, setEditPolicyTarget] = useState<RiskPolicy | null>(null);
   const [historyTarget, setHistoryTarget] = useState<RiskPolicy | null>(null);
   const [killAction, setKillAction] = useState<'kill' | 'resume' | null>(null);
   const [killOnListingOpen, setKillOnListingOpen] = useState(false);
+  const [showAllListingPolicies, setShowAllListingPolicies] = useState(false);
+
+  const beginRefresh = useLatestRequest();
 
   const refresh = useCallback(async (showLoading = true) => {
+    const isCurrent = beginRefresh();
     if (showLoading) setLoading(true);
     try {
       const [allStrategies, pnl, allPolicies, sessionList] = await Promise.all([
@@ -86,25 +107,42 @@ function StrategyDetail() {
         registryApi.listRiskPolicies(),
         registryApi.listSessions({ strategyId: id }),
       ]);
+      if (!isCurrent()) return;
       setStrategy(allStrategies[0] ?? null);
       setPnlRows(pnl);
       setPolicies(withoutEndedSessions(policiesForStrategy(allPolicies, id), sessionList));
+      setPoliciesLoaded(true);
       setSessions(sessionList);
+      setLoadError(null);
+      setLastUpdated(new Date());
+    } catch (e) {
+      if (!isCurrent()) return;
+      setLoadError(errorMessage(e, 'Failed to load strategy'));
     } finally {
-      if (showLoading) setLoading(false);
+      // Not gated on showLoading: a superseded load skips this, so the newest must clear a spinner it didn't start.
+      if (isCurrent()) setLoading(false);
     }
-  }, [id, pnlMode]);
+  }, [id, pnlMode, beginRefresh]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
-    const interval = setInterval(() => refresh(false), 10000);
+    const interval = setInterval(() => refresh(false), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [refresh]);
 
-  const listingLabels = useListingLabels(policies.flatMap((p) => (p.listingId != null ? [p.listingId] : [])));
+  const tradedListings = useMemo(
+    () => configuredListings(sessions.filter((s) => isActiveSessionStatus(s.status))),
+    [sessions],
+  );
+  const hiddenListingPolicies = policies.filter((p) => isUnrelatedListingPolicy(p, tradedListings)).length;
+  const shownPolicies = useMemo(
+    () => (showAllListingPolicies ? policies : policies.filter((p) => !isUnrelatedListingPolicy(p, tradedListings))),
+    [policies, tradedListings, showAllListingPolicies],
+  );
+  const listingLabels = useListingLabels(shownPolicies.flatMap((p) => (p.listingId != null ? [p.listingId] : [])));
   const killSwitchTarget = useMemo(() => ({ strategyId: id }), [id]);
   const killSwitch = findKillSwitch(policies, killSwitchTarget);
-  const strategyKilled = killSwitch?.enabled ?? false;
+  const strategyKilled = isKilled(policiesLoaded ? policies : null, killSwitchTarget);
   const latestKillSwitchEntry = useLatestPolicyHistory(killSwitch);
 
   const confirmKillAction = async (reason: string | undefined) => {
@@ -269,7 +307,7 @@ function StrategyDetail() {
 
   const policyTable = useMantineReactTable({
     columns: policyColumns,
-    data: policies,
+    data: shownPolicies,
     state: { isLoading: loading },
     enableEditing: false,
     enableRowActions: true,
@@ -288,6 +326,18 @@ function StrategyDetail() {
             <IconHistory size={16} />
           </ActionIcon>
         </Tooltip>
+        {row.original.policyType !== KILL_SWITCH_TYPE && (
+          <Tooltip label="Edit limits" withArrow openDelay={500}>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              disabled={row.original.strategyId == null}
+              onClick={() => setEditPolicyTarget(row.original)}
+            >
+              <IconPencil size={16} />
+            </ActionIcon>
+          </Tooltip>
+        )}
         <ActionIcon
           variant="subtle"
           color="red"
@@ -317,13 +367,18 @@ function StrategyDetail() {
           )}
         </Group>
         <Group>
-          <Button
-            color={strategyKilled ? 'green' : 'red'}
-            leftSection={strategyKilled ? <IconPlayerPlay size={16} /> : <IconPlayerStop size={16} />}
-            onClick={() => setKillAction(strategyKilled ? 'resume' : 'kill')}
-          >
-            {strategyKilled ? 'Resume strategy' : 'Kill strategy'}
-          </Button>
+          <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={loadError !== null} />
+          {strategyKilled === null ? (
+            <Button variant="default" disabled>Kill status unknown</Button>
+          ) : (
+            <Button
+              color={strategyKilled ? 'green' : 'red'}
+              leftSection={strategyKilled ? <IconPlayerPlay size={16} /> : <IconPlayerStop size={16} />}
+              onClick={() => setKillAction(strategyKilled ? 'resume' : 'kill')}
+            >
+              {strategyKilled ? 'Resume strategy' : 'Kill strategy'}
+            </Button>
+          )}
           <Tooltip label="Edit Strategy" position="bottom" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setEditOpen(true)}>
               <IconEdit size={20} />
@@ -336,6 +391,13 @@ function StrategyDetail() {
           </Tooltip>
         </Group>
       </Group>
+
+      {loadError && (
+        <Alert mb="md" color="red" title="Error">
+          {loadError}
+          {policiesLoaded ? ' — showing the last state that loaded.' : " — this strategy's kill switch status is unknown."}
+        </Alert>
+      )}
 
       {strategyKilled && (
         <Alert mb="xl" color="red" title="Strategy Killed" icon={<IconAlertTriangle size={20} />}>
@@ -380,7 +442,13 @@ function StrategyDetail() {
       <Group justify="space-between" mb="xs">
         <Title order={4}>Risk Policies</Title>
         <Group gap="xs">
-          <Button size="xs" variant="light" color="red" onClick={() => setKillOnListingOpen(true)}>
+          <Switch
+            size="xs"
+            label={`Show all listing policies${hiddenListingPolicies ? ` (${hiddenListingPolicies} hidden)` : ''}`}
+            checked={showAllListingPolicies}
+            onChange={(e) => setShowAllListingPolicies(e.currentTarget.checked)}
+          />
+          <Button size="xs" variant="light" color="red" disabled={!policiesLoaded} onClick={() => setKillOnListingOpen(true)}>
             Kill on listing
           </Button>
           <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setCreatePolicyOpen(true)}>
@@ -465,6 +533,13 @@ function StrategyDetail() {
       />
 
       <RiskPolicyHistoryModal policy={historyTarget} onClose={() => setHistoryTarget(null)} />
+
+      <EditRiskPolicyModal
+        policy={editPolicyTarget}
+        targetDescription={strategy?.name}
+        onClose={() => setEditPolicyTarget(null)}
+        onSaved={() => refresh(false)}
+      />
 
       <AddRiskPolicyModal
         opened={createPolicyOpen}

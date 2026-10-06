@@ -1,15 +1,19 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActionIcon,
+  Alert,
   Anchor,
   Badge,
+  Button,
   Container,
   Group,
+  Modal,
   Paper,
   SegmentedControl,
   Select,
   Stack,
   Switch,
+  Text,
   Title,
   Tooltip,
 } from '@mantine/core';
@@ -20,6 +24,7 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { ContractRelationship, ContractRelationshipType } from '../../types';
 import { registryApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import RelationshipGraph from './RelationshipGraph';
@@ -47,6 +52,9 @@ const METHOD_OPTIONS = [
 
 function ContractRelationships() {
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const urlState = useUrlTableState({ defaultSort: { id: 'confidence', desc: true } });
   const methodFilter = urlState.getParam('method') || null;
@@ -71,6 +79,7 @@ function ContractRelationships() {
     data: relationships,
     total,
     isLoading,
+    error,
     pagination,
     sorting,
     setPagination,
@@ -91,14 +100,27 @@ function ContractRelationships() {
     },
   });
 
-  const handleDelete = async (relationshipId: number) => {
+  const requestDelete = (relationshipId: number) => {
+    setDeleteError(null);
+    setDeleteTarget(relationshipId);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteTarget === null) return;
+    setDeletePending(true);
+    setDeleteError(null);
     try {
-      await registryApi.deleteContractRelationship(relationshipId);
+      await registryApi.deleteContractRelationship(deleteTarget);
+      setDeleteTarget(null);
       refresh();
     } catch (err) {
-      console.error('Failed to delete relationship:', err);
+      setDeleteError(errorMessage(err, 'Failed to delete relationship'));
+    } finally {
+      setDeletePending(false);
     }
   };
+
+  const deleteTargetRow = relationships.find(r => r.relationshipId === deleteTarget);
 
   const symbolMap = useMemo(() => {
     const map: Record<number, string> = {};
@@ -198,7 +220,7 @@ function ContractRelationships() {
     },
     renderRowActions: ({ row }: { row: MRT_Row<ContractRelationship> }) => (
       <Tooltip label="Delete" position="left" withArrow openDelay={500}>
-        <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); handleDelete(row.original.relationshipId); }}>
+        <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); requestDelete(row.original.relationshipId); }}>
           <IconTrash size={16} />
         </ActionIcon>
       </Tooltip>
@@ -256,6 +278,8 @@ function ContractRelationships() {
         </Group>
       </Group>
 
+      {error && <Alert color="red" title="Error" mb="md">{error}</Alert>}
+
       {view === 'table' ? (
         <MantineReactTable table={table} />
       ) : (
@@ -269,13 +293,34 @@ function ContractRelationships() {
               relationships={relationships}
               securitySymbols={symbolMap}
               height="100%"
-              onDelete={handleDelete}
+              onDelete={requestDelete}
             />
           )}
         </Paper>
       )}
 
       <CreateRelationshipModal opened={createOpened} onClose={closeCreate} onCreated={refresh} />
+
+      <Modal
+        opened={deleteTarget !== null}
+        onClose={() => { if (deletePending) return; setDeleteTarget(null); }}
+        title="Delete Relationship"
+        size="sm"
+      >
+        <Stack>
+          <Text>Are you sure you want to delete this relationship?</Text>
+          {deleteTargetRow && (
+            <Text fw={500}>
+              {deleteTargetRow.symbolA ?? `#${deleteTargetRow.securityIdA}`} {deleteTargetRow.relationshipType.replace(/_/g, ' ')} {deleteTargetRow.symbolB ?? `#${deleteTargetRow.securityIdB}`}
+            </Text>
+          )}
+          {deleteError && <Text c="red" size="sm">{deleteError}</Text>}
+          <Group justify="flex-end">
+            <Button variant="default" disabled={deletePending} onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button color="red" loading={deletePending} onClick={confirmDelete}>Delete</Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Container>
   );
 }

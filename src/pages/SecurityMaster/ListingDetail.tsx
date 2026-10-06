@@ -30,7 +30,7 @@ import {
   unscalePrice,
   unscaleSize,
 } from '../../utils/security-master';
-import { errorMessage, findKillSwitch, setKillSwitch } from '../../utils/kill-switch';
+import { errorMessage, findKillSwitch, isKilled, setKillSwitch } from '../../utils/kill-switch';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal';
@@ -57,17 +57,20 @@ function ListingDetail() {
   const [relatedListings, setRelatedListings] = useState<Listing[]>([]);
   const [specs, setSpecs] = useState<ListingSpec[]>([]);
   const [loading, setLoading] = useState(true);
+  const [listingError, setListingError] = useState<string | null>(null);
   const [loadingSpecs, setLoadingSpecs] = useState(true);
+  const [specsError, setSpecsError] = useState<string | null>(null);
   const [eventContract, setEventContract] = useState<EventContract | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
-  const [policies, setPolicies] = useState<RiskPolicy[]>([]);
+  const [eventError, setEventError] = useState<string | null>(null);
+  const [policies, setPolicies] = useState<RiskPolicy[] | null>(null);
   const [policiesError, setPoliciesError] = useState<string | null>(null);
   const [killAction, setKillAction] = useState<'kill' | 'resume' | null>(null);
   const [historyTarget, setHistoryTarget] = useState<RiskPolicy | null>(null);
 
   const killSwitchTarget = useMemo(() => ({ listingId: id }), [id]);
   const killSwitch = findKillSwitch(policies, killSwitchTarget);
-  const listingKilled = killSwitch?.enabled ?? false;
+  const listingKilled = isKilled(policies, killSwitchTarget);
   const latestKillSwitchEntry = useLatestPolicyHistory(killSwitch);
 
   const loadPolicies = useCallback(async () => {
@@ -88,49 +91,77 @@ function ListingDetail() {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     setLoading(true);
+    setListingError(null);
     registryApi.listListingsPaginated({ listingId: id, limit: 1 })
       .then(async rows => {
+        if (cancelled) return;
         const l = rows[0] ?? null;
         setListing(l);
         if (l) {
           const [secs, related] = await Promise.all([
             registryApi.listSecuritiesPaginated({ securityId: l.securityId, limit: 1 }),
-            registryApi.listListings().then(all => all.filter((r: Listing) => r.securityId === l.securityId && r.listingId !== id)),
+            registryApi.listListingsPaginated({ securityId: l.securityId })
+              .then(rows => rows.filter((r: Listing) => r.listingId !== id)),
           ]);
+          if (cancelled) return;
           setSecurity(secs[0] ?? null);
           setRelatedListings(related);
         }
       })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .catch(e => { if (!cancelled) setListingError(errorMessage(e, 'Failed to load listing')); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [id]);
 
   useEffect(() => {
+    setEventContract(null);
+    setEvent(null);
+    setEventError(null);
     if (!security || security.type !== SecurityType.EVENT_CONTRACT) return;
+    let cancelled = false;
     registryApi.listEventContracts({ securityId: security.securityId })
       .then(async (contracts: EventContract[]) => {
+        if (cancelled) return;
         const ec = contracts[0] ?? null;
         setEventContract(ec);
         if (ec) {
           const events = await registryApi.listEvents({ eventId: ec.eventId });
+          if (cancelled) return;
           setEvent((events as Event[])[0] ?? null);
         }
       })
-      .catch(console.error);
+      .catch(e => { if (!cancelled) setEventError(errorMessage(e, 'Failed to load event')); });
+    return () => { cancelled = true; };
   }, [security]);
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     setLoadingSpecs(true);
+    setSpecsError(null);
     registryApi.listListingSpecs(id, true)
-      .then(setSpecs)
-      .catch(() => setSpecs([]))
-      .finally(() => setLoadingSpecs(false));
+      .then(rows => { if (!cancelled) setSpecs(rows); })
+      .catch(e => {
+        if (cancelled) return;
+        setSpecs([]);
+        setSpecsError(errorMessage(e, 'Failed to load spec history'));
+      })
+      .finally(() => { if (!cancelled) setLoadingSpecs(false); });
+    return () => { cancelled = true; };
   }, [id]);
 
   if (loading) {
     return <Container size="xl" py="xl"><Loader /></Container>;
+  }
+
+  if (listingError) {
+    return (
+      <Container size="xl" py="xl">
+        <Alert color="red" title="Error">{listingError}</Alert>
+      </Container>
+    );
   }
 
   if (!listing) {
@@ -151,16 +182,29 @@ function ListingDetail() {
           <Title order={2}>{listing.securitySymbol}</Title>
           <Text c="dimmed">{listing.exchangeName} &mdash; {listing.exchangeSecuritySymbol}</Text>
         </div>
-        <Button
-          color={listingKilled ? 'green' : 'red'}
-          leftSection={listingKilled ? <IconPlayerPlay size={16} /> : <IconPlayerStop size={16} />}
-          onClick={() => setKillAction(listingKilled ? 'resume' : 'kill')}
-        >
-          {listingKilled ? 'Resume listing' : 'Kill listing'}
-        </Button>
+        {listingKilled === null ? (
+          <Button variant="default" disabled>Kill status unknown</Button>
+        ) : (
+          <Button
+            color={listingKilled ? 'green' : 'red'}
+            leftSection={listingKilled ? <IconPlayerPlay size={16} /> : <IconPlayerStop size={16} />}
+            onClick={() => setKillAction(listingKilled ? 'resume' : 'kill')}
+          >
+            {listingKilled ? 'Resume listing' : 'Kill listing'}
+          </Button>
+        )}
       </Group>
 
-      {policiesError && <Alert mb="md" color="red" title="Error">{policiesError}</Alert>}
+      {policiesError && (
+        <Alert mb="md" color="red" title="Error">
+          {policiesError}
+          {policies === null ? " — this listing's kill switch status is unknown." : ' — showing the last state that loaded.'}
+        </Alert>
+      )}
+
+      {eventError && (
+        <Alert mb="md" color="red" title="Error">{eventError}</Alert>
+      )}
 
       {listingKilled && (
         <Alert mb="xl" color="red" title="Listing Killed" icon={<IconAlertTriangle size={20} />}>
@@ -252,6 +296,8 @@ function ListingDetail() {
             <Title order={4} mb="md">Spec History</Title>
             {loadingSpecs ? (
               <Loader size="sm" />
+            ) : specsError ? (
+              <Alert color="red" title="Error">{specsError}</Alert>
             ) : specs.length === 0 ? (
               <Text c="dimmed" size="sm">No specs recorded.</Text>
             ) : (

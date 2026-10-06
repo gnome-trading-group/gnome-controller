@@ -24,6 +24,16 @@ export function scaleRiskParameters(parameters: Record<string, unknown>): Record
   return scaled;
 }
 
+/** Inverse of scaleRiskParameters: stored scaled integers back to the dollars and units operators type. */
+export function unscaleRiskParameters(parameters: Record<string, unknown>): Record<string, unknown> {
+  const unscaled: Record<string, unknown> = { ...parameters };
+  for (const [key, value] of Object.entries(parameters ?? {})) {
+    const scale = PARAMETER_SCALES[key];
+    if (scale && typeof value === 'number') unscaled[key] = Number(formatUnscaled(value / scale.factor));
+  }
+  return unscaled;
+}
+
 /** Shows stored limits as dollars and units, e.g. "maxNotionalValue: $5000". */
 export function formatRiskParameters(parameters: Record<string, unknown>): string {
   const entries = Object.entries(parameters ?? {});

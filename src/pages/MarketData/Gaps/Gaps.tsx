@@ -25,6 +25,10 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { marketDataApi, registryApi } from '../../../utils/api';
 import { useListingSearch, useListingLabels } from '../../../hooks/useAsyncSearch';
 import { Gap, GapStatus, GapReason } from '../../../types/gaps';
+import { useLatestRequest } from '../../../hooks/useLatestRequest';
+import { LastUpdated } from '../../../components/LastUpdated';
+
+const POLL_INTERVAL_MS = 60000;
 
 const STATUS_CONFIG: Record<GapStatus, { color: string; icon: React.ReactNode; label: string }> = {
   UNREVIEWED: { color: 'yellow', icon: <IconEyeOff size={14} />, label: 'Unreviewed' },
@@ -62,6 +66,9 @@ function Gaps() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [failing, setFailing] = useState(false);
+  const [pagedBeyondFirst, setPagedBeyondFirst] = useState(false);
 
   const initialListingId = searchParams.get('listingId');
   const [selectedStatus, setSelectedStatus] = useState<GapStatus>('UNREVIEWED');
@@ -81,6 +88,7 @@ function Gaps() {
   const [reviewNote, setReviewNote] = useState('');
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const beginRequest = useLatestRequest();
 
   const handleListingChange = useCallback((listingId: string | null) => {
     setSelectedListingId(listingId);
@@ -109,10 +117,13 @@ function Gaps() {
     return listingSearchOptions;
   }, [listingSearchOptions, selectedListingOption]);
 
-  const fetchGaps = useCallback(async (append = false) => {
-    setLoading(true);
-    setError(null);
-    setApiError(null);
+  const fetchGaps = useCallback(async (append = false, silent = false) => {
+    const isCurrent = beginRequest();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+      setApiError(null);
+    }
 
     try {
       let response;
@@ -127,10 +138,10 @@ function Gaps() {
           lastEvaluatedKey: append ? lastEvaluatedKey || undefined : undefined,
         });
       }
+      if (!isCurrent()) return;
 
-      if (response.error) {
-        setApiError(response.error);
-      }
+      if (silent) setError(null);
+      setApiError(response.error || null);
 
       if (append) {
         setGaps((prev) => [...prev, ...response.gaps]);
@@ -139,18 +150,32 @@ function Gaps() {
       }
       setLastEvaluatedKey(response.lastEvaluatedKey || null);
       setHasMore(!!response.lastEvaluatedKey);
+      setPagedBeyondFirst(append);
+      setLastUpdated(new Date());
+      setFailing(false);
     } catch (err) {
+      if (!isCurrent()) return;
       setError(err instanceof Error ? err.message : 'Failed to fetch gaps');
+      setFailing(true);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [selectedListingId, selectedStatus, lastEvaluatedKey]);
+  }, [selectedListingId, selectedStatus, lastEvaluatedKey, beginRequest]);
 
   useEffect(() => {
     setRowSelection({});
     setLastEvaluatedKey(null);
+    setHasMore(false);
     fetchGaps(false);
   }, [selectedStatus, selectedListingId]);
+
+  // A refresh replaces the list with page one, which would drop Load More pages and the review selection.
+  const canAutoRefresh = !pagedBeyondFirst && Object.keys(rowSelection).length === 0 && !reviewModalOpen && !updating;
+  useEffect(() => {
+    if (!canAutoRefresh) return;
+    const interval = setInterval(() => fetchGaps(false, true), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [canAutoRefresh, fetchGaps]);
 
   const handleRefresh = () => {
     setRowSelection({});
@@ -327,6 +352,7 @@ function Gaps() {
         <Group justify="space-between">
           <Title order={2}>Gaps</Title>
           <Group>
+            <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={failing} />
             {selectedGaps.length > 0 && (
               <Button onClick={openReviewModal} leftSection={<IconCheck size={16} />}>
                 Review {selectedGaps.length} Gap{selectedGaps.length !== 1 ? 's' : ''}
@@ -378,7 +404,7 @@ function Gaps() {
                     <Badge color={config.color} size="lg" leftSection={config.icon}>
                       {config.label}
                     </Badge>
-                    <Text fw={600}>{statusCounts[status]}</Text>
+                    <Text fw={600}>{statusCounts[status]}{hasMore ? '+' : ''}</Text>
                   </Group>
                 </Paper>
               );

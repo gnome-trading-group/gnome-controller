@@ -15,25 +15,27 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconAlertTriangle, IconHistory, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconAlertTriangle, IconHelpCircle, IconHistory, IconPencil, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { RiskPolicy, RISK_POLICY_TYPES } from '../../types';
 import { registryApi } from '../../utils/api';
 import { formatRiskParameters, scaleRiskParameters } from '../../utils/risk-parameters';
-import { errorMessage, findKillSwitch, GLOBAL_TARGET, isKillSwitch, setKillSwitch } from '../../utils/kill-switch';
+import { errorMessage, findKillSwitch, GLOBAL_TARGET, isKilled, isKillSwitch, KILL_SWITCH_TYPE, setKillSwitch } from '../../utils/kill-switch';
 import { describeTarget, withoutEndedSessions } from '../../utils/policy-target';
 import { useListingLabels, useListingSearch } from '../../hooks/useAsyncSearch';
-import { StrategySession } from '../../types/strategy-sessions';
+import { ACTIVE_SESSION_STATUSES, StrategySession } from '../../types/strategy-sessions';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal';
 import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
+import { EditRiskPolicyModal } from '../../components/EditRiskPolicyModal';
+import { LastUpdated } from '../../components/LastUpdated';
 
 const POLL_INTERVAL_MS = 5000;
 
 function RiskPolicies() {
-  const [policies, setPolicies] = useState<RiskPolicy[]>([]);
+  const [policies, setPolicies] = useState<RiskPolicy[] | null>(null);
   const [sessions, setSessions] = useState<StrategySession[]>([]);
   const [strategyNames, setStrategyNames] = useState<Record<number, string>>({});
   const [listingSearch, setListingSearch] = useState('');
@@ -42,9 +44,11 @@ function RiskPolicies() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RiskPolicy | null>(null);
   const [toggleTarget, setToggleTarget] = useState<RiskPolicy | null>(null);
+  const [editTarget, setEditTarget] = useState<RiskPolicy | null>(null);
   const [killSwitchAction, setKillSwitchAction] = useState<'halt' | 'resume' | null>(null);
   const [historyTarget, setHistoryTarget] = useState<RiskPolicy | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [policyForm, setPolicyForm] = useState({
     policyType: '',
     strategyId: '',
@@ -53,14 +57,20 @@ function RiskPolicies() {
     enabled: true,
   });
   const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const refresh = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const [data, sessionList] = await Promise.all([registryApi.listRiskPolicies(), registryApi.listSessions()]);
+      // Only active sessions are needed to hide policies of ended ones, and this polls every 5s.
+      const [data, sessionList] = await Promise.all([
+        registryApi.listRiskPolicies(),
+        registryApi.listSessions({ status: ACTIVE_SESSION_STATUSES.join(',') }),
+      ]);
       setPolicies(data);
       setSessions(sessionList);
       setLoadError(null);
+      setLastUpdated(new Date());
     } catch (e) {
       setLoadError(errorMessage(e, 'Failed to load risk policies'));
     } finally {
@@ -82,7 +92,7 @@ function RiskPolicies() {
   }, [refresh]);
 
   const killSwitch = findKillSwitch(policies, GLOBAL_TARGET);
-  const tradingHalted = killSwitch?.enabled ?? false;
+  const tradingHalted = isKilled(policies, GLOBAL_TARGET);
   const latestKillSwitchEntry = useLatestPolicyHistory(killSwitch);
 
   const confirmKillSwitch = async (reason: string | undefined) => {
@@ -98,6 +108,7 @@ function RiskPolicies() {
 
   const handleCreate = async () => {
     setCreateError(null);
+    setCreating(true);
     try {
       const parameters = scaleRiskParameters(JSON.parse(policyForm.parametersJson));
       await registryApi.createRiskPolicy({
@@ -112,6 +123,8 @@ function RiskPolicies() {
       refresh();
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Failed to create policy');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -122,7 +135,7 @@ function RiskPolicies() {
   };
 
   const nonKillSwitchPolicies = useMemo(
-    () => withoutEndedSessions(policies, sessions).filter((p) => !isKillSwitch(p, GLOBAL_TARGET)),
+    () => withoutEndedSessions(policies ?? [], sessions).filter((p) => !isKillSwitch(p, GLOBAL_TARGET)),
     [policies, sessions],
   );
   const listingLabels = useListingLabels(
@@ -188,6 +201,13 @@ function RiskPolicies() {
             <IconHistory size={16} />
           </ActionIcon>
         </Tooltip>
+        {row.original.policyType !== KILL_SWITCH_TYPE && (
+          <Tooltip label="Edit limits" withArrow openDelay={500}>
+            <ActionIcon variant="subtle" color="gray" onClick={() => setEditTarget(row.original)}>
+              <IconPencil size={16} />
+            </ActionIcon>
+          </Tooltip>
+        )}
         <ActionIcon variant="subtle" color="red" onClick={() => setDeleteTarget(row.original)}>
           <IconTrash size={16} />
         </ActionIcon>
@@ -200,6 +220,7 @@ function RiskPolicies() {
       <Group justify="space-between" mb="md">
         <Title order={2}>Risk Policies</Title>
         <Group>
+          <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={loadError !== null} />
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()}>
               <IconRefresh size={20} />
@@ -213,44 +234,58 @@ function RiskPolicies() {
         </Group>
       </Group>
 
-      {loadError && <Alert mb="md" color="red" title="Error">{loadError}</Alert>}
+      {loadError && (
+        <Alert mb="md" color="red" title="Error">
+          {loadError}{policies !== null && ' — showing the last state that loaded.'}
+        </Alert>
+      )}
 
-      <Alert
-        mb="xl"
-        color={tradingHalted ? 'red' : 'green'}
-        title={tradingHalted ? 'Trading Halted' : 'Trading Active'}
-        icon={tradingHalted ? <IconAlertTriangle size={20} /> : undefined}
-      >
-        <Group justify="space-between" align="center">
-          <Stack gap={4}>
-            <Text size="sm">
-              {tradingHalted
-                ? 'Kill switch is ACTIVE — all open orders were cancelled and all order flow is blocked.'
-                : 'All systems go. Kill switch is inactive (trading allowed).'}
-            </Text>
-            {killSwitch && <KillSwitchLatestEntry entry={latestKillSwitchEntry} enabled={tradingHalted} />}
-          </Stack>
-          <Group>
-            {killSwitch && (
-              <Button variant="outline" size="sm" leftSection={<IconHistory size={16} />} onClick={() => setHistoryTarget(killSwitch)}>
-                History
+      {tradingHalted === null ? (
+        <Alert mb="xl" color="gray" title="Kill switch status unknown" icon={<IconHelpCircle size={20} />}>
+          <Text size="sm">
+            {loadError
+              ? "Risk policies couldn't be loaded, so whether trading is halted is unknown. Halting and resuming are disabled until they load."
+              : 'Loading risk policies…'}
+          </Text>
+        </Alert>
+      ) : (
+        <Alert
+          mb="xl"
+          color={tradingHalted ? 'red' : 'green'}
+          title={tradingHalted ? 'Trading Halted' : 'Trading Active'}
+          icon={tradingHalted ? <IconAlertTriangle size={20} /> : undefined}
+        >
+          <Group justify="space-between" align="center">
+            <Stack gap={4}>
+              <Text size="sm">
+                {tradingHalted
+                  ? 'Kill switch is ACTIVE — all open orders were cancelled and all order flow is blocked.'
+                  : 'All systems go. Kill switch is inactive (trading allowed).'}
+              </Text>
+              {killSwitch && <KillSwitchLatestEntry entry={latestKillSwitchEntry} enabled={tradingHalted} />}
+            </Stack>
+            <Group>
+              {killSwitch && (
+                <Button variant="outline" size="sm" leftSection={<IconHistory size={16} />} onClick={() => setHistoryTarget(killSwitch)}>
+                  History
+                </Button>
+              )}
+              <Button
+                color={tradingHalted ? 'green' : 'red'}
+                variant="filled"
+                size="sm"
+                onClick={() => setKillSwitchAction(tradingHalted ? 'resume' : 'halt')}
+              >
+                {tradingHalted ? 'RESUME TRADING' : 'HALT ALL TRADING'}
               </Button>
-            )}
-            <Button
-              color={tradingHalted ? 'green' : 'red'}
-              variant="filled"
-              size="sm"
-              onClick={() => setKillSwitchAction(tradingHalted ? 'resume' : 'halt')}
-            >
-              {tradingHalted ? 'RESUME TRADING' : 'HALT ALL TRADING'}
-            </Button>
+            </Group>
           </Group>
-        </Group>
-      </Alert>
+        </Alert>
+      )}
 
       <MantineReactTable table={table} />
 
-      <Modal opened={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Add Risk Policy" size="md">
+      <Modal opened={createModalOpen} onClose={() => { if (!creating) setCreateModalOpen(false); }} title="Add Risk Policy" size="md">
         <Stack>
           <Select
             label="Policy Type"
@@ -309,8 +344,8 @@ function RiskPolicies() {
           />
           {createError && <Text c="red" size="sm">{createError}</Text>}
           <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreate}>Add</Button>
+            <Button variant="outline" onClick={() => setCreateModalOpen(false)} disabled={creating}>Cancel</Button>
+            <Button onClick={handleCreate} loading={creating}>Add</Button>
           </Group>
         </Stack>
       </Modal>
@@ -358,6 +393,13 @@ function RiskPolicies() {
       />
 
       <RiskPolicyHistoryModal policy={historyTarget} onClose={() => setHistoryTarget(null)} />
+
+      <EditRiskPolicyModal
+        policy={editTarget}
+        targetDescription={editTarget ? describeTarget(editTarget, (id) => strategyNames[id], (id) => listingLabels[id]) : undefined}
+        onClose={() => setEditTarget(null)}
+        onSaved={() => refresh(false)}
+      />
     </Container>
   );
 }

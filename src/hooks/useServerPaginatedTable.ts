@@ -25,6 +25,7 @@ interface UseServerPaginatedTableResult<T> {
   total: number;
   isLoading: boolean;
   error: string | null;
+  lastUpdated: Date | null;
   pagination: MRT_PaginationState;
   sorting: MRT_SortingState;
   globalFilter: string;
@@ -47,6 +48,7 @@ export function useServerPaginatedTable<T>({
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // Internal state — used when controlledState is not provided
   const [internalPagination, setInternalPagination] = useState<MRT_PaginationState>({ pageIndex: 0, pageSize: defaultPageSize });
@@ -93,16 +95,22 @@ export function useServerPaginatedTable<T>({
     }
     setError(null);
 
+    // A slower response for an earlier page, sort or search must not overwrite the one the table now shows.
+    let cancelled = false;
     Promise.all([fetchFn(params), countFn(filterParams)])
       .then(([rows, count]) => {
+        if (cancelled) return;
         setData(rows);
         setTotal(count);
+        setLastUpdated(new Date());
       })
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load data'))
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load data'); })
       .finally(() => {
+        if (cancelled) return;
         setIsLoading(false);
         silentRefreshRef.current = false;
       });
+    return () => { cancelled = true; };
   }, [pagination.pageIndex, pagination.pageSize, sorting, globalFilter, refreshKey, externalRefreshKey, extraParamsKey]);
 
   return {
@@ -110,6 +118,7 @@ export function useServerPaginatedTable<T>({
     total,
     isLoading,
     error,
+    lastUpdated,
     pagination,
     sorting,
     globalFilter,

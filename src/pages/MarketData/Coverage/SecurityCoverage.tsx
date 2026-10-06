@@ -18,6 +18,7 @@ import {
   Paper,
   SimpleGrid,
   Select,
+  Alert,
 } from '@mantine/core';
 import { IconRefresh, IconDatabase, IconClock, IconCalendar, IconArrowLeft } from '@tabler/icons-react';
 import {
@@ -36,6 +37,8 @@ import { useGlobalState } from '../../../context/GlobalStateContext';
 import { Security, DenormalizedListing } from '../../../types';
 import { SecurityCoverageResponse, ExchangeCoverage } from '../../../types/coverage';
 import { ListingStatisticsHistoryPoint } from '../../../types/quality-issues';
+import { useLatestRequest } from '../../../hooks/useLatestRequest';
+import { errorMessage } from '../../../utils/kill-switch';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -86,18 +89,23 @@ function SecurityCoverage() {
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
   const [metricsHistory, setMetricsHistory] = useState<ListingStatisticsHistoryPoint[] | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const beginRequest = useLatestRequest();
 
   const loadData = async () => {
     if (!securityId) return;
+    const isCurrent = beginRequest();
     try {
       setLoading(true);
       setError(null);
       const response = await marketDataApi.getSecurityCoverage(Number(securityId));
+      if (!isCurrent()) return;
       setData(response);
     } catch (err) {
+      if (!isCurrent()) return;
       setError(err instanceof Error ? err.message : 'Failed to load coverage data');
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
@@ -106,14 +114,24 @@ function SecurityCoverage() {
   }, [securityId]);
 
   useEffect(() => {
+    setSecurity(null);
+    setSecurityListingsData([]);
+    setSelectedListingId(null);
+    setMetricsHistory(null);
+    setMetricsError(null);
     if (!securityId) return;
+    let cancelled = false;
     Promise.all([
       registryApi.listSecuritiesPaginated({ securityId: Number(securityId), limit: 1 }),
       registryApi.listListingsPaginated({ securityId: Number(securityId), limit: 100 }),
     ]).then(([secs, lists]) => {
+      if (cancelled) return;
       setSecurity(secs[0] ?? null);
       setSecurityListingsData(lists);
-    }).catch(() => {});
+    }).catch(e => {
+      if (!cancelled) setMetricsError(errorMessage(e, 'Failed to load listings'));
+    });
+    return () => { cancelled = true; };
   }, [securityId]);
 
   const securityListings = useMemo(() => {
@@ -131,13 +149,16 @@ function SecurityCoverage() {
 
   useEffect(() => {
     if (!selectedListingId) return;
+    let cancelled = false;
     setMetricsLoading(true);
     setMetricsHistory(null);
+    setMetricsError(null);
     marketDataApi
       .getListingStatisticsHistory(Number(selectedListingId), 30)
-      .then(d => setMetricsHistory(d.history))
-      .catch(() => setMetricsHistory(null))
-      .finally(() => setMetricsLoading(false));
+      .then(d => { if (!cancelled) setMetricsHistory(d.history); })
+      .catch(e => { if (!cancelled) setMetricsError(errorMessage(e, 'Failed to load quality metrics')); })
+      .finally(() => { if (!cancelled) setMetricsLoading(false); });
+    return () => { cancelled = true; };
   }, [selectedListingId]);
 
   const tableData = useMemo((): TableRow[] => {
@@ -326,7 +347,11 @@ function SecurityCoverage() {
           </Center>
         )}
 
-        {!metricsLoading && (!metricsHistory || metricsHistory.length === 0) && (
+        {metricsError && (
+          <Alert color="red" title="Error" mb="md">{metricsError}</Alert>
+        )}
+
+        {!metricsLoading && !metricsError && (!metricsHistory || metricsHistory.length === 0) && (
           <Text c="dimmed" size="sm">No metrics data available for this listing.</Text>
         )}
 

@@ -22,6 +22,9 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { useNavigate, useParams } from 'react-router-dom';
 import { PipelineDefinition, PipelineRun } from '../../types/pipeline';
 import { controllerApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
+import { useLatestRequest } from '../../hooks/useLatestRequest';
+import { LastUpdated } from '../../components/LastUpdated';
 
 const STATUS_COLORS: Record<string, string> = {
   SUCCEEDED: 'green',
@@ -29,6 +32,8 @@ const STATUS_COLORS: Record<string, string> = {
   RUNNING: 'blue',
   PENDING: 'yellow',
 };
+
+const POLL_INTERVAL_MS = 10000;
 
 function PipelineDetail() {
   const navigate = useNavigate();
@@ -40,33 +45,56 @@ function PipelineDetail() {
   const [triggering, setTriggering] = useState(false);
   const [editSchedule, setEditSchedule] = useState('');
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [failing, setFailing] = useState(false);
+  const beginRefresh = useLatestRequest();
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (silent = false) => {
     if (!pipelineName) return;
-    setLoading(true);
-    setError(null);
+    const isCurrent = beginRefresh();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const result = await controllerApi.getPipeline(pipelineName);
+      if (!isCurrent()) return;
       setPipeline(result.pipeline);
       setRuns(result.runs);
-      setEditSchedule(result.pipeline.schedule ?? '');
+      // A background poll must not overwrite a schedule the user is part-way through editing.
+      if (!silent) setEditSchedule(result.pipeline.schedule ?? '');
+      setLastUpdated(new Date());
+      setFailing(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load pipeline');
+      if (!isCurrent()) return;
+      setFailing(true);
+      // A failed background poll keeps the last good page; the full-page error is for loads the user asked for.
+      if (!silent) setError(e instanceof Error ? e.message : 'Failed to load pipeline');
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [pipelineName]);
+  }, [pipelineName, beginRefresh]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const inProgress = runs.some((r) => r.status === 'PENDING' || r.status === 'RUNNING');
+  const pollPaused = triggering || savingSchedule;
+  useEffect(() => {
+    if (!inProgress || pollPaused) return;
+    const interval = setInterval(() => refresh(true), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [inProgress, pollPaused, refresh]);
 
   const handleTrigger = async () => {
     if (!pipelineName) return;
     setTriggering(true);
+    setActionError(null);
     try {
       await controllerApi.triggerPipeline(pipelineName);
       await refresh();
     } catch (e) {
-      console.error('Failed to trigger pipeline:', e);
+      setActionError(errorMessage(e, 'Failed to trigger pipeline'));
     } finally {
       setTriggering(false);
     }
@@ -75,12 +103,15 @@ function PipelineDetail() {
   const handleToggleSchedule = async () => {
     if (!pipelineName || !pipeline) return;
     setSavingSchedule(true);
+    setActionError(null);
     try {
       await controllerApi.updatePipeline(pipelineName, {
         schedule_enabled: !pipeline.scheduleEnabled,
         schedule: editSchedule || pipeline.schedule,
       });
       await refresh();
+    } catch (e) {
+      setActionError(errorMessage(e, 'Failed to update schedule'));
     } finally {
       setSavingSchedule(false);
     }
@@ -89,9 +120,12 @@ function PipelineDetail() {
   const handleSaveSchedule = async () => {
     if (!pipelineName) return;
     setSavingSchedule(true);
+    setActionError(null);
     try {
       await controllerApi.updatePipeline(pipelineName, { schedule: editSchedule });
       await refresh();
+    } catch (e) {
+      setActionError(errorMessage(e, 'Failed to save schedule'));
     } finally {
       setSavingSchedule(false);
     }
@@ -226,12 +260,19 @@ function PipelineDetail() {
         >
           Trigger Now
         </Button>
+        {inProgress && <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={failing} />}
         <Tooltip label="Refresh" withArrow openDelay={500}>
-          <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
+          <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
             <IconRefresh size={20} />
           </ActionIcon>
         </Tooltip>
       </Group>
+
+      {actionError && (
+        <Alert color="red" title="Error" mb="md" withCloseButton onClose={() => setActionError(null)}>
+          {actionError}
+        </Alert>
+      )}
 
       {pipeline && (
         <Card withBorder mb="md" p="md">

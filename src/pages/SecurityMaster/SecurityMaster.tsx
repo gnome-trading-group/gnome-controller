@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   ActionIcon,
+  Alert,
   Button,
   Container,
   FileButton,
@@ -19,6 +20,7 @@ import { IconDownload, IconPlus, IconRefresh, IconUpload } from '@tabler/icons-r
 import { useSearchParams } from 'react-router-dom';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { registryApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
 import * as XLSX from 'xlsx';
 import ListingsTab from './ListingsTab';
 import SecuritiesTab from './SecuritiesTab';
@@ -48,7 +50,10 @@ function SecurityMaster() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<{ type: DeleteType; id: number; name: string } | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const [securitiesRefreshKey, setSecuritiesRefreshKey] = useState(0);
   const [listingsRefreshKey, setListingsRefreshKey] = useState(0);
@@ -63,6 +68,7 @@ function SecurityMaster() {
     setUploadFile(file);
     setUploadError(null);
     setUploadProgress({ exchanges: 0, securities: 0, listings: 0 });
+    const created = { exchanges: 0, securities: 0, listings: 0 };
 
     try {
       const data = await file.arrayBuffer();
@@ -73,7 +79,17 @@ function SecurityMaster() {
         if (!sheet) return;
         const rows = XLSX.utils.sheet_to_json(sheet);
         for (let i = 0; i < rows.length; i++) {
-          await processFn(rows[i]);
+          try {
+            await processFn(rows[i]);
+          } catch (err) {
+            // Row 1 of the sheet is the header, so data row i sits on spreadsheet row i + 2.
+            throw new Error(
+              `${sheetName} sheet, row ${i + 2} failed: ${errorMessage(err, 'unknown error')}. ` +
+              `Created before the failure (not rolled back): ${created.exchanges} exchanges, ` +
+              `${created.securities} securities, ${created.listings} listings.`,
+            );
+          }
+          created[key] = i + 1;
           setUploadProgress(prev => ({ ...prev, [key]: i + 1 }));
         }
       };
@@ -102,6 +118,7 @@ function SecurityMaster() {
 
   const handleDownloadData = async () => {
     setDownloadProgress('Fetching exchanges...');
+    setDownloadError(null);
     try {
       const wb = XLSX.utils.book_new();
 
@@ -132,7 +149,7 @@ function SecurityMaster() {
 
       XLSX.writeFile(wb, 'security_master_data.xlsx');
     } catch (err) {
-      console.error('Download failed:', err);
+      setDownloadError(errorMessage(err, 'Failed to download data'));
     } finally {
       setDownloadProgress(null);
     }
@@ -140,11 +157,14 @@ function SecurityMaster() {
 
   const handleDelete = (type: DeleteType, id: number, name: string) => {
     setDeleteItem({ type, id, name });
+    setDeleteError(null);
     setDeleteModalOpen(true);
   };
 
   const confirmDelete = async () => {
     if (!deleteItem) return;
+    setDeletePending(true);
+    setDeleteError(null);
     try {
       switch (deleteItem.type) {
         case 'exchange':
@@ -160,11 +180,12 @@ function SecurityMaster() {
           setListingsRefreshKey(k => k + 1);
           break;
       }
-    } catch (err) {
-      console.error('Failed to delete:', err);
-    } finally {
       setDeleteModalOpen(false);
       setDeleteItem(null);
+    } catch (err) {
+      setDeleteError(errorMessage(err, `Failed to delete ${deleteItem.type}`));
+    } finally {
+      setDeletePending(false);
     }
   };
 
@@ -224,15 +245,16 @@ function SecurityMaster() {
         </Stack>
       </Modal>
 
-      <Modal opened={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} title="Confirm Delete" size="sm">
+      <Modal opened={deleteModalOpen} onClose={() => { if (deletePending) return; setDeleteModalOpen(false); }} title="Confirm Delete" size="sm">
         <Stack>
           <Text>
             Are you sure you want to delete this {deleteItem?.type}?
             {deleteItem && <Text fw={500} mt="xs">{deleteItem.name}</Text>}
           </Text>
+          {deleteError && <Text c="red" size="sm">{deleteError}</Text>}
           <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setDeleteModalOpen(false)}>Cancel</Button>
-            <Button color="red" onClick={confirmDelete}>Delete</Button>
+            <Button variant="outline" disabled={deletePending} onClick={() => setDeleteModalOpen(false)}>Cancel</Button>
+            <Button color="red" loading={deletePending} onClick={confirmDelete}>Delete</Button>
           </Group>
         </Stack>
       </Modal>
@@ -242,6 +264,12 @@ function SecurityMaster() {
           {downloadProgress}
           <Progress value={100} animated mt="xs" />
         </Notification>
+      )}
+
+      {downloadError && (
+        <Alert color="red" title="Error" mb="md" withCloseButton onClose={() => setDownloadError(null)}>
+          {downloadError}
+        </Alert>
       )}
 
       {error.exchanges && (

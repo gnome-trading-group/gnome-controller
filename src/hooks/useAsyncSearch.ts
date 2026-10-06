@@ -12,6 +12,15 @@ interface UseAsyncSearchResult {
   isLoading: boolean;
 }
 
+// Keeps each batch lookup's query string well under URL length limits.
+const ID_BATCH_SIZE = 200;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 function useDebounced(value: string, delay: number): string {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -32,12 +41,14 @@ export function useSecuritySearch(search: string): UseAsyncSearchResult {
       return;
     }
     setIsLoading(true);
+    let cancelled = false;
     registryApi.searchSecurities(debounced)
-      .then((securities: Security[]) =>
-        setOptions(securities.map(s => ({ value: String(s.securityId), label: s.symbol })))
-      )
-      .catch(() => setOptions([]))
-      .finally(() => setIsLoading(false));
+      .then((securities: Security[]) => {
+        if (!cancelled) setOptions(securities.map(s => ({ value: String(s.securityId), label: s.symbol })));
+      })
+      .catch(() => { if (!cancelled) setOptions([]); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
   }, [debounced]);
 
   return { options, isLoading };
@@ -54,15 +65,18 @@ export function useListingSearch(search: string): UseAsyncSearchResult {
       return;
     }
     setIsLoading(true);
+    let cancelled = false;
     registryApi.searchListings(debounced)
-      .then((listings: DenormalizedListing[]) =>
+      .then((listings: DenormalizedListing[]) => {
+        if (cancelled) return;
         setOptions(listings.map(l => ({
           value: String(l.listingId),
           label: `${l.listingId} - ${l.exchangeName} - ${l.securitySymbol}`,
-        })))
-      )
-      .catch(() => setOptions([]))
-      .finally(() => setIsLoading(false));
+        })));
+      })
+      .catch(() => { if (!cancelled) setOptions([]); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
   }, [debounced]);
 
   return { options, isLoading };
@@ -79,12 +93,14 @@ export function useEventSearch(search: string): UseAsyncSearchResult {
       return;
     }
     setIsLoading(true);
+    let cancelled = false;
     registryApi.listEventsPaginated({ search: debounced, limit: 20 })
-      .then((events: Event[]) =>
-        setOptions(events.map(e => ({ value: String(e.eventId), label: e.title })))
-      )
-      .catch(() => setOptions([]))
-      .finally(() => setIsLoading(false));
+      .then((events: Event[]) => {
+        if (!cancelled) setOptions(events.map(e => ({ value: String(e.eventId), label: e.title })));
+      })
+      .catch(() => { if (!cancelled) setOptions([]); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
   }, [debounced]);
 
   return { options, isLoading };
@@ -101,12 +117,14 @@ export function useCurrencySearch(search: string): UseAsyncSearchResult {
       return;
     }
     setIsLoading(true);
+    let cancelled = false;
     registryApi.searchCurrencies(debounced)
-      .then((currencies: Currency[]) =>
-        setOptions(currencies.map(c => ({ value: String(c.currencyId), label: c.symbol })))
-      )
-      .catch(() => setOptions([]))
-      .finally(() => setIsLoading(false));
+      .then((currencies: Currency[]) => {
+        if (!cancelled) setOptions(currencies.map(c => ({ value: String(c.currencyId), label: c.symbol })));
+      })
+      .catch(() => { if (!cancelled) setOptions([]); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
   }, [debounced]);
 
   return { options, isLoading };
@@ -123,16 +141,19 @@ export function useListingLabels(listingIds: number[]): Record<number, string> {
     prevIds.current = key;
 
     const unique = [...new Set(listingIds)];
-    Promise.all(unique.map(id =>
-      registryApi.listListingsPaginated({ listingId: id, limit: 1 })
-        .then((rows: DenormalizedListing[]) => rows[0])
-    )).then(results => {
+    let cancelled = false;
+    // allSettled: one failed batch should cost those listings their labels, not every listing.
+    Promise.allSettled(chunk(unique, ID_BATCH_SIZE).map(ids => registryApi.listListingsByIds(ids))).then(batches => {
+      if (cancelled) return;
+      const results = batches.flatMap(b => (b.status === 'fulfilled' ? b.value : []));
       const map: Record<number, string> = {};
       results.forEach(l => {
-        if (l) map[l.listingId] = `${l.listingId} - ${l.exchangeName} - ${l.securitySymbol}`;
+        map[l.listingId] = `${l.listingId} - ${l.exchangeName} - ${l.securitySymbol}`;
       });
       setLabels(map);
-    }).catch(() => {});
+    });
+    // Forget the key on cancel so the same ids load again (React re-runs effects after cleanup in StrictMode).
+    return () => { cancelled = true; prevIds.current = ''; };
   }, [listingIds.join(',')]);
 
   return labels;
@@ -149,16 +170,19 @@ export function useListingDetails(listingIds: number[]): Record<number, Denormal
     prevIds.current = key;
 
     const unique = [...new Set(listingIds)];
-    Promise.all(unique.map(id =>
-      registryApi.listListingsPaginated({ listingId: id, limit: 1 })
-        .then((rows: DenormalizedListing[]) => rows[0])
-    )).then(results => {
+    let cancelled = false;
+    // allSettled: one failed batch should cost those listings their labels, not every listing.
+    Promise.allSettled(chunk(unique, ID_BATCH_SIZE).map(ids => registryApi.listListingsByIds(ids))).then(batches => {
+      if (cancelled) return;
+      const results = batches.flatMap(b => (b.status === 'fulfilled' ? b.value : []));
       const map: Record<number, DenormalizedListing> = {};
       results.forEach(l => {
-        if (l) map[l.listingId] = l;
+        map[l.listingId] = l;
       });
       setDetails(map);
-    }).catch(() => {});
+    });
+    // Forget the key on cancel so the same ids load again (React re-runs effects after cleanup in StrictMode).
+    return () => { cancelled = true; prevIds.current = ''; };
   }, [listingIds.join(',')]);
 
   return details;

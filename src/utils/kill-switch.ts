@@ -28,8 +28,15 @@ export function listingKills(policies: RiskPolicy[]): RiskPolicy[] {
     && (p.strategyId != null || p.sessionId != null));
 }
 
-export function findKillSwitch(policies: RiskPolicy[], target: KillSwitchTarget): RiskPolicy | undefined {
-  return policies.find((p) => isKillSwitch(p, target));
+export function findKillSwitch(policies: RiskPolicy[] | null, target: KillSwitchTarget): RiskPolicy | undefined {
+  return policies?.find((p) => isKillSwitch(p, target));
+}
+
+// Policies are null until they first load. Reporting "not killed" then would tell an operator trading is live when
+// we simply don't know, so callers get null and must render an unknown state.
+export function isKilled(policies: RiskPolicy[] | null, target: KillSwitchTarget): boolean | null {
+  if (policies === null) return null;
+  return findKillSwitch(policies, target)?.enabled ?? false;
 }
 
 // The kill-switch row may not exist yet for a target, so the first kill creates it.

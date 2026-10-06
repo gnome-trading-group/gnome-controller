@@ -50,41 +50,49 @@ export const defaultSimulationState = (): SimulationState => ({
   cancelAheadProbability: 0.5,
 });
 
+// A cleared NumberInput holds '', which Number() turns into 0, so a blank fee or latency would silently simulate as
+// free or instant and flatter the results.
+function requireNumber(field: string, value: number | string): number {
+  const n = typeof value === 'number' ? value : value.trim() === '' ? NaN : Number(value);
+  if (!Number.isFinite(n)) throw new Error(`${field} is empty or not a number`);
+  return n;
+}
+
 export function simulationStateToConfig(sim: SimulationState): Record<string, ConfigValue> {
   const cfg: Record<string, ConfigValue> = {};
   cfg['fee.model'] = sim.feeModel;
   if (sim.feeModel === 'parametric') {
-    cfg['fee.taker.rate'] = Number(sim.feeTakerRate);
-    cfg['fee.maker.rate'] = Number(sim.feeMakerRate);
+    cfg['fee.taker.rate'] = requireNumber('fee.taker.rate', sim.feeTakerRate);
+    cfg['fee.maker.rate'] = requireNumber('fee.maker.rate', sim.feeMakerRate);
   } else {
-    cfg['fee.taker'] = Number(sim.feeTaker);
-    cfg['fee.maker'] = Number(sim.feeMaker);
+    cfg['fee.taker'] = requireNumber('fee.taker', sim.feeTaker);
+    cfg['fee.maker'] = requireNumber('fee.maker', sim.feeMaker);
   }
   cfg['network.latency.model'] = sim.networkLatencyModel;
   if (sim.networkLatencyModel === 'gaussian') {
-    cfg['network.latency.mu'] = Number(sim.networkLatencyMu);
-    cfg['network.latency.sigma'] = Number(sim.networkLatencySigma);
+    cfg['network.latency.mu'] = requireNumber('network.latency.mu', sim.networkLatencyMu);
+    cfg['network.latency.sigma'] = requireNumber('network.latency.sigma', sim.networkLatencySigma);
   } else if (sim.networkLatencyModel === 'maker_taker') {
-    cfg['network.latency.base.nanos'] = Number(sim.networkLatencyBaseNanos);
-    cfg['network.latency.taker.delay.nanos'] = Number(sim.networkLatencyTakerDelayNanos);
-    cfg['network.latency.maker.delay.nanos'] = Number(sim.networkLatencyMakerDelayNanos);
+    cfg['network.latency.base.nanos'] = requireNumber('network.latency.base.nanos', sim.networkLatencyBaseNanos);
+    cfg['network.latency.taker.delay.nanos'] = requireNumber('network.latency.taker.delay.nanos', sim.networkLatencyTakerDelayNanos);
+    cfg['network.latency.maker.delay.nanos'] = requireNumber('network.latency.maker.delay.nanos', sim.networkLatencyMakerDelayNanos);
   } else {
-    cfg['network.latency.nanos'] = Number(sim.networkLatencyNanos);
+    cfg['network.latency.nanos'] = requireNumber('network.latency.nanos', sim.networkLatencyNanos);
   }
   cfg['order.latency.model'] = sim.orderLatencyModel;
   if (sim.orderLatencyModel === 'gaussian') {
-    cfg['order.latency.mu'] = Number(sim.orderLatencyMu);
-    cfg['order.latency.sigma'] = Number(sim.orderLatencySigma);
+    cfg['order.latency.mu'] = requireNumber('order.latency.mu', sim.orderLatencyMu);
+    cfg['order.latency.sigma'] = requireNumber('order.latency.sigma', sim.orderLatencySigma);
   } else if (sim.orderLatencyModel === 'maker_taker') {
-    cfg['order.latency.base.nanos'] = Number(sim.orderLatencyBaseNanos);
-    cfg['order.latency.taker.delay.nanos'] = Number(sim.orderLatencyTakerDelayNanos);
-    cfg['order.latency.maker.delay.nanos'] = Number(sim.orderLatencyMakerDelayNanos);
+    cfg['order.latency.base.nanos'] = requireNumber('order.latency.base.nanos', sim.orderLatencyBaseNanos);
+    cfg['order.latency.taker.delay.nanos'] = requireNumber('order.latency.taker.delay.nanos', sim.orderLatencyTakerDelayNanos);
+    cfg['order.latency.maker.delay.nanos'] = requireNumber('order.latency.maker.delay.nanos', sim.orderLatencyMakerDelayNanos);
   } else {
-    cfg['order.latency.nanos'] = Number(sim.orderLatencyNanos);
+    cfg['order.latency.nanos'] = requireNumber('order.latency.nanos', sim.orderLatencyNanos);
   }
   cfg['queue.model'] = sim.queueModel;
   if (sim.queueModel === 'probabilistic') {
-    cfg['queue.cancel.ahead.probability'] = Number(sim.cancelAheadProbability);
+    cfg['queue.cancel.ahead.probability'] = requireNumber('queue.cancel.ahead.probability', sim.cancelAheadProbability);
   }
   return cfg;
 }
@@ -146,7 +154,12 @@ export function simulationProfilesToConfig(
 ): Record<string, ConfigValue> {
   const cfg: Record<string, ConfigValue> = {};
   for (const [name, sim] of Object.entries(profiles)) {
-    const simCfg = simulationStateToConfig(sim);
+    let simCfg: Record<string, ConfigValue>;
+    try {
+      simCfg = simulationStateToConfig(sim);
+    } catch (e) {
+      throw new Error(`Simulation profile "${name}": ${e instanceof Error ? e.message : String(e)}`);
+    }
     for (const [k, v] of Object.entries(simCfg)) {
       cfg[`simulation.profiles.${name}.${k}`] = v;
     }

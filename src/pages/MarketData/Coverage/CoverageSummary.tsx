@@ -76,13 +76,14 @@ function CoverageSummary() {
     const key = [...uniqueIds].sort().join(',');
     if (key === fetchedSecurityIds.current) return;
     fetchedSecurityIds.current = key;
-    Promise.all(uniqueIds.map(id =>
-      registryApi.listSecuritiesPaginated({ securityId: id, limit: 1 }).then(rows => rows[0])
-    )).then(results => {
+    // One request for every security on the page instead of one each; batched to keep URLs short.
+    const batches: number[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += 200) batches.push(uniqueIds.slice(i, i + 200));
+    Promise.allSettled(batches.map(ids => registryApi.listSecuritiesByIds(ids))).then(results => {
       const map: Record<number, string> = {};
-      results.forEach(s => { if (s) map[s.securityId] = s.symbol; });
+      results.forEach(r => { if (r.status === 'fulfilled') r.value.forEach(sec => { map[sec.securityId] = sec.symbol; }); });
       setSecurityMap(map);
-    }).catch(() => {});
+    });
   }, [data]);
 
   const tableData = useMemo((): TableRow[] => {

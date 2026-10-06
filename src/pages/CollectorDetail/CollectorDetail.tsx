@@ -22,11 +22,14 @@ import {
   Anchor,
   Breadcrumbs,
   Table,
+  Alert,
 } from '@mantine/core';
 import { IconRefresh, IconPlayerStop, IconAB2, IconTrash } from '@tabler/icons-react';
 import { ContainerLogs } from '../../components/ContainerLogs';
 import ReactTimeAgo from 'react-time-ago';
-import { marketDataApi } from '../../utils/api';
+import { marketDataApi, ApiError } from '../../utils/api';
+import { useLatestRequest } from '../../hooks/useLatestRequest';
+import { errorMessage } from '../../utils/kill-switch';
 
 interface Collector {
   listingId: number;
@@ -77,7 +80,11 @@ function CollectorDetail() {
   const [initialLoad, setInitialLoad] = useState(true);
   const [logsLoading, setLogsLoading] = useState(false);
   const [initialLogsLoad, setInitialLogsLoad] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [logsError, setLogsError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const beginCollectorRequest = useLatestRequest();
+  const beginLogsRequest = useLatestRequest();
   const [stopModalOpen, setStopModalOpen] = useState(false);
   const [redeployModalOpen, setRedeployModalOpen] = useState(false);
   const [redeployVersion, setRedeployVersion] = useState('');
@@ -105,41 +112,53 @@ function CollectorDetail() {
 
   const loadCollector = async (showLoading = true) => {
     if (!listingId) return;
-    
+    const isCurrent = beginCollectorRequest();
+
     try {
       if (showLoading) {
         setLoading(true);
       }
-      setError(null);
       const response = await marketDataApi.getCollector(Number(listingId));
+      if (!isCurrent()) return;
       setCollector(response.collector);
       setTaskDetails(response.taskDetails || []);
+      setLoadError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load collector');
-    } finally {
-      if (showLoading) {
-        setLoading(false);
+      if (!isCurrent()) return;
+      if (err instanceof ApiError && err.statusCode === 404) {
+        setCollector(null);
+        setLoadError(null);
+      } else {
+        setLoadError(errorMessage(err, 'Failed to load collector'));
       }
-      setInitialLoad(false);
+    } finally {
+      if (isCurrent()) {
+        setLoading(false);
+        setInitialLoad(false);
+      }
     }
   };
 
   const loadLogs = async (showLoading = true) => {
     if (!listingId) return;
-    
+    const isCurrent = beginLogsRequest();
+
     try {
       if (showLoading) {
         setLogsLoading(true);
       }
       const response = await marketDataApi.getCollectorLogs(Number(listingId));
+      if (!isCurrent()) return;
       setLogs(response.logs);
+      setLogsError(null);
     } catch (err) {
-      console.error('Failed to load logs:', err);
+      if (!isCurrent()) return;
+      setLogsError(errorMessage(err, 'Failed to load logs'));
     } finally {
-      if (showLoading) {
+      if (isCurrent()) {
         setLogsLoading(false);
+        setInitialLogsLoad(false);
       }
-      setInitialLogsLoad(false);
     }
   };
 
@@ -148,18 +167,18 @@ function CollectorDetail() {
 
     setActionPending(true);
     try {
-      setError(null);
+      setActionError(null);
       await marketDataApi.deleteCollector(Number(listingId));
+      setStopModalOpen(false);
       await loadCollector();
     } catch (err) {
       if (err instanceof Error) {
-        setError(err.message);
+        setActionError(err.message);
       } else {
-        setError('Failed to stop collector');
+        setActionError('Failed to stop collector');
       }
     } finally {
       setActionPending(false);
-      setStopModalOpen(false);
     }
   };
 
@@ -168,19 +187,19 @@ function CollectorDetail() {
 
     setActionPending(true);
     try {
-      setError(null);
+      setActionError(null);
       await marketDataApi.redeployCollector(Number(listingId), redeployVersion.trim() || undefined);
+      setRedeployModalOpen(false);
+      setRedeployVersion('');
       await loadCollector();
     } catch (err) {
       if (err instanceof Error) {
-        setError(err.message);
+        setActionError(err.message);
       } else {
-        setError('Failed to redeploy collector');
+        setActionError('Failed to redeploy collector');
       }
     } finally {
       setActionPending(false);
-      setRedeployModalOpen(false);
-      setRedeployVersion('');
     }
   };
 
@@ -189,18 +208,18 @@ function CollectorDetail() {
 
     setActionPending(true);
     try {
-      setError(null);
+      setActionError(null);
       await marketDataApi.purgeCollector(Number(listingId));
+      setPurgeModalOpen(false);
       navigate('/market-data/collectors');
     } catch (err) {
       if (err instanceof Error) {
-        setError(err.message);
+        setActionError(err.message);
       } else {
-        setError('Failed to delete collector');
+        setActionError('Failed to delete collector');
       }
     } finally {
       setActionPending(false);
-      setPurgeModalOpen(false);
     }
   };
 
@@ -209,21 +228,24 @@ function CollectorDetail() {
   }, [listingId]);
 
 
+  // The 10s collector poll replaces taskDetails every time; keying on the ARNs keeps the logs interval from restarting.
+  const taskArnsKey = taskDetails.map(t => t.taskArn).join(',');
+
   useEffect(() => {
     // Load logs for all tasks when component mounts or listingId changes
-    if (taskDetails.length > 0) {
+    if (taskArnsKey) {
       loadLogs();
     }
     
     // Auto-refresh logs every 5 seconds
     const interval = setInterval(() => {
-      if (taskDetails.length > 0) {
+      if (taskArnsKey) {
         loadLogs(false);
       }
     }, 5000);
     
     return () => clearInterval(interval);
-  }, [listingId, taskDetails]);
+  }, [listingId, taskArnsKey]);
 
   // Auto-refresh collector data every 10 seconds
   useEffect(() => {
@@ -254,7 +276,11 @@ function CollectorDetail() {
   if (!collector) {
     return (
       <Container size="xl" py="xl">
-        <Text color="red">Collector not found</Text>
+        {loadError ? (
+          <Alert color="red" title="Error">{loadError}</Alert>
+        ) : (
+          <Text color="red">Collector not found</Text>
+        )}
       </Container>
     );
   }
@@ -318,14 +344,14 @@ function CollectorDetail() {
         </Group>
       </Group>
 
-      {error && (
+      {loadError && (
         <Notification 
           color="red" 
           title="Error" 
-          onClose={() => setError(null)}
+          onClose={() => setLoadError(null)}
           mb="md"
         >
-          {error}
+          {loadError}
         </Notification>
       )}
 
@@ -466,6 +492,10 @@ function CollectorDetail() {
         )}
       </Card>
 
+      {logsError && (
+        <Alert color="red" title="Error" mb="md">{logsError}</Alert>
+      )}
+
       <ContainerLogs
         logs={logs.map((l, i) => ({ id: l.taskArn, label: `Task ${i + 1}`, logs: l.logs, consoleUrl: l.consoleUrl }))}
         loading={logsLoading}
@@ -475,13 +505,14 @@ function CollectorDetail() {
 
       <Modal
         opened={stopModalOpen}
-        onClose={() => { if (!actionPending) setStopModalOpen(false); }}
+        onClose={() => { if (actionPending) return; setStopModalOpen(false); setActionError(null); }}
         title="Stop Collector"
       >
         <Stack>
           <Text>Are you sure you want to stop this collector?</Text>
+          {actionError && <Text c="red" size="sm">{actionError}</Text>}
           <Group justify="flex-end">
-            <Button variant="default" disabled={actionPending} onClick={() => setStopModalOpen(false)}>
+            <Button variant="default" disabled={actionPending} onClick={() => { setStopModalOpen(false); setActionError(null); }}>
               Cancel
             </Button>
             <Button
@@ -497,14 +528,15 @@ function CollectorDetail() {
 
       <Modal
         opened={redeployModalOpen}
-        onClose={() => { if (!actionPending) setRedeployModalOpen(false); }}
+        onClose={() => { if (actionPending) return; setRedeployModalOpen(false); setActionError(null); }}
         title="Redeploy Collector"
       >
         <Stack>
           <Text>Are you sure you want to redeploy this collector?</Text>
           <TextInput label="Orchestrator Version" placeholder="Latest" description="Blank deploys the latest release" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} disabled={actionPending} />
+          {actionError && <Text c="red" size="sm">{actionError}</Text>}
           <Group justify="flex-end">
-            <Button variant="default" disabled={actionPending} onClick={() => setRedeployModalOpen(false)}>
+            <Button variant="default" disabled={actionPending} onClick={() => { setRedeployModalOpen(false); setActionError(null); }}>
               Cancel
             </Button>
             <Button
@@ -520,7 +552,7 @@ function CollectorDetail() {
 
       <Modal
         opened={purgeModalOpen}
-        onClose={() => { if (!actionPending) setPurgeModalOpen(false); }}
+        onClose={() => { if (actionPending) return; setPurgeModalOpen(false); setActionError(null); }}
         title="Delete Collector Record"
       >
         <Stack>
@@ -529,8 +561,9 @@ function CollectorDetail() {
             This action cannot be undone. The collector metadata will be permanently removed from the database.
             You will need to create a new collector to resume data collection.
           </Text>
+          {actionError && <Text c="red" size="sm">{actionError}</Text>}
           <Group justify="flex-end">
-            <Button variant="default" disabled={actionPending} onClick={() => setPurgeModalOpen(false)}>
+            <Button variant="default" disabled={actionPending} onClick={() => { setPurgeModalOpen(false); setActionError(null); }}>
               Cancel
             </Button>
             <Button color="red" loading={actionPending} onClick={handlePurgeCollector}>

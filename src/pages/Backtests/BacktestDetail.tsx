@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Accordion,
   ActionIcon,
+  Alert,
   Anchor,
   Badge,
   Button,
@@ -35,6 +36,9 @@ import {
 } from 'recharts';
 import { BacktestJob, BacktestRun, BacktestStatus, JobStatus } from '../../types/backtests';
 import { controllerApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
+import { useLatestRequest } from '../../hooks/useLatestRequest';
+import { LastUpdated } from '../../components/LastUpdated';
 
 const RUN_STATUS_COLORS: Record<BacktestStatus, string> = {
   SUBMITTED: 'blue',
@@ -55,6 +59,8 @@ const JOB_STATUS_COLORS: Record<JobStatus, string> = {
 
 const CANCELLABLE = new Set<BacktestStatus>(['SUBMITTED', 'PENDING', 'RUNNING']);
 const EXPLORABLE = new Set<BacktestStatus>(['COMPLETED', 'PARTIALLY_FAILED']);
+const TERMINAL_JOB_STATUSES = new Set<JobStatus>(['SUCCEEDED', 'FAILED']);
+const POLL_INTERVAL_MS = 10000;
 
 function toCamelWords(key: string): string {
   return key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).trim();
@@ -95,29 +101,53 @@ function BacktestDetail() {
   const [loading, setLoading] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
   const [visibilityInitialized, setVisibilityInitialized] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const beginRefresh = useLatestRequest();
+
+  const refresh = useCallback(async (showLoading = true) => {
     if (!runId) return;
-    setLoading(true);
+    const isCurrent = beginRefresh();
+    if (showLoading) setLoading(true);
     try {
       const data = await controllerApi.getBacktest(runId);
+      if (!isCurrent()) return;
       setRun(data as BacktestRun);
+      setLoadError(null);
+      setLastUpdated(new Date());
+    } catch (e) {
+      if (!isCurrent()) return;
+      setLoadError(errorMessage(e, 'Failed to load backtest'));
     } finally {
-      setLoading(false);
+      // Not gated on showLoading: a superseded load skips this, so the newest must clear a spinner it didn't start.
+      if (isCurrent()) setLoading(false);
     }
-  }, [runId]);
+  }, [runId, beginRefresh]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const inProgress = run !== null
+    && (CANCELLABLE.has(run.status) || (run.jobs ?? []).some((j) => !TERMINAL_JOB_STATUSES.has(j.status)));
+  useEffect(() => {
+    if (!inProgress) return;
+    const interval = setInterval(() => refresh(false), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [inProgress, refresh]);
 
   const handleCancel = async () => {
     if (!runId) return;
     setCancelling(true);
+    setCancelError(null);
     try {
       await controllerApi.cancelBacktest(runId);
       setCancelModalOpen(false);
       refresh();
+    } catch (e) {
+      setCancelError(errorMessage(e, 'Failed to cancel backtest'));
     } finally {
       setCancelling(false);
     }
@@ -321,7 +351,7 @@ function BacktestDetail() {
     initialState: { sorting: [{ id: 'summary_finalPnl', desc: true }], density: 'xs' },
   });
 
-  if (!run && !loading) return null;
+  if (!run && !loading && !loadError) return null;
 
   return (
     <Container size="xl" py="xl">
@@ -333,24 +363,33 @@ function BacktestDetail() {
         </Tooltip>
         <Title order={2}>Backtest Detail</Title>
         <Group ml="auto">
+          {inProgress && (
+            <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={loadError !== null} />
+          )}
           {run && CANCELLABLE.has(run.status) && (
             <Button
               size="sm"
               color="red"
               variant="light"
               leftSection={<IconX size={14} />}
-              onClick={() => setCancelModalOpen(true)}
+              onClick={() => { setCancelError(null); setCancelModalOpen(true); }}
             >
               Cancel
             </Button>
           )}
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
+            <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
               <IconRefresh size={20} />
             </ActionIcon>
           </Tooltip>
         </Group>
       </Group>
+
+      {loadError && (
+        <Alert color="red" title="Error" mb="md">
+          {loadError}
+        </Alert>
+      )}
 
       {run && (
         <Card withBorder mb="md" p="md">
@@ -481,6 +520,7 @@ function BacktestDetail() {
       >
         <Stack>
           <Text size="sm">This will terminate all running Batch jobs for this run.</Text>
+          {cancelError && <Text c="red" size="sm">{cancelError}</Text>}
           <Group justify="flex-end">
             <Button variant="outline" onClick={() => setCancelModalOpen(false)}>Back</Button>
             <Button color="red" loading={cancelling} onClick={handleCancel}>Cancel Run</Button>

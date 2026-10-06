@@ -14,6 +14,7 @@ import {
 } from '@mantine/core';
 import {
   IconAlertTriangle,
+  IconHelpCircle,
   IconAntenna,
   IconChartLine,
   IconCurrencyDollar,
@@ -34,13 +35,16 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { PnlSnapshot, RiskPolicy, Strategy, StrategySession, isActiveSession, StrategyStatus } from '../../types';
+import { PnlSnapshot, RiskPolicy, Strategy, StrategySession, isActiveSession, StrategyStatus, ACTIVE_SESSION_STATUSES } from '../../types';
 import { BacktestRun } from '../../types/backtests';
 import { ResearchSession } from '../../types/research';
 import { controllerApi, marketDataApi, registryApi } from '../../utils/api';
 import { unscalePrice } from '../../utils/security-master';
 import { SESSION_STATUS_COLORS } from '../../utils/session-status';
-import { findKillSwitch, GLOBAL_TARGET } from '../../utils/kill-switch';
+import { GLOBAL_TARGET, isKilled } from '../../utils/kill-switch';
+import { ActiveKillSwitches } from '../../components/ActiveKillSwitches';
+import { withoutEndedSessions } from '../../utils/policy-target';
+import { LastUpdated } from '../../components/LastUpdated';
 
 interface Collector {
   listingId: number;
@@ -75,33 +79,44 @@ function Dashboard() {
 
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [sessions, setSessions] = useState<StrategySession[]>([]);
+  const [sessionTotal, setSessionTotal] = useState<number | null>(null);
   const [pnlSnapshots, setPnlSnapshots] = useState<PnlSnapshot[]>([]);
-  const [riskPolicies, setRiskPolicies] = useState<RiskPolicy[]>([]);
+  const [riskPolicies, setRiskPolicies] = useState<RiskPolicy[] | null>(null);
+  const [riskPoliciesFailed, setRiskPoliciesFailed] = useState(false);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [failedCount, setFailedCount] = useState(0);
   const [collectors, setCollectors] = useState<Collector[]>([]);
   const [backtests, setBacktests] = useState<BacktestRun[]>([]);
   const [research, setResearch] = useState<ResearchSession[]>([]);
   const [loading, setLoading] = useState(true);
-  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const refresh = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     const results = await Promise.allSettled([
       registryApi.listStrategies(),
-      registryApi.listSessions(),
+      // Only active sessions are listed here; every session ever, every 30s, grows without bound.
+      registryApi.listSessions({ status: ACTIVE_SESSION_STATUSES.join(',') }),
       registryApi.listPnlLatest(),
       registryApi.listRiskPolicies(),
       marketDataApi.listCollectors(),
       controllerApi.listBacktests({ limit: 10 }),
       controllerApi.listResearchSessions({ limit: 10 }),
+      registryApi.countSessions(),
     ]);
     if (results[0].status === 'fulfilled') setStrategies(results[0].value);
     if (results[1].status === 'fulfilled') setSessions(results[1].value);
+    setSessionsLoaded(results[1].status === 'fulfilled');
     if (results[2].status === 'fulfilled') setPnlSnapshots(results[2].value);
     if (results[3].status === 'fulfilled') setRiskPolicies(results[3].value);
+    setRiskPoliciesFailed(results[3].status === 'rejected');
+    const failed = results.filter(r => r.status === 'rejected').length;
+    setFailedCount(failed);
+    if (failed === 0) setLastUpdated(new Date());
     if (results[4].status === 'fulfilled') setCollectors((results[4].value as { collectors: Collector[] }).collectors);
     if (results[5].status === 'fulfilled') setBacktests((results[5].value as { runs: BacktestRun[] }).runs);
     if (results[6].status === 'fulfilled') setResearch((results[6].value as { sessions: ResearchSession[] }).sessions);
-    setLastRefreshed(new Date());
+    if (results[7].status === 'fulfilled') setSessionTotal(results[7].value as number);
     if (showLoading) setLoading(false);
   }, []);
 
@@ -118,9 +133,12 @@ function Dashboard() {
     return map;
   }, [strategies]);
 
-  const tradingHalted = useMemo(() =>
-    findKillSwitch(riskPolicies, GLOBAL_TARGET)?.enabled ?? false,
-    [riskPolicies],
+  const tradingHalted = useMemo(() => isKilled(riskPolicies, GLOBAL_TARGET), [riskPolicies]);
+  // Stopping a session leaves its kill switch on for good, so only kills on still-active sessions are worth showing.
+  // Without the session list, show everything rather than risk hiding a live kill.
+  const livePolicies = useMemo(
+    () => (riskPolicies && sessionsLoaded ? withoutEndedSessions(riskPolicies, sessions) : riskPolicies),
+    [riskPolicies, sessions, sessionsLoaded],
   );
 
   const activeStrategies = useMemo(() => strategies.filter(s => s.status === StrategyStatus.ACTIVE).length, [strategies]);
@@ -335,9 +353,10 @@ function Dashboard() {
       <Group justify="space-between" mb="md">
         <Title order={2}>Dashboard</Title>
         <Group>
-          <Text size="sm" c="dimmed">
-            Refreshed <ReactTimeAgo date={lastRefreshed} timeStyle="round" />
-          </Text>
+          <LastUpdated at={lastUpdated} intervalMs={30000} failing={failedCount > 0} />
+          {failedCount > 0 && (
+            <Text size="sm" c="red">{failedCount} {failedCount === 1 ? 'source' : 'sources'} failed to load</Text>
+          )}
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
               <IconRefresh size={20} />
@@ -345,6 +364,19 @@ function Dashboard() {
           </Tooltip>
         </Group>
       </Group>
+
+      {riskPoliciesFailed && (
+        <Alert
+          mb="lg"
+          color="gray"
+          title={tradingHalted === null ? 'Kill switch status unknown' : 'Kill switch status may be stale'}
+          icon={<IconHelpCircle size={20} />}
+          onClick={(e) => handleNavigateClick(e, navigate, '/risk/policies')}
+          style={{ cursor: 'pointer' }}
+        >
+          Risk policies couldn't be loaded, so this page can't confirm whether trading is halted. Click to open risk policies.
+        </Alert>
+      )}
 
       {tradingHalted && (
         <Alert
@@ -358,6 +390,8 @@ function Dashboard() {
           Kill switch is ACTIVE — all order flow is blocked. Click to manage risk policies.
         </Alert>
       )}
+
+      <ActiveKillSwitches policies={livePolicies} strategyName={(id) => strategyMap[id]} />
 
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="lg">
         <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={(e) => handleNavigateClick(e, navigate, '/strategies')}>
@@ -376,7 +410,7 @@ function Dashboard() {
             <div>
               <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Running Sessions</Text>
               <Text size="xl" fw={700}>{activeSessions.length}</Text>
-              <Text size="xs" c="dimmed">{sessions.length} total</Text>
+              <Text size="xs" c="dimmed">{sessionTotal ?? '–'} total</Text>
             </div>
             <IconPlayerPlay size={32} stroke={1.5} color="var(--mantine-color-blue-6)" />
           </Group>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  ActionIcon, Badge, Button, Container, Group, Modal, NumberInput,
+  ActionIcon, Alert, Badge, Button, Container, Group, Modal, NumberInput,
   ScrollArea, Select, Stack, Switch, TextInput, Title, Tooltip, Text,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
@@ -8,6 +8,7 @@ import { IconEdit, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react'
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { LaunchRule, RuleType } from '../../types/launcher';
 import { launcherApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
 import { SchemaFormFields } from '../../components/SchemaFormFields';
 
 const LAUNCH_PATH_COLORS: Record<string, string> = {
@@ -41,6 +42,7 @@ function RuleModal({
   ruleTypes: RuleType[];
 }) {
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const form = useForm<RuleFormValues>({
     initialValues: {
@@ -57,6 +59,7 @@ function RuleModal({
 
   useEffect(() => {
     if (opened) {
+      setSaveError(null);
       form.setValues(rule ? {
         name: rule.name,
         description: rule.description ?? '',
@@ -93,6 +96,7 @@ function RuleModal({
 
   const handleSubmit = async (values: RuleFormValues) => {
     setSaving(true);
+    setSaveError(null);
     try {
       const params = Object.fromEntries(
         Object.entries(values.parameters).filter(([, v]) => v !== undefined && v !== '' && v !== null)
@@ -115,7 +119,7 @@ function RuleModal({
       onSaved();
       onClose();
     } catch (e) {
-      console.error(e);
+      setSaveError(errorMessage(e, 'Failed to save rule'));
     } finally {
       setSaving(false);
     }
@@ -189,6 +193,8 @@ function RuleModal({
             </>
           )}
 
+          {saveError && <Text c="red" size="sm">{saveError}</Text>}
+
           <Group justify="flex-end" mt="sm">
             <Button variant="outline" onClick={onClose}>Cancel</Button>
             <Button type="submit" loading={saving}>{rule ? 'Save' : 'Create'}</Button>
@@ -208,12 +214,15 @@ function LaunchRules() {
   const [deleteTarget, setDeleteTarget] = useState<LaunchRule | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = () => {
     setIsLoading(true);
     Promise.all([launcherApi.listRules(), launcherApi.getRuleTypes()])
-      .then(([r, rt]) => { setRules(r); setRuleTypes(rt); })
-      .catch(console.error)
+      .then(([r, rt]) => { setRules(r); setRuleTypes(rt); setLoadError(null); })
+      .catch(e => setLoadError(errorMessage(e, 'Failed to load launch rules')))
       .finally(() => setIsLoading(false));
   };
 
@@ -221,13 +230,14 @@ function LaunchRules() {
 
   const handleToggle = async (rule: LaunchRule) => {
     setToggling(rule.rule_id);
+    setToggleError(null);
     try {
       const updated = await launcherApi.updateRule(rule.rule_id, {
         status: rule.status === 'active' ? 'disabled' : 'active',
       });
       setRules(prev => prev.map(r => r.rule_id === rule.rule_id ? updated : r));
     } catch (e) {
-      console.error(e);
+      setToggleError(errorMessage(e, `Failed to update rule ${rule.name}`));
     } finally {
       setToggling(null);
     }
@@ -236,12 +246,13 @@ function LaunchRules() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
+    setDeleteError(null);
     try {
       await launcherApi.deleteRule(deleteTarget.rule_id);
       setRules(prev => prev.filter(r => r.rule_id !== deleteTarget.rule_id));
       setDeleteTarget(null);
     } catch (e) {
-      console.error(e);
+      setDeleteError(errorMessage(e, 'Failed to delete rule'));
     } finally {
       setDeleting(false);
     }
@@ -322,7 +333,7 @@ function LaunchRules() {
         <ActionIcon
           variant="subtle"
           color="red"
-          onClick={e => { e.stopPropagation(); setDeleteTarget(row.original); }}
+          onClick={e => { e.stopPropagation(); setDeleteError(null); setDeleteTarget(row.original); }}
         >
           <IconTrash size={16} />
         </ActionIcon>
@@ -353,6 +364,17 @@ function LaunchRules() {
         </Group>
       </Group>
 
+      {loadError && (
+        <Alert color="red" title="Error" mb="md">
+          {loadError}
+        </Alert>
+      )}
+      {toggleError && (
+        <Alert color="red" title="Error" mb="md" withCloseButton onClose={() => setToggleError(null)}>
+          {toggleError}
+        </Alert>
+      )}
+
       <MantineReactTable table={table} />
 
       <RuleModal
@@ -371,6 +393,7 @@ function LaunchRules() {
       >
         <Stack>
           <Text>Delete rule <Text span fw={500}>{deleteTarget?.name}</Text>? This cannot be undone.</Text>
+          {deleteError && <Text c="red" size="sm">{deleteError}</Text>}
           <Group justify="flex-end">
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button color="red" loading={deleting} onClick={handleDelete}>Delete</Button>

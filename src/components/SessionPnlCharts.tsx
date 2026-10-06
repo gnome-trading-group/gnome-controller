@@ -35,6 +35,33 @@ function bucketTime(isoTime: string): string {
   return d.toISOString();
 }
 
+type CumulativeField = 'totalPnl' | 'realizedPnl' | 'unrealizedPnl' | 'totalFees';
+
+// PnL and fees are cumulative per listing, so a bucket's total is each listing's latest value at or before that
+// bucket, summed. Adding every snapshot in a bucket instead double-counts a listing that reported twice in it and
+// drops a listing that didn't report at all.
+function cumulativeTotals<F extends CumulativeField>(snapshots: PnlSnapshot[], fields: F[]): ({ ts: number } & Record<F, number>)[] {
+  const ordered = [...snapshots].sort((a, b) => new Date(a.snapshotTime).getTime() - new Date(b.snapshotTime).getTime());
+  const latestByListing = new Map<number, PnlSnapshot>();
+  const rows: ({ ts: number } & Record<F, number>)[] = [];
+  let i = 0;
+  while (i < ordered.length) {
+    const key = bucketTime(ordered[i].snapshotTime);
+    while (i < ordered.length && bucketTime(ordered[i].snapshotTime) === key) {
+      latestByListing.set(ordered[i].listingId, ordered[i]);
+      i++;
+    }
+    const totals = {} as Record<F, number>;
+    for (const field of fields) {
+      let sum = 0;
+      latestByListing.forEach((snapshot) => { sum += Number(snapshot[field]); });
+      totals[field] = unscalePrice(sum);
+    }
+    rows.push({ ts: new Date(key).getTime(), ...totals });
+  }
+  return rows;
+}
+
 function toLabel(isoTime: string) {
   return new Date(isoTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -60,25 +87,10 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
     [snapshots],
   );
 
-  const aggregateData = useMemo(() => {
-    const grouped = new Map<string, { time: string; totalPnl: number; realizedPnl: number; unrealizedPnl: number }>();
-    snapshots.forEach(s => {
-      const key = bucketTime(s.snapshotTime);
-      const existing = grouped.get(key) ?? { time: key, totalPnl: 0, realizedPnl: 0, unrealizedPnl: 0 };
-      existing.totalPnl += Number(s.totalPnl);
-      existing.realizedPnl += Number(s.realizedPnl);
-      existing.unrealizedPnl += Number(s.unrealizedPnl);
-      grouped.set(key, existing);
-    });
-    return Array.from(grouped.values())
-      .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
-      .map(d => ({
-        ts: new Date(d.time).getTime(),
-        totalPnl: unscalePrice(d.totalPnl),
-        realizedPnl: unscalePrice(d.realizedPnl),
-        unrealizedPnl: unscalePrice(d.unrealizedPnl),
-      }));
-  }, [snapshots]);
+  const aggregateData = useMemo(
+    () => cumulativeTotals(snapshots, ['totalPnl', 'realizedPnl', 'unrealizedPnl']),
+    [snapshots],
+  );
 
   const perListingData = useMemo(() => {
     const grouped = new Map<string, Record<string, number | string>>();
@@ -93,18 +105,7 @@ export function SessionPnlCharts({ snapshots, loading }: SessionPnlChartsProps) 
       .map(d => ({ ...d, ts: new Date(String(d.time)).getTime() }));
   }, [snapshots]);
 
-  const aggregateFeesData = useMemo(() => {
-    const grouped = new Map<string, { time: string; totalFees: number }>();
-    snapshots.forEach(s => {
-      const key = bucketTime(s.snapshotTime);
-      const existing = grouped.get(key) ?? { time: key, totalFees: 0 };
-      existing.totalFees += Number(s.totalFees);
-      grouped.set(key, existing);
-    });
-    return Array.from(grouped.values())
-      .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
-      .map(d => ({ ts: new Date(d.time).getTime(), totalFees: unscalePrice(d.totalFees) }));
-  }, [snapshots]);
+  const aggregateFeesData = useMemo(() => cumulativeTotals(snapshots, ['totalFees']), [snapshots]);
 
   const perListingFeesData = useMemo(() => {
     const grouped = new Map<string, Record<string, number | string>>();

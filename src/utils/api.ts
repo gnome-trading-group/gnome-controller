@@ -1,4 +1,4 @@
-import { fetchAuthSession } from 'aws-amplify/auth';
+import { fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
 import { ContractRelationship, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, HedgeKeyword, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, RiskPolicyHistory, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse, ResearchArtifactListResponse, ResearchDatasetListResponse } from '../types/research';
@@ -16,6 +16,17 @@ export interface ServiceConfigResponse {
   version: number;
   updatedAt?: string;
   updatedBy?: string;
+}
+
+export interface ServiceConfigVersion {
+  version: number;
+  config: Record<string, unknown>;
+  updated_at: string;
+  updated_by: string;
+}
+
+export interface ServiceConfigHistoryResponse {
+  versions: ServiceConfigVersion[];
 }
 
 const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
@@ -60,15 +71,28 @@ function convertObjectToCamelCase(obj: any, preserveKeys?: Set<string>): any {
   return obj;
 }
 
+let signingOut = false;
+
+// Every endpoint needs a Cognito token, so once the session can't be refreshed or the API rejects the token, all calls
+// fail until the user logs in again. Signing out shows the login screen instead of a page of identical errors.
+function endSession() {
+  if (signingOut) return;
+  signingOut = true;
+  const currentPath = window.location.pathname + window.location.search + window.location.hash;
+  if (currentPath !== '/') sessionStorage.setItem('postLoginRedirect', currentPath);
+  signOut().catch(() => { signingOut = false; });
+}
+
 export async function sendApiRequest<T>(
   endpoint: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET',
   config: ApiConfig,
 ): Promise<T> {
   try {
-    const { tokens } = await fetchAuthSession();
+    const { tokens } = await fetchAuthSession().catch(() => ({ tokens: undefined }));
     if (!tokens?.idToken) {
-      throw new ApiError(401, 'Not authenticated');
+      endSession();
+      throw new ApiError(401, 'Your login has expired — signing you out');
     }
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -101,6 +125,7 @@ export async function sendApiRequest<T>(
     if (response.ok) {
       return (config.convertToCamelCase ? convertObjectToCamelCase(data, config.preserveKeys) : data) as T;
     } else {
+      if (response.status === 401) endSession();
       const body = data as { body?: string | { error?: string }; message?: string; error?: string } | null;
       const error = (typeof body?.body === 'string' ? body.body : body?.body?.error)
         ?? body?.message
@@ -516,6 +541,18 @@ export const registryApi = {
       convertToCamelCase: true,
       queryParams: { search, limit },
     }),
+  listListingsByIds: (listingIds: number[]) =>
+    sendApiRequest<DenormalizedListing[]>('/listings', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: { listingIds: listingIds.join(','), denormalize: true, limit: listingIds.length },
+    }),
+  listSecuritiesByIds: (securityIds: number[]) =>
+    sendApiRequest<Security[]>('/securities', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: { securityIds: securityIds.join(','), limit: securityIds.length },
+    }),
   searchListings: (search: string, limit = 50) =>
     sendApiRequest<DenormalizedListing[]>('/listings', 'GET', {
       apiUrl: REGISTRY_API_URL,
@@ -780,10 +817,12 @@ export const controllerApi = {
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
   },
+  // Parameter and metric names are user-defined (e.g. spread_bps) and shown verbatim next to the run's YAML.
   getBacktest: (runId: string) =>
     sendApiRequest<any>(`/backtests/${runId}`, 'GET', {
       apiUrl: CONTROLLER_API_URL,
       convertToCamelCase: true,
+      preserveKeys: new Set(['configParams', 'sweepParams', 'summary']),
     }),
   cancelBacktest: (runId: string) =>
     sendApiRequest<{ runId: string; status: string }>(`/backtests/${runId}`, 'DELETE', {
@@ -804,6 +843,7 @@ export const controllerApi = {
     sendApiRequest<ResearchSession>(`/research/sessions/${sessionName}`, 'GET', {
       apiUrl: CONTROLLER_API_URL,
       convertToCamelCase: true,
+      preserveKeys: new Set(['metrics', 'metadata', 'environment']),
     }),
   addResearchNote: (sessionName: string, content: string) =>
     sendApiRequest<{ sessionName: string; timestamp: string }>(
@@ -869,6 +909,10 @@ export const controllerApi = {
     sendApiRequest<ServiceConfigResponse>(`/cognito/config/${service}`, 'PUT', {
       apiUrl: CONTROLLER_API_URL,
       body: { config, version },
+    }),
+  getServiceConfigHistory: (service: string) =>
+    sendApiRequest<ServiceConfigHistoryResponse>(`/cognito/config/${service}/history`, 'GET', {
+      apiUrl: CONTROLLER_API_URL,
     }),
 }
 

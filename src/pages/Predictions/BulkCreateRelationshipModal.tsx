@@ -20,6 +20,7 @@ import {
 import { ContractRelationshipType, CreateContractRelationship, EventContract } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useEventSearch } from '../../hooks/useAsyncSearch';
+import { errorMessage } from '../../utils/kill-switch';
 
 const RELATIONSHIP_TYPE_OPTIONS: { value: ContractRelationshipType; label: string }[] = [
   { value: 'EQUIVALENT', label: 'Equivalent' },
@@ -133,6 +134,7 @@ function BulkCreateRelationshipModal({
   const [targetEventId, setTargetEventId] = useState<number | null>(null);
   const [targetContracts, setTargetContracts] = useState<EventContract[]>([]);
   const [loadingTarget, setLoadingTarget] = useState(false);
+  const [targetError, setTargetError] = useState<string | null>(null);
   const [selectedB, setSelectedB] = useState<number[]>([]);
 
   const [relationshipType, setRelationshipType] = useState<ContractRelationshipType>('EQUIVALENT');
@@ -143,6 +145,8 @@ function BulkCreateRelationshipModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setTargetError(null);
+    setLoadingTarget(false);
     if (!targetEventId) {
       setTargetContracts([]);
       setSelectedB([]);
@@ -155,12 +159,15 @@ function BulkCreateRelationshipModal({
       setPairings({});
       return;
     }
+    let cancelled = false;
     setLoadingTarget(true);
+    setTargetContracts([]);
     registryApi.listEventContracts({ eventId: targetEventId })
-      .then(cs => setTargetContracts(cs as EventContract[]))
-      .catch(() => setTargetContracts([]))
-      .finally(() => setLoadingTarget(false));
+      .then(cs => { if (!cancelled) setTargetContracts(cs as EventContract[]); })
+      .catch(e => { if (!cancelled) setTargetError(errorMessage(e, 'Failed to load target event contracts')); })
+      .finally(() => { if (!cancelled) setLoadingTarget(false); });
     setPairings({});
+    return () => { cancelled = true; };
   }, [targetEventId, currentEventId, currentContracts]);
 
   const sameEvent = targetEventId === currentEventId;
@@ -292,7 +299,8 @@ function BulkCreateRelationshipModal({
                   rightSection={eventsLoading ? <Loader size="xs" /> : undefined}
                   filter={({ options }) => options}
                 />
-                {targetEventId && (
+                {targetError && <Text c="red" size="sm">{targetError}</Text>}
+                {targetEventId && !targetError && (
                   <ContractCheckboxList
                     contracts={effectiveTargetContracts}
                     selected={selectedB}
@@ -319,7 +327,8 @@ function BulkCreateRelationshipModal({
               rightSection={eventsLoading ? <Loader size="xs" /> : undefined}
               filter={({ options }) => options}
             />
-            {targetEventId && (
+            {targetError && <Text c="red" size="sm">{targetError}</Text>}
+            {targetEventId && !targetError && (
               loadingTarget ? <Loader size="sm" /> : (
                 <Table fz="sm" withColumnBorders withRowBorders>
                   <Table.Thead>

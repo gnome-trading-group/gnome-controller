@@ -1,9 +1,14 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActionIcon,
+  Alert,
   Anchor,
+  Button,
   Container,
   Group,
+  Modal,
+  Stack,
+  Text,
   Title,
   Tooltip,
 } from '@mantine/core';
@@ -14,12 +19,16 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { HedgeKeyword } from '../../types';
 import { registryApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import CreateHedgeKeywordModal from './CreateHedgeKeywordModal';
 
 function HedgeKeywords() {
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
+  const [deleteTarget, setDeleteTarget] = useState<HedgeKeyword | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const urlState = useUrlTableState({ defaultSort: { id: 'dateCreated', desc: true } });
 
@@ -27,6 +36,7 @@ function HedgeKeywords() {
     data: keywords,
     total,
     isLoading,
+    error,
     pagination,
     sorting,
     setPagination,
@@ -46,12 +56,23 @@ function HedgeKeywords() {
     },
   });
 
-  const handleDelete = async (hedgeKeywordId: number) => {
+  const requestDelete = (keyword: HedgeKeyword) => {
+    setDeleteError(null);
+    setDeleteTarget(keyword);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeletePending(true);
+    setDeleteError(null);
     try {
-      await registryApi.deleteHedgeKeyword(hedgeKeywordId);
+      await registryApi.deleteHedgeKeyword(deleteTarget.hedgeKeywordId);
+      setDeleteTarget(null);
       refresh();
     } catch (err) {
-      console.error('Failed to delete hedge keyword:', err);
+      setDeleteError(errorMessage(err, 'Failed to delete hedge keyword'));
+    } finally {
+      setDeletePending(false);
     }
   };
 
@@ -110,7 +131,7 @@ function HedgeKeywords() {
     },
     renderRowActions: ({ row }: { row: MRT_Row<HedgeKeyword> }) => (
       <Tooltip label="Delete" position="left" withArrow openDelay={500}>
-        <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); handleDelete(row.original.hedgeKeywordId); }}>
+        <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); requestDelete(row.original); }}>
           <IconTrash size={16} />
         </ActionIcon>
       </Tooltip>
@@ -135,9 +156,32 @@ function HedgeKeywords() {
         </Group>
       </Group>
 
+      {error && <Alert color="red" title="Error" mb="md">{error}</Alert>}
+
       <MantineReactTable table={table} />
 
       <CreateHedgeKeywordModal opened={createOpened} onClose={closeCreate} onCreated={refresh} />
+
+      <Modal
+        opened={deleteTarget !== null}
+        onClose={() => { if (deletePending) return; setDeleteTarget(null); }}
+        title="Delete Hedge Keyword"
+        size="sm"
+      >
+        <Stack>
+          <Text>Are you sure you want to delete this hedge keyword?</Text>
+          {deleteTarget && (
+            <Text fw={500}>
+              {deleteTarget.keyword} ({deleteTarget.securitySymbol ?? `#${deleteTarget.securityId}`})
+            </Text>
+          )}
+          {deleteError && <Text c="red" size="sm">{deleteError}</Text>}
+          <Group justify="flex-end">
+            <Button variant="default" disabled={deletePending} onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button color="red" loading={deletePending} onClick={confirmDelete}>Delete</Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Container>
   );
 }

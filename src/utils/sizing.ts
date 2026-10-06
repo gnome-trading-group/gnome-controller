@@ -31,8 +31,8 @@ interface InstanceType {
   isolatedCpus: number;
 }
 
-// c7i.large is offered to measure whether 2 vCPU is now enough for standard sessions: the old 4 vCPU floor came
-// from JIT warmup crashing on Fargate while every agent busy-spun, which agents no longer do.
+// Measured 2026-10 on c7i.large (standard, paper): 2 and 5 listings both ran at ~2-7% CPU and ~370 MB, starting
+// in under 30s. The old 4 vCPU floor came from JIT warmup crashing on Fargate while every agent busy-spun.
 export const INSTANCE_TYPES: InstanceType[] = [
   { value: 'c7i.large', vcpus: 2, memoryGb: 4, isolatedCpus: 0 },
   { value: 'c7i.xlarge', vcpus: 4, memoryGb: 8, isolatedCpus: 0 },
@@ -57,8 +57,16 @@ export function expectedHotThreads(mode: string, listingCount: number): number {
   return perListing * listingCount + 2 + (listingCount > 1 ? 2 : 0);
 }
 
+// The most listings c7i.large has been measured with; above it, the next size up until someone measures more.
+const LARGE_MEASURED_LISTINGS = 5;
+
+// Paper fills come from a simulated exchange that models its own latency, so isolated cores buy it nothing.
+export function defaultLatencyProfile(mode: string): LatencyProfile {
+  return mode === 'live' ? 'low_latency' : 'standard';
+}
+
 export function suggestInstanceType(profile: LatencyProfile, mode: string, listingCount: number): string {
-  if (profile === 'standard') return 'c7i.xlarge';
+  if (profile === 'standard') return listingCount <= LARGE_MEASURED_LISTINGS ? 'c7i.large' : 'c7i.xlarge';
   const hot = expectedHotThreads(mode, Math.max(listingCount, 1));
   const fits = INSTANCE_TYPES.find(t => t.isolatedCpus >= hot);
   return (fits ?? INSTANCE_TYPES[INSTANCE_TYPES.length - 1]).value;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ActionIcon,
+  Alert,
   Badge,
   Container,
   Group,
@@ -20,6 +21,9 @@ import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import DeploySessionModal from './DeploySessionModal';
 import { SESSION_STATUS_COLORS } from '../../utils/session-status';
+import { LastUpdated } from '../../components/LastUpdated';
+
+const POLL_INTERVAL_MS = 5000;
 
 const MODE_COLORS: Record<string, string> = {
   paper: 'violet',
@@ -69,7 +73,7 @@ function SessionsList() {
     return p;
   }, [statusFilter, strategyFilter]);
 
-  const { data, total, isLoading, pagination, sorting, globalFilter, setPagination, setSorting, setGlobalFilter, refresh, silentRefresh } =
+  const { data, total, isLoading, error, lastUpdated, pagination, sorting, globalFilter, setPagination, setSorting, setGlobalFilter, refresh, silentRefresh } =
     useServerPaginatedTable<StrategySession>({
       fetchFn: registryApi.listSessionsPaginated,
       countFn: registryApi.countSessions,
@@ -146,7 +150,7 @@ function SessionsList() {
   ], [strategyMap]);
 
   useEffect(() => {
-    const interval = setInterval(silentRefresh, 5000);
+    const interval = setInterval(silentRefresh, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [silentRefresh]);
 
@@ -201,6 +205,7 @@ function SessionsList() {
       <Group justify="space-between" mb="md">
         <Title order={2}>Strategy Sessions</Title>
         <Group>
+          <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={error !== null} />
           <Select
             size="sm"
             data={STATUS_OPTIONS}
@@ -230,6 +235,12 @@ function SessionsList() {
           </Tooltip>
         </Group>
       </Group>
+
+      {error && (
+        <Alert color="red" title="Error" mb="md">
+          {error}
+        </Alert>
+      )}
 
       <MantineReactTable table={table} />
 

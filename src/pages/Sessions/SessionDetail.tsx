@@ -14,21 +14,30 @@ import {
   SimpleGrid,
   Space,
   Stack,
+  Switch,
   Table,
   Text,
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconAB2, IconArrowLeft, IconPlayerPlay, IconPlayerStop, IconPlus, IconRefresh } from '@tabler/icons-react';
+import { IconAB2, IconArrowLeft, IconPencil, IconPlayerPlay, IconPlayerStop, IconPlus, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { PnlSnapshot, RiskPolicy, StrategySession, StrategySessionStatus, ConfigValue, isActiveSession } from '../../types';
-import { findKillSwitch, listingKills, setKillSwitch } from '../../utils/kill-switch';
-import { describeTarget, policiesForSession, policyLevel } from '../../utils/policy-target';
+import { errorMessage, findKillSwitch, isKilled, KILL_SWITCH_TYPE, listingKills, setKillSwitch } from '../../utils/kill-switch';
+import {
+  configuredListings,
+  describeTarget,
+  isUnrelatedListingPolicy,
+  policiesForSession,
+  policyLevel,
+} from '../../utils/policy-target';
 import { formatRiskParameters } from '../../utils/risk-parameters';
 import { useListingLabels } from '../../hooks/useAsyncSearch';
+import { useLatestRequest } from '../../hooks/useLatestRequest';
 import { KillOnListingModal } from '../../components/KillOnListingModal';
 import { AddRiskPolicyModal } from '../../components/AddRiskPolicyModal';
+import { EditRiskPolicyModal } from '../../components/EditRiskPolicyModal';
 import { ListingKillList } from '../../components/ListingKillList';
 import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { registryApi } from '../../utils/api';
@@ -38,6 +47,9 @@ import { PnlSnapshotTable } from '../../components/PnlSnapshotTable';
 import { SessionPnlCharts } from '../../components/SessionPnlCharts';
 import DeploySessionModal from './DeploySessionModal';
 import { SESSION_STATUS_COLORS } from '../../utils/session-status';
+import { LastUpdated } from '../../components/LastUpdated';
+
+const POLL_INTERVAL_MS = 5000;
 
 const MODE_COLORS: Record<string, string> = {
   paper: 'violet',
@@ -99,9 +111,14 @@ function SessionDetail() {
   const [initialLoad, setInitialLoad] = useState(true);
   const [stopOpen, setStopOpen] = useState(false);
   const [policies, setPolicies] = useState<RiskPolicy[]>([]);
+  const [policiesLoaded, setPoliciesLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [killAction, setKillAction] = useState<'kill' | 'resume' | null>(null);
   const [killOnListingOpen, setKillOnListingOpen] = useState(false);
   const [addPolicyOpen, setAddPolicyOpen] = useState(false);
+  const [editPolicyTarget, setEditPolicyTarget] = useState<RiskPolicy | null>(null);
+  const [showAllListingPolicies, setShowAllListingPolicies] = useState(false);
   const [relaunchOpen, setRelaunchOpen] = useState(false);
   const relaunchSessionRef = useRef<StrategySession | null>(null);
   const [pnlRows, setPnlRows] = useState<PnlSnapshot[]>([]);
@@ -112,8 +129,13 @@ function SessionDetail() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [chartRange, setChartRange] = useState('24h');
 
+  const beginRefresh = useLatestRequest();
+  const beginLogs = useLatestRequest();
+  const beginHistory = useLatestRequest();
+
   const refresh = useCallback(async (showLoading = true) => {
     if (!sessionId) return;
+    const isCurrent = beginRefresh();
     if (showLoading) setLoading(true);
     try {
       const [sessions, pnl, allPolicies] = await Promise.all([
@@ -121,42 +143,56 @@ function SessionDetail() {
         registryApi.listPnlLatest(undefined, undefined, sessionId),
         registryApi.listRiskPolicies(),
       ]);
+      if (!isCurrent()) return;
       const s = sessions[0] ?? null;
       setSession(s);
       setPnlRows(pnl);
       setPolicies(allPolicies);
+      setPoliciesLoaded(true);
+      setLoadError(null);
+      setLastUpdated(new Date());
       if (s) {
         registryApi.listStrategies().then(list => {
           const match = list.find((st: { strategyId: number; name: string }) => st.strategyId === s.strategyId);
-          if (match) setStrategyName(match.name);
+          if (match && isCurrent()) setStrategyName(match.name);
         }).catch(() => {});
       }
+    } catch (e) {
+      if (!isCurrent()) return;
+      setLoadError(errorMessage(e, 'Failed to load session'));
     } finally {
-      if (showLoading) setLoading(false);
-      setInitialLoad(false);
+      // Not gated on showLoading: a superseded load skips this, so the newest must clear a spinner it didn't start.
+      if (isCurrent()) {
+        setLoading(false);
+        setInitialLoad(false);
+      }
     }
-  }, [sessionId]);
+  }, [sessionId, beginRefresh]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
     if (isTerminal(session)) return;
-    const interval = setInterval(() => refresh(false), 5000);
+    const interval = setInterval(() => refresh(false), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [refresh, session?.status]);
 
   const loadLogs = useCallback(async (showLoading = true) => {
     if (!sessionId || !session?.instanceId) return;
+    const isCurrent = beginLogs();
     try {
       if (showLoading) setLogsLoading(true);
       const response = await registryApi.getSessionLogs(sessionId);
+      if (!isCurrent()) return;
       setSessionLogs(response.logs.map(l => ({ id: l.instanceId, label: l.instanceId, logs: l.logs, consoleUrl: l.consoleUrl })));
     } catch (err) {
       console.error('Failed to load logs:', err);
     } finally {
-      if (showLoading) setLogsLoading(false);
-      setInitialLogsLoad(false);
+      if (isCurrent()) {
+        setLogsLoading(false);
+        setInitialLogsLoad(false);
+      }
     }
-  }, [sessionId, session?.instanceId]);
+  }, [sessionId, session?.instanceId, beginLogs]);
 
   useEffect(() => {
     if (!session?.instanceId) return;
@@ -175,16 +211,18 @@ function SessionDetail() {
     const durations: Record<string, number> = { '1h': 3600000, '6h': 21600000, '24h': 86400000, '7d': 604800000 };
     const duration = durations[chartRange];
     const startTime = duration ? new Date(anchor - duration).toISOString() : undefined;
+    const isCurrent = beginHistory();
     setHistoryLoading(true);
     try {
       const result = await registryApi.listPnlSnapshots(sessionId, startTime);
+      if (!isCurrent()) return;
       setHistorySnapshots(result);
     } catch (err) {
       console.error('Failed to load PnL history:', err);
     } finally {
-      setHistoryLoading(false);
+      if (isCurrent()) setHistoryLoading(false);
     }
-  }, [sessionId, session?.status, session?.stoppedAt, chartRange]);
+  }, [sessionId, session?.status, session?.stoppedAt, chartRange, beginHistory]);
 
   useEffect(() => {
     if (!session) return;
@@ -200,10 +238,16 @@ function SessionDetail() {
   const isStoppable = session ? isActiveSession(session.status) : false;
   // Only this session: other sessions of the strategy keep trading.
   const sessionKillSwitch = sessionId ? findKillSwitch(policies, { sessionId }) : undefined;
-  const sessionKilled = sessionKillSwitch?.enabled ?? false;
-  const strategyKilled = session ? findKillSwitch(policies, { strategyId: session.strategyId })?.enabled ?? false : false;
+  const knownPolicies = policiesLoaded ? policies : null;
+  const sessionKilled = sessionId ? isKilled(knownPolicies, { sessionId }) : false;
+  const strategyKilled = session ? isKilled(knownPolicies, { strategyId: session.strategyId }) : false;
 
-  const sessionPolicies = session && sessionId ? policiesForSession(policies, sessionId, session.strategyId) : [];
+  const applicablePolicies = session && sessionId ? policiesForSession(policies, sessionId, session.strategyId) : [];
+  const tradedListings = configuredListings(session ? [session] : []);
+  const hiddenListingPolicies = applicablePolicies.filter((p) => isUnrelatedListingPolicy(p, tradedListings)).length;
+  const sessionPolicies = showAllListingPolicies
+    ? applicablePolicies
+    : applicablePolicies.filter((p) => !isUnrelatedListingPolicy(p, tradedListings));
   const listingLabels = useListingLabels(
     sessionPolicies.flatMap((p) => (p.listingId != null ? [p.listingId] : [])),
   );
@@ -233,6 +277,9 @@ function SessionDetail() {
             {session.status}
           </Badge>
         )}
+        {!isTerminal(session) && (
+          <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={loadError !== null} />
+        )}
         <Tooltip label="Refresh" withArrow openDelay={500}>
           <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
             <IconRefresh size={20} />
@@ -245,7 +292,10 @@ function SessionDetail() {
             </ActionIcon>
           </Tooltip>
         )}
-        {isStoppable && (
+        {isStoppable && sessionKilled === null && (
+          <Button variant="default" disabled>Kill status unknown</Button>
+        )}
+        {isStoppable && sessionKilled !== null && (
           <Button
             color={sessionKilled ? 'green' : 'red'}
             variant="light"
@@ -263,6 +313,13 @@ function SessionDetail() {
           </Tooltip>
         )}
       </Group>
+
+      {loadError && (
+        <Alert color="red" title="Error" mb="md">
+          {loadError}
+          {policiesLoaded ? ' — showing the last state that loaded.' : " — this session's kill switch status is unknown."}
+        </Alert>
+      )}
 
       {isStoppable && (sessionKilled || strategyKilled) && (
         <Alert color="red" title={sessionKilled ? 'Session killed' : 'Strategy killed'} mb="md">
@@ -322,18 +379,26 @@ function SessionDetail() {
 
           <Group justify="space-between" mb="xs">
             <Title order={4}>Risk Policies</Title>
-            {isStoppable && (
-              <Group gap="xs">
-                <Button size="xs" variant="light" color="red" onClick={() => setKillOnListingOpen(true)}>
-                  Kill on listing
-                </Button>
-                <Tooltip label="Add a policy for this session" withArrow openDelay={500}>
-                  <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setAddPolicyOpen(true)}>
-                    <IconPlus size={20} />
-                  </ActionIcon>
-                </Tooltip>
-              </Group>
-            )}
+            <Group gap="xs">
+              <Switch
+                size="xs"
+                label={`Show all listing policies${hiddenListingPolicies ? ` (${hiddenListingPolicies} hidden)` : ''}`}
+                checked={showAllListingPolicies}
+                onChange={(e) => setShowAllListingPolicies(e.currentTarget.checked)}
+              />
+              {isStoppable && (
+                <Group gap="xs">
+                  <Button size="xs" variant="light" color="red" disabled={!policiesLoaded} onClick={() => setKillOnListingOpen(true)}>
+                    Kill on listing
+                  </Button>
+                  <Tooltip label="Add a policy for this session" withArrow openDelay={500}>
+                    <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setAddPolicyOpen(true)}>
+                      <IconPlus size={20} />
+                    </ActionIcon>
+                  </Tooltip>
+                </Group>
+              )}
+            </Group>
           </Group>
           <Card withBorder p="sm" mb="md">
             <ListingKillList
@@ -353,6 +418,7 @@ function SessionDetail() {
                     <Table.Th>Applies to</Table.Th>
                     <Table.Th>Limits</Table.Th>
                     <Table.Th>Enabled</Table.Th>
+                    <Table.Th />
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -366,6 +432,16 @@ function SessionDetail() {
                         <Table.Td>{formatRiskParameters(p.parameters)}</Table.Td>
                         <Table.Td>
                           <Badge color={p.enabled ? 'green' : 'gray'} variant="light">{p.enabled ? 'On' : 'Off'}</Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          {/* Only this session's own policies; strategy-wide and global ones are edited where they apply. */}
+                          {p.sessionId === sessionId && p.policyType !== KILL_SWITCH_TYPE && (
+                            <Tooltip label="Edit limits" withArrow openDelay={500}>
+                              <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => setEditPolicyTarget(p)}>
+                                <IconPencil size={14} />
+                              </ActionIcon>
+                            </Tooltip>
+                          )}
                         </Table.Td>
                       </Table.Tr>
                     );
@@ -467,6 +543,13 @@ function SessionDetail() {
       />
 
       <StopSessionModal session={stopOpen ? session : null} onClose={() => setStopOpen(false)} onStopped={() => refresh()} />
+
+      <EditRiskPolicyModal
+        policy={editPolicyTarget}
+        targetDescription={editPolicyTarget ? describePolicy(editPolicyTarget) : undefined}
+        onClose={() => setEditPolicyTarget(null)}
+        onSaved={() => refresh(false)}
+      />
 
       {sessionId && (
         <AddRiskPolicyModal

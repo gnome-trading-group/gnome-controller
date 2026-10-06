@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   ActionIcon,
+  Alert,
   Badge,
   Button,
   ComboboxItem,
@@ -8,6 +9,7 @@ import {
   Modal,
   Select,
   Stack,
+  Text,
   TextInput,
   Tooltip,
 } from '@mantine/core';
@@ -19,6 +21,7 @@ import { navigateRowProps } from '../../utils/navigation';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { DenormalizedListing } from '../../types';
 import { registryApi } from '../../utils/api';
+import { errorMessage } from '../../utils/kill-switch';
 import { formatSecurityType } from '../../utils/security-master';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
@@ -35,6 +38,8 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
   const navigate = useNavigate();
 
   const [createListingOpen, setCreateListingOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [newListingForm, setNewListingForm] = useState({
     exchangeId: 0,
     securityId: 0,
@@ -50,6 +55,7 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
     data: listings,
     total,
     isLoading,
+    error,
     pagination,
     sorting,
     globalFilter,
@@ -72,13 +78,17 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
   });
 
   const handleCreateListing = async () => {
+    setCreating(true);
+    setCreateError(null);
     try {
       await registryApi.createListing(newListingForm);
       await refresh();
       setCreateListingOpen(false);
       setNewListingForm({ exchangeId: 0, securityId: 0, exchangeSecurityId: '', exchangeSecuritySymbol: '' });
     } catch (err) {
-      console.error('Failed to create listing:', err);
+      setCreateError(errorMessage(err, 'Failed to create listing'));
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -179,7 +189,7 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
           size="lg"
           variant="filled"
           color="green"
-          onClick={() => setCreateListingOpen(true)}
+          onClick={() => { setCreateError(null); setCreateListingOpen(true); }}
         >
           <IconPlus size={20} />
         </ActionIcon>
@@ -191,7 +201,7 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
     <>
       <Modal
         opened={createListingOpen}
-        onClose={() => setCreateListingOpen(false)}
+        onClose={() => { if (creating) return; setCreateListingOpen(false); }}
         title="Create Listing"
         size="sm"
       >
@@ -227,12 +237,14 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
             onChange={(e) => setNewListingForm(prev => ({ ...prev, exchangeSecuritySymbol: e.target.value }))}
             required
           />
+          {createError && <Text c="red" size="sm">{createError}</Text>}
           <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setCreateListingOpen(false)}>Cancel</Button>
-            <Button color="green" onClick={handleCreateListing}>Create</Button>
+            <Button variant="outline" disabled={creating} onClick={() => setCreateListingOpen(false)}>Cancel</Button>
+            <Button color="green" loading={creating} onClick={handleCreateListing}>Create</Button>
           </Group>
         </Stack>
       </Modal>
+      {error && <Alert color="red" title="Error" mb="md">{error}</Alert>}
       <MantineReactTable table={table} />
     </>
   );

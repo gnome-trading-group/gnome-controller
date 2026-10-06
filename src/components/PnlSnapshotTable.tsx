@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Anchor, Badge, Group, SegmentedControl, Text, Title } from '@mantine/core';
+import { Anchor, Badge, Group, SegmentedControl, Text, Title, Tooltip } from '@mantine/core';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { PnlSnapshot } from '../types';
 import { formatUnscaled, unscalePrice, unscaleSize } from '../utils/security-master';
+import { useListingDetails } from '../hooks/useAsyncSearch';
 
 const MODE_COLORS: Record<string, string> = {
   paper: 'violet',
@@ -29,19 +30,30 @@ interface PnlSnapshotTableProps {
 
 export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, title, extraControls }: PnlSnapshotTableProps) {
   const [scaled, setScaled] = useState(false);
+  const [showSymbols, setShowSymbols] = useState(false);
+  const listingIds = useMemo(() => [...new Set(data.map((row) => row.listingId))], [data]);
+  // Fetched only once symbols are asked for, so the default ID view costs no extra requests.
+  const listings = useListingDetails(showSymbols ? listingIds : []);
 
   const columns = useMemo<MRT_ColumnDef<PnlSnapshot>[]>(() => {
     const cols: MRT_ColumnDef<PnlSnapshot>[] = [
       {
         accessorKey: 'listingId',
-        header: 'Listing ID',
+        header: showSymbols ? 'Listing' : 'Listing ID',
         enableSorting: true,
-        size: 80,
-        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => (
-          <Anchor component={Link} to={`/security-master/listings/${row.original.listingId}`} size="sm">
-            {row.original.listingId}
-          </Anchor>
-        ),
+        size: showSymbols ? 160 : 80,
+        Cell: ({ row }: { row: MRT_Row<PnlSnapshot> }) => {
+          const { listingId } = row.original;
+          const listing = showSymbols ? listings[listingId] : undefined;
+          const link = (
+            <Anchor component={Link} to={`/security-master/listings/${listingId}`} size="sm">
+              {listing?.exchangeSecuritySymbol ?? listingId}
+            </Anchor>
+          );
+          return listing
+            ? <Tooltip label={`Listing ${listingId} · ${listing.exchangeName}`} withArrow openDelay={300}>{link}</Tooltip>
+            : link;
+        },
       },
     ];
     if (showModeColumn) {
@@ -133,7 +145,7 @@ export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, titl
       },
     );
     return cols;
-  }, [scaled, showModeColumn]);
+  }, [scaled, showModeColumn, showSymbols, listings]);
 
   const table = useMantineReactTable({
     columns,
@@ -157,6 +169,12 @@ export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, titl
         {title && <Title order={4}>{title}</Title>}
         <Group gap="sm">
           {extraControls}
+          <SegmentedControl
+            size="xs"
+            value={showSymbols ? 'Symbol' : 'ID'}
+            onChange={(v) => setShowSymbols(v === 'Symbol')}
+            data={['ID', 'Symbol']}
+          />
           <SegmentedControl
             size="xs"
             value={scaled ? 'Scaled' : 'Unscaled'}

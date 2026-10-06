@@ -41,6 +41,15 @@ export class ServiceConfigStack extends cdk.Stack {
     });
     serviceConfigTable.grantWriteData(putLambda.function);
 
+    const historyLambda = new PythonLambdaFunction(this, "ServiceConfigHistoryLambda", {
+      codePath: "lambda/functions/service-config/history",
+      functionName: "gnome-service-config-history",
+      description: "List saved service config versions (Cognito auth, UI only)",
+      timeout: cdk.Duration.seconds(10),
+      environment: commonEnv,
+    });
+    serviceConfigTable.grantReadData(historyLambda.function);
+
     const getIntegration = new apigateway.LambdaIntegration(getLambda.function);
     const cognitoOptions: apigateway.MethodOptions = {
       authorizationType: apigateway.AuthorizationType.COGNITO,
@@ -55,5 +64,7 @@ export class ServiceConfigStack extends cdk.Stack {
     const cognitoServiceResource = props.apiGateway.root.resourceForPath("cognito/config/{service}");
     cognitoServiceResource.addMethod("GET", getIntegration, cognitoOptions);
     cognitoServiceResource.addMethod("PUT", new apigateway.LambdaIntegration(putLambda.function), cognitoOptions);
+    cognitoServiceResource.addResource("history")
+      .addMethod("GET", new apigateway.LambdaIntegration(historyLambda.function), cognitoOptions);
   }
 }

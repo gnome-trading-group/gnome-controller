@@ -25,6 +25,7 @@ import {
   instanceTypeOptions,
   isInstanceTypeValidFor,
   suggestInstanceType,
+  defaultLatencyProfile,
 } from '../../utils/sizing';
 import {
   defaultSimulationState,
@@ -51,8 +52,8 @@ function defaultForm() {
     strategyClass: '',
     region: '',
     researchCommit: '',
-    latencyProfile: 'low_latency' as LatencyProfile,
-    instanceType: 'c7i.4xlarge',
+    latencyProfile: defaultLatencyProfile('paper'),
+    instanceType: suggestInstanceType(defaultLatencyProfile('paper'), 'paper', 1),
     availabilityZone: '',
     orchestratorVersion: '',
     gnomepyVersion: '',
@@ -84,6 +85,8 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
   const [liveListingSearchValue, setLiveListingSearchValue] = useState('');
   const { options: liveListingSearchOptions, isLoading: liveListingSearchLoading } = useListingSearch(liveListingSearchValue);
   const [sizingUserOverridden, setSizingUserOverridden] = useState(false);
+  // Until someone picks a profile it follows the mode, and isn't saved: launches then default it by mode too.
+  const [profileUserChosen, setProfileUserChosen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const liveListingMergedData = useMemo(() => [
@@ -109,6 +112,12 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
   }, [liveListingItems, liveListingSearchOptions]);
 
   useEffect(() => {
+    if (profileUserChosen) return;
+    const profile = defaultLatencyProfile(form.mode);
+    setForm(f => (f.latencyProfile === profile ? f : { ...f, latencyProfile: profile }));
+  }, [form.mode, profileUserChosen]);
+
+  useEffect(() => {
     const count = form.mode === 'paper'
       ? listings.filter(l => l.listingId.trim()).length
       : liveListingIds.length;
@@ -123,6 +132,7 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
 
     if (!strategy) {
       setForm(defaultForm());
+      setProfileUserChosen(false);
       setProfiles(defaultProfiles());
       setListings(defaultListings());
       setLiveListingIds([]);
@@ -144,16 +154,20 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
       : [];
 
     setSizingUserOverridden(!!p.instanceType);
+    setProfileUserChosen(!!p.latencyProfile);
+    const mode = p.mode ? String(p.mode) : 'paper';
     setForm({
       name: strategy.name ?? '',
       description: strategy.description ?? '',
       status: strategy.status,
-      mode: p.mode ? String(p.mode) : 'paper',
+      mode,
       strategyType: p.strategyType ? String(p.strategyType) : 'java',
       strategyClass: p.strategyClass ? String(p.strategyClass) : '',
       region: p.region ? String(p.region) : '',
       researchCommit: p.researchCommit ? String(p.researchCommit) : '',
-      latencyProfile: p.latencyProfile === 'standard' ? 'standard' : 'low_latency',
+      latencyProfile: p.latencyProfile
+        ? (p.latencyProfile === 'standard' ? 'standard' : 'low_latency')
+        : defaultLatencyProfile(mode),
       instanceType: p.instanceType ? String(p.instanceType) : 'c7i.4xlarge',
       availabilityZone: p.availabilityZone ? String(p.availabilityZone) : '',
       orchestratorVersion: p.orchestratorVersion ? String(p.orchestratorVersion) : '',
@@ -199,7 +213,7 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
       if (form.region.trim()) parameters.region = form.region.trim();
       if (Object.keys(args).length > 0) parameters.args = args;
       if (form.mode === 'paper') parameters.simulation = simulationProfilesToConfig(profiles, listings);
-      parameters.latency_profile = form.latencyProfile;
+      if (profileUserChosen) parameters.latency_profile = form.latencyProfile;
       parameters.instance_type = form.instanceType;
       if (form.availabilityZone.trim()) parameters.availability_zone = form.availabilityZone.trim();
       if (form.orchestratorVersion.trim()) parameters.orchestrator_version = form.orchestratorVersion.trim();
@@ -267,7 +281,11 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
             label="Latency Profile"
             data={LATENCY_PROFILE_OPTIONS}
             value={form.latencyProfile}
-            onChange={(v) => setForm((f) => ({ ...f, latencyProfile: (v ?? 'low_latency') as LatencyProfile }))}
+            onChange={(v) => {
+              if (!v) return;
+              setForm((f) => ({ ...f, latencyProfile: v as LatencyProfile }));
+              setProfileUserChosen(true);
+            }}
           />
           <Select
             label="Instance Type"

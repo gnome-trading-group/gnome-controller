@@ -105,6 +105,7 @@ function SecurityExchangeCoverage() {
   const [viewMode, setViewMode] = useState<string | null>('calendar');
   const [metricsHistory, setMetricsHistory] = useState<ListingStatisticsHistoryPoint[] | null>(null);
   const [qualityIssueSummary, setQualityIssueSummary] = useState<QualityIssue[]>([]);
+  const [qualityIssuesTruncated, setQualityIssuesTruncated] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
   const [security, setSecurity] = useState<Security | null>(null);
   const [listing, setListing] = useState<DenormalizedListing | null>(null);
@@ -155,6 +156,7 @@ function SecurityExchangeCoverage() {
     ]).then(([statsHistory, issues]) => {
       setMetricsHistory(statsHistory.history);
       setQualityIssueSummary(issues?.issues ?? []);
+      setQualityIssuesTruncated(!!issues?.lastEvaluatedKey);
     }).catch(() => {
       // Non-critical — statistics may not exist yet
     }).finally(() => {
@@ -615,10 +617,13 @@ function SecurityExchangeCoverage() {
                           size="md"
                           variant="light"
                         >
-                          {formatRuleType(ruleType)}: {count}
+                          {formatRuleType(ruleType)}: {count}{qualityIssuesTruncated ? '+' : ''}
                         </Badge>
                       ))}
                     </Group>
+                  )}
+                  {qualityIssuesTruncated && (
+                    <Text size="xs" c="dimmed" mt={4}>Counted from the most recent {qualityIssueSummary.length} issues only.</Text>
                   )}
                 </Skeleton>
               </div>

@@ -28,6 +28,11 @@ import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_R
 import { useGlobalState } from '../../../context/GlobalStateContext';
 import { useListingSearch, useEventSearch } from '../../../hooks/useAsyncSearch';
 import { CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestCollectorSizing } from '../../../utils/sizing';
+import { useLatestRequest } from '../../../hooks/useLatestRequest';
+import { errorMessage } from '../../../utils/kill-switch';
+import { LastUpdated } from '../../../components/LastUpdated';
+
+const POLL_INTERVAL_MS = 5000;
 
 interface Collector {
   listingId: number;
@@ -49,8 +54,12 @@ function Collectors() {
   const [collectors, setCollectors] = useState<Collector[]>([]);
   const [hideInactive, setHideInactive] = useState(true);
   const [listingIdSearch, setListingIdSearch] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [failing, setFailing] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const beginRequest = useLatestRequest();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -75,6 +84,7 @@ function Collectors() {
   const [eventExchangeId, setEventExchangeId] = useState<number | null>(null);
   const [eventListings, setEventListings] = useState<DenormalizedListing[]>([]);
   const [loadingEventListings, setLoadingEventListings] = useState(false);
+  const [eventLoadError, setEventLoadError] = useState<string | null>(null);
   const [prefilledEvent, setPrefilledEvent] = useState<{ value: string; label: string } | null>(null);
 
   // Stop/redeploy modals
@@ -104,15 +114,18 @@ function Collectors() {
       setListingsRegion(null);
       return;
     }
+    let cancelled = false;
     const firstId = Number(selectedListingIds[0]);
     registryApi.listListingsPaginated({ listingId: firstId, limit: 1, denormalize: true })
       .then((rows: DenormalizedListing[]) => {
+        if (cancelled) return;
         const listing = rows[0];
         if (!listing) return;
         const exchange = exchanges.find(e => e.exchangeId === listing.exchangeId);
         setListingsRegion(exchange?.region ?? null);
       })
-      .catch(() => setListingsRegion(null));
+      .catch(() => { if (!cancelled) setListingsRegion(null); });
+    return () => { cancelled = true; };
   }, [selectedListingIds[0], mode, exchanges]);
 
   const effectiveRegion = mode === 'event'
@@ -129,23 +142,28 @@ function Collectors() {
 
   // Fetch event contracts + the event's exchange when event is selected
   useEffect(() => {
-    if (!selectedEventId) {
-      setEventContracts([]);
-      setEventExchangeId(null);
-      setSelectedExchangeId(null);
-      setEventListings([]);
-      return;
-    }
+    // Clear the previous event's contracts up front so its listings can't be submitted while the new event loads.
+    setEventContracts([]);
+    setEventExchangeId(null);
+    setSelectedExchangeId(null);
+    setEventListings([]);
+    setEventLoadError(null);
+    if (!selectedEventId) return;
+    let cancelled = false;
     const id = Number(selectedEventId);
     Promise.all([
       registryApi.listEventContracts({ eventId: id }),
       registryApi.listEvents({ eventId: id }),
     ]).then(([contracts, evts]) => {
+      if (cancelled) return;
       const exchangeId = (evts as Event[])[0]?.exchangeId ?? null;
       setEventContracts(contracts);
       setEventExchangeId(exchangeId);
       setSelectedExchangeId(exchangeId != null ? String(exchangeId) : null);
-    }).catch(() => {});
+    }).catch(e => {
+      if (!cancelled) setEventLoadError(errorMessage(e, 'Failed to load event contracts'));
+    });
+    return () => { cancelled = true; };
   }, [selectedEventId]);
 
   // Fetch listings for event + exchange
@@ -154,18 +172,23 @@ function Collectors() {
       setEventListings([]);
       return;
     }
+    let cancelled = false;
     const exchangeId = Number(selectedExchangeId);
     setLoadingEventListings(true);
     Promise.all(
       eventContracts.map(ec =>
         registryApi.listListingsPaginated({ securityId: ec.securityId, exchangeId, limit: 1, denormalize: true })
           .then((rows: DenormalizedListing[]) => rows[0] ?? null)
-          .catch(() => null)
       )
     ).then(results => {
+      if (cancelled) return;
       setEventListings(results.filter((l): l is DenormalizedListing => l !== null));
-    }).catch(() => setEventListings([]))
-      .finally(() => setLoadingEventListings(false));
+    }).catch(e => {
+      if (cancelled) return;
+      setEventListings([]);
+      setEventLoadError(errorMessage(e, 'Failed to load event listings'));
+    }).finally(() => { if (!cancelled) setLoadingEventListings(false); });
+    return () => { cancelled = true; };
   }, [selectedExchangeId, eventContracts]);
 
   const exchangeOptions = useMemo(() => {
@@ -238,41 +261,49 @@ function Collectors() {
     setMemory(512);
     setCreateVersion('');
     setListingsRegion(null);
+    setActionError(null);
   };
+
+  const loadCollectors = useCallback(async (showLoading = true) => {
+    const isCurrent = beginRequest();
+    try {
+      if (showLoading) setLoading(true);
+      const response = await marketDataApi.listCollectors();
+      if (!isCurrent()) return;
+      setCollectors(response.collectors);
+      setLoadError(null);
+      setLastUpdated(new Date());
+      setFailing(false);
+    } catch (err) {
+      if (!isCurrent()) return;
+      setLoadError(err instanceof ApiError ? err.message : 'Failed to load collectors');
+      setFailing(true);
+    } finally {
+      // A superseding poll doesn't touch the spinner, so whichever load is current must clear it.
+      if (isCurrent()) setLoading(false);
+    }
+  }, [beginRequest]);
 
   useEffect(() => {
     loadCollectors();
-  }, []);
+  }, [loadCollectors]);
 
   useEffect(() => {
-    const interval = setInterval(() => loadCollectors(false), 5000);
+    const interval = setInterval(() => loadCollectors(false), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, []);
-
-  const loadCollectors = async (showLoading = true) => {
-    try {
-      if (showLoading) setLoading(true);
-      setError(null);
-      const response = await marketDataApi.listCollectors();
-      setCollectors(response.collectors);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load collectors');
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  };
+  }, [loadCollectors]);
 
   const handleCreateCollector = async () => {
     if (activeListingIds.length === 0 || !effectiveRegion) return;
     try {
-      setError(null);
+      setActionError(null);
       setCreating(true);
       await marketDataApi.createCollector(activeListingIds, effectiveRegion, String(cpu), String(memory), createVersion.trim() || undefined);
       setCreateModalOpen(false);
       resetCreateModal();
       await loadCollectors();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to create collector');
+      setActionError(err instanceof ApiError ? err.message : 'Failed to create collector');
     } finally {
       setCreating(false);
     }
@@ -281,63 +312,63 @@ function Collectors() {
   const handleStopCollector = async (listingId: number) => {
     setActionPending(true);
     try {
-      setError(null);
+      setActionError(null);
       await marketDataApi.deleteCollector(listingId);
-      await loadCollectors();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to stop collector');
-    } finally {
-      setActionPending(false);
       setStopModalOpen(false);
       setCollectorToStop(null);
+      await loadCollectors();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Failed to stop collector');
+    } finally {
+      setActionPending(false);
     }
   };
 
   const handleRedeployCollector = async (listingId?: number) => {
     setActionPending(true);
     try {
-      setError(null);
+      setActionError(null);
       await marketDataApi.redeployCollector(listingId, redeployVersion.trim() || undefined);
-      await loadCollectors();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to redeploy collector');
-    } finally {
-      setActionPending(false);
       setRedeployModalOpen(false);
       setRedeployAllModalOpen(false);
       setCollectorToRedeploy(null);
       setRedeployVersion('');
+      await loadCollectors();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Failed to redeploy collector');
+    } finally {
+      setActionPending(false);
     }
   };
 
   const handleRestartCollector = async (collector: Collector) => {
     setActionPending(true);
     try {
-      setError(null);
+      setActionError(null);
       // Restarting keeps the release the collector last ran.
       await marketDataApi.createCollector(collector.listingIds, collector.region!, collector.cpu, collector.memory, collector.deploymentVersion);
-      await loadCollectors();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to restart collector');
-    } finally {
-      setActionPending(false);
       setRestartModalOpen(false);
       setCollectorToRestart(null);
+      await loadCollectors();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Failed to restart collector');
+    } finally {
+      setActionPending(false);
     }
   };
 
   const handlePurgeCollector = async (listingId: number) => {
     setActionPending(true);
     try {
-      setError(null);
+      setActionError(null);
       await marketDataApi.purgeCollector(listingId);
-      await loadCollectors();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to delete collector');
-    } finally {
-      setActionPending(false);
       setPurgeModalOpen(false);
       setCollectorToPurge(null);
+      await loadCollectors();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Failed to delete collector');
+    } finally {
+      setActionPending(false);
     }
   };
 
@@ -507,6 +538,7 @@ function Collectors() {
       <Group justify="space-between" mb="md">
         <Title order={2}>Collectors</Title>
         <Group>
+          <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={failing} />
           <TextInput
             placeholder="Search listing ID..."
             value={listingIdSearch}
@@ -536,9 +568,9 @@ function Collectors() {
         </Group>
       </Group>
 
-      {error && (
-        <Notification color="red" title="Error" onClose={() => setError(null)} mb="md">
-          {error}
+      {loadError && (
+        <Notification color="red" title="Error" onClose={() => setLoadError(null)} mb="md">
+          {loadError}
         </Notification>
       )}
 
@@ -604,6 +636,7 @@ function Collectors() {
                 />
               )}
               {loadingEventListings && <Loader size="sm" />}
+              {eventLoadError && <Text c="red" size="sm">{eventLoadError}</Text>}
               {eventListings.length > 0 && (
                 <Stack gap="xs">
                   <Text size="sm" fw={500}>
@@ -655,6 +688,8 @@ function Collectors() {
             </Text>
           )}
 
+          {actionError && <Text c="red" size="sm">{actionError}</Text>}
+
           <Button
             onClick={handleCreateCollector}
             loading={creating}
@@ -668,13 +703,14 @@ function Collectors() {
 
       <Modal
         opened={stopModalOpen}
-        onClose={() => { if (actionPending) return; setStopModalOpen(false); setCollectorToStop(null); }}
+        onClose={() => { if (actionPending) return; setStopModalOpen(false); setCollectorToStop(null); setActionError(null); }}
         title="Stop Collector"
       >
         <Stack>
           <Text>Are you sure you want to stop this collector?</Text>
+          {actionError && <Text c="red" size="sm">{actionError}</Text>}
           <Group justify="flex-end">
-            <Button variant="default" disabled={actionPending} onClick={() => { setStopModalOpen(false); setCollectorToStop(null); }}>
+            <Button variant="default" disabled={actionPending} onClick={() => { setStopModalOpen(false); setCollectorToStop(null); setActionError(null); }}>
               Cancel
             </Button>
             <Button color="red" loading={actionPending} onClick={() => collectorToStop && handleStopCollector(collectorToStop)}>
@@ -686,14 +722,15 @@ function Collectors() {
 
       <Modal
         opened={redeployModalOpen}
-        onClose={() => { if (actionPending) return; setRedeployModalOpen(false); setCollectorToRedeploy(null); }}
+        onClose={() => { if (actionPending) return; setRedeployModalOpen(false); setCollectorToRedeploy(null); setActionError(null); }}
         title="Redeploy Collector"
       >
         <Stack>
           <Text>Are you sure you want to redeploy this collector?</Text>
           <TextInput label="Orchestrator Version" placeholder="Latest" description="Blank deploys the latest release" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} disabled={actionPending} />
+          {actionError && <Text c="red" size="sm">{actionError}</Text>}
           <Group justify="flex-end">
-            <Button variant="default" disabled={actionPending} onClick={() => { setRedeployModalOpen(false); setCollectorToRedeploy(null); }}>
+            <Button variant="default" disabled={actionPending} onClick={() => { setRedeployModalOpen(false); setCollectorToRedeploy(null); setActionError(null); }}>
               Cancel
             </Button>
             <Button color="blue" loading={actionPending} onClick={() => collectorToRedeploy && handleRedeployCollector(collectorToRedeploy)}>
@@ -705,14 +742,15 @@ function Collectors() {
 
       <Modal
         opened={redeployAllModalOpen}
-        onClose={() => { if (!actionPending) setRedeployAllModalOpen(false); }}
+        onClose={() => { if (actionPending) return; setRedeployAllModalOpen(false); setActionError(null); }}
         title="Redeploy All Collectors"
       >
         <Stack>
           <Text>Are you sure you want to redeploy all active collectors?</Text>
           <TextInput label="Orchestrator Version" placeholder="Latest" description="Blank deploys the latest release" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} disabled={actionPending} />
+          {actionError && <Text c="red" size="sm">{actionError}</Text>}
           <Group justify="flex-end">
-            <Button variant="default" disabled={actionPending} onClick={() => setRedeployAllModalOpen(false)}>
+            <Button variant="default" disabled={actionPending} onClick={() => { setRedeployAllModalOpen(false); setActionError(null); }}>
               Cancel
             </Button>
             <Button color="blue" loading={actionPending} onClick={() => handleRedeployCollector()}>
@@ -724,7 +762,7 @@ function Collectors() {
 
       <Modal
         opened={restartModalOpen}
-        onClose={() => { if (actionPending) return; setRestartModalOpen(false); setCollectorToRestart(null); }}
+        onClose={() => { if (actionPending) return; setRestartModalOpen(false); setCollectorToRestart(null); setActionError(null); }}
         title="Restart Collector"
       >
         <Stack>
@@ -732,8 +770,9 @@ function Collectors() {
           <Text size="sm" c="dimmed">
             Listings: {collectorToRestart?.listingIds.join(', ')}
           </Text>
+          {actionError && <Text c="red" size="sm">{actionError}</Text>}
           <Group justify="flex-end">
-            <Button variant="default" disabled={actionPending} onClick={() => { setRestartModalOpen(false); setCollectorToRestart(null); }}>
+            <Button variant="default" disabled={actionPending} onClick={() => { setRestartModalOpen(false); setCollectorToRestart(null); setActionError(null); }}>
               Cancel
             </Button>
             <Button color="green" loading={actionPending} onClick={() => collectorToRestart && handleRestartCollector(collectorToRestart)}>
@@ -745,7 +784,7 @@ function Collectors() {
 
       <Modal
         opened={purgeModalOpen}
-        onClose={() => { if (actionPending) return; setPurgeModalOpen(false); setCollectorToPurge(null); }}
+        onClose={() => { if (actionPending) return; setPurgeModalOpen(false); setCollectorToPurge(null); setActionError(null); }}
         title="Delete Collector Record"
       >
         <Stack>
@@ -753,8 +792,9 @@ function Collectors() {
           <Text size="sm" c="red" fw={500}>
             This action cannot be undone. The collector metadata will be permanently removed from the database.
           </Text>
+          {actionError && <Text c="red" size="sm">{actionError}</Text>}
           <Group justify="flex-end">
-            <Button variant="default" disabled={actionPending} onClick={() => { setPurgeModalOpen(false); setCollectorToPurge(null); }}>
+            <Button variant="default" disabled={actionPending} onClick={() => { setPurgeModalOpen(false); setCollectorToPurge(null); setActionError(null); }}>
               Cancel
             </Button>
             <Button color="red" loading={actionPending} onClick={() => collectorToPurge && handlePurgeCollector(collectorToPurge)}>

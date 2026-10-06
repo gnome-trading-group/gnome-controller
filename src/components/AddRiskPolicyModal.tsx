@@ -21,6 +21,7 @@ const EMPTY_FORM = { policyType: '', listingId: '', parametersJson: '{}', enable
 export function AddRiskPolicyModal({ opened, onClose, target, targetLabel, onCreated }: AddRiskPolicyModalProps) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [listingSearch, setListingSearch] = useState('');
   const { options: listingOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearch);
 
@@ -34,6 +35,7 @@ export function AddRiskPolicyModal({ opened, onClose, target, targetLabel, onCre
 
   const create = async () => {
     setError(null);
+    setCreating(true);
     try {
       await registryApi.createRiskPolicy({
         policyType: form.policyType,
@@ -46,11 +48,13 @@ export function AddRiskPolicyModal({ opened, onClose, target, targetLabel, onCre
       onCreated();
     } catch (e) {
       setError(errorMessage(e, 'Failed to create policy'));
+    } finally {
+      setCreating(false);
     }
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Add Risk Policy" size="md">
+    <Modal opened={opened} onClose={() => { if (!creating) onClose(); }} title="Add Risk Policy" size="md">
       <Stack>
         <Select
           label="Policy Type"
@@ -90,8 +94,8 @@ export function AddRiskPolicyModal({ opened, onClose, target, targetLabel, onCre
         />
         {error && <Text c="red" size="sm">{error}</Text>}
         <Group justify="flex-end">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={create} disabled={!form.policyType}>Add</Button>
+          <Button variant="outline" onClick={onClose} disabled={creating}>Cancel</Button>
+          <Button onClick={create} disabled={!form.policyType} loading={creating}>Add</Button>
         </Group>
       </Stack>
     </Modal>
