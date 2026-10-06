@@ -21,6 +21,7 @@ import { IconAlertTriangle, IconPlus, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { Strategy, ConfigValue, RiskPolicy, StrategySession, StrategySessionStatus } from '../../types';
 import { registryApi } from '../../utils/api';
+import { strategyClassError, strategyClassHint } from '../../utils/strategy-class';
 import { OrchestratorOverridesEditor } from '../../components/OrchestratorOverrides';
 import { Overrides, toOverrides } from '../../utils/orchestrator-overrides';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
@@ -394,6 +395,8 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     if (!strategyId) { setError('Strategy is required'); return; }
     if (!strategyType) { setError('Strategy type is required'); return; }
     if (!strategyClass.trim()) { setError('Strategy class is required'); return; }
+    const classError = strategyClassError(strategyType, strategyClass.trim());
+    if (classError) { setError(classError); return; }
 
     if (mode === 'paper') {
       if (listings.length === 0) { setError('At least one listing is required'); return; }
@@ -513,7 +516,14 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
         <Divider />
         <Title order={6} c="dimmed">Strategy Class</Title>
         <Select label="Strategy Type" data={STRATEGY_TYPE_OPTIONS} value={strategyType} onChange={setStrategyType} placeholder="Select a type" required />
-        <TextInput label="Strategy Class" placeholder="com.example.MyStrategy or module:ClassName" value={strategyClass} onChange={e => setStrategyClass(e.currentTarget.value)} required />
+        <TextInput
+          label="Strategy Class"
+          placeholder={strategyClassHint(strategyType).placeholder}
+          description={strategyClassHint(strategyType).description}
+          value={strategyClass}
+          onChange={e => setStrategyClass(e.currentTarget.value)}
+          required
+        />
         {/* Python strategies run inside the orchestrator JVM too, so they take its version as well. */}
         <Group grow>
           <TextInput label="Orchestrator Version" placeholder="Latest" value={orchestratorVersion} onChange={e => setOrchestratorVersion(e.currentTarget.value)} />

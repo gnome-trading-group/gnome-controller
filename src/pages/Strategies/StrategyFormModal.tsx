@@ -18,6 +18,7 @@ import {
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { Strategy, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
+import { strategyClassHint } from '../../utils/strategy-class';
 import { OrchestratorOverridesEditor } from '../../components/OrchestratorOverrides';
 import { Overrides, toOverrides } from '../../utils/orchestrator-overrides';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
@@ -268,7 +269,13 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
           <Select label="Mode" value={form.mode} data={[{ value: 'paper', label: 'Paper' }, { value: 'live', label: 'Live' }]} onChange={(v) => setForm((f) => ({ ...f, mode: v ?? 'paper' }))} />
           <Select label="Strategy Type" value={form.strategyType} data={[{ value: 'java', label: 'Java' }, { value: 'python', label: 'Python' }]} onChange={(v) => setForm((f) => ({ ...f, strategyType: v ?? 'java' }))} />
         </Group>
-        <TextInput label="Strategy Class" placeholder="com.example.MyStrategy or module:ClassName" value={form.strategyClass} onChange={(e) => setForm((f) => ({ ...f, strategyClass: e.target.value }))} />
+        <TextInput
+          label="Strategy Class"
+          placeholder={strategyClassHint(form.strategyType).placeholder}
+          description={strategyClassHint(form.strategyType).description}
+          value={form.strategyClass}
+          onChange={(e) => setForm((f) => ({ ...f, strategyClass: e.target.value }))}
+        />
         {form.mode === 'live' && (
           <MultiSelect
             label="Listings"

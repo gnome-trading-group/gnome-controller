@@ -9,3 +9,7 @@ cdk.out
 
 # Ignore Dockerfiles produced dynamically
 /*/**/Dockerfile
+
+# Python bytecode from running Lambda code locally
+__pycache__/
+*.pyc

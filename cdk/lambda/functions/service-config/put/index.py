@@ -7,15 +7,15 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import boto3
-from boto3.dynamodb.types import TypeSerializer
 from botocore.exceptions import ClientError
 from utils import create_response
 
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
 
 _ddb = boto3.resource("dynamodb")
+# The resource's client converts plain Python values to DynamoDB's typed form itself, so items and expression values
+# must be passed as plain values; pre-serializing them gets them wrapped twice and DynamoDB rejects the write.
 _client = _ddb.meta.client
-_serializer = TypeSerializer()
 
 
 def _now_iso() -> str:
@@ -28,10 +28,6 @@ def _caller(event: dict) -> str:
         return claims.get("email") or claims.get("cognito:username", "unknown")
     except (KeyError, TypeError):
         return "unknown"
-
-
-def _serialize(item: dict) -> dict:
-    return {k: _serializer.serialize(v) for k, v in item.items()}
 
 
 def _is_conflict(e: ClientError) -> bool:
@@ -77,16 +73,16 @@ def handler(event: dict, context) -> dict:
             {
                 "Put": {
                     "TableName": DYNAMODB_TABLE,
-                    "Item": _serialize({"pk": pk, "sk": "CURRENT", **audit}),
+                    "Item": {"pk": pk, "sk": "CURRENT", **audit},
                     "ConditionExpression": "attribute_not_exists(pk) OR #v = :expected",
                     "ExpressionAttributeNames": {"#v": "version"},
-                    "ExpressionAttributeValues": {":expected": _serializer.serialize(expected_version)},
+                    "ExpressionAttributeValues": {":expected": expected_version},
                 },
             },
             {
                 "Put": {
                     "TableName": DYNAMODB_TABLE,
-                    "Item": _serialize({"pk": pk, "sk": f"VERSION#{new_version:010d}", **audit}),
+                    "Item": {"pk": pk, "sk": f"VERSION#{new_version:010d}", **audit},
                     "ConditionExpression": "attribute_not_exists(pk)",
                 },
             },
@@ -94,6 +90,7 @@ def handler(event: dict, context) -> dict:
     except ClientError as e:
         if _is_conflict(e):
             return create_response(409, {"error": "config was modified by another request, please reload and try again"})
-        raise
+        # Returned rather than raised so the controller shows the reason instead of a bare 502.
+        return create_response(500, {"error": f"Failed to save config: {e.response['Error'].get('Message', str(e))}"})
 
     return create_response(200, audit)
