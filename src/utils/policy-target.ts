@@ -1,6 +1,8 @@
 import { RiskPolicy } from '../types';
 import { StrategySession, StrategySessionStatus } from '../types/strategy-sessions';
 
+// STOPPING is left out on purpose: a stop kills the session before shutting it down, and that kill (or any other
+// policy on the session) no longer guards anything that will trade.
 const ACTIVE_SESSION_STATUSES = new Set<StrategySessionStatus>([
   StrategySessionStatus.SUBMITTED,
   StrategySessionStatus.STARTING,

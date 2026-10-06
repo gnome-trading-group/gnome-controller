@@ -16,8 +16,10 @@ import {
   Title,
 } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
-import { Strategy, StrategyStatus, ConfigValue } from '../../types';
+import { Strategy, ConfigValue } from '../../types';
 import { registryApi } from '../../utils/api';
+import { OrchestratorOverridesEditor } from '../../components/OrchestratorOverrides';
+import { Overrides, toOverrides } from '../../utils/orchestrator-overrides';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
 import {
   LATENCY_PROFILE_OPTIONS,
@@ -36,17 +38,11 @@ import {
   simulationProfilesToConfig,
 } from '../../components/SimulationConfigForm';
 
-const STATUS_LABELS: Record<number, string> = {
-  [StrategyStatus.INACTIVE]: 'Inactive',
-  [StrategyStatus.ACTIVE]: 'Active',
-  [StrategyStatus.PAUSED]: 'Paused',
-};
-
 function defaultForm() {
   return {
     name: '',
     description: '',
-    status: StrategyStatus.INACTIVE,
+    archived: false,
     mode: 'paper',
     strategyType: 'java',
     strategyClass: '',
@@ -79,6 +75,8 @@ interface StrategyFormModalProps {
 function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormModalProps) {
   const [form, setForm] = useState(defaultForm());
   const [profiles, setProfiles] = useState<ProfilesState>(defaultProfiles());
+  const [simSeed, setSimSeed] = useState<number | string>('');
+  const [overrides, setOverrides] = useState<Overrides>({});
   const [listings, setListings] = useState<ListingProfileRow[]>(defaultListings());
   const [liveListingIds, setLiveListingIds] = useState<string[]>([]);
   const [liveListingItems, setLiveListingItems] = useState<Record<string, string>>({});
@@ -135,6 +133,8 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
       setProfileUserChosen(false);
       setProfiles(defaultProfiles());
       setListings(defaultListings());
+      setSimSeed('');
+      setOverrides({});
       setLiveListingIds([]);
       setLiveListingItems({});
       setLiveListingSearchValue('');
@@ -159,7 +159,7 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
     setForm({
       name: strategy.name ?? '',
       description: strategy.description ?? '',
-      status: strategy.status,
+      archived: strategy.archived,
       mode,
       strategyType: p.strategyType ? String(p.strategyType) : 'java',
       strategyClass: p.strategyClass ? String(p.strategyClass) : '',
@@ -174,6 +174,7 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
       gnomepyVersion: p.gnomepyVersion ? String(p.gnomepyVersion) : '',
       args,
     });
+    setOverrides(toOverrides(p.overrides));
     if (Array.isArray(p.listings)) {
       setLiveListingIds((p.listings as number[]).map(String));
     } else {
@@ -183,14 +184,16 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
     setLiveListingSearchValue('');
 
     if (p.simulation && typeof p.simulation === 'object') {
-      const { profiles: loadedProfiles, listings: loadedListings } = simulationProfilesFromConfig(
+      const { profiles: loadedProfiles, listings: loadedListings, seed } = simulationProfilesFromConfig(
         p.simulation as Record<string, string>
       );
       setProfiles(Object.keys(loadedProfiles).length > 0 ? loadedProfiles : defaultProfiles());
       setListings(loadedListings.length > 0 ? loadedListings : defaultListings());
+      setSimSeed(seed);
     } else {
       setProfiles(defaultProfiles());
       setListings(defaultListings());
+      setSimSeed('');
     }
     setFormError(null);
   }, [opened, strategy?.strategyId]);
@@ -212,7 +215,8 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
       if (form.mode === 'live') parameters.listings = liveListingIds.map(Number);
       if (form.region.trim()) parameters.region = form.region.trim();
       if (Object.keys(args).length > 0) parameters.args = args;
-      if (form.mode === 'paper') parameters.simulation = simulationProfilesToConfig(profiles, listings);
+      if (Object.keys(overrides).length > 0) parameters.overrides = overrides;
+      if (form.mode === 'paper') parameters.simulation = simulationProfilesToConfig(profiles, listings, simSeed);
       if (profileUserChosen) parameters.latency_profile = form.latencyProfile;
       parameters.instance_type = form.instanceType;
       if (form.availabilityZone.trim()) parameters.availability_zone = form.availabilityZone.trim();
@@ -226,14 +230,13 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
         await registryApi.updateStrategy(strategy.strategyId, {
           name: form.name,
           description: form.description || undefined,
-          status: form.status,
+          archived: form.archived,
           parameters,
         });
       } else {
         await registryApi.createStrategy({
           name: form.name,
           description: form.description || undefined,
-          status: form.status,
           parameters,
         });
       }
@@ -250,7 +253,14 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
       <Stack>
         <TextInput label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
         <TextInput label="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
-        <Select label="Status" value={form.status.toString()} data={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))} onChange={(v) => setForm((f) => ({ ...f, status: parseInt(v ?? '0') }))} />
+        {strategy && (
+          <Switch
+            label="Archived"
+            description="Hides the strategy from day-to-day lists. Has no effect on trading."
+            checked={form.archived}
+            onChange={(e) => { const checked = e.currentTarget.checked; setForm((f) => ({ ...f, archived: checked })); }}
+          />
+        )}
 
         <Divider />
         <Title order={6} c="dimmed">Default Config</Title>
@@ -347,10 +357,14 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
           <ProfilesEditor
             profiles={profiles}
             listings={listings}
+            seed={simSeed}
             onProfilesChange={setProfiles}
             onListingsChange={setListings}
+            onSeedChange={setSimSeed}
           />
         )}
+
+        <OrchestratorOverridesEditor value={overrides} onChange={setOverrides} version={form.orchestratorVersion} />
 
         {formError && <Text c="red" size="sm">{formError}</Text>}
         <Group justify="flex-end">

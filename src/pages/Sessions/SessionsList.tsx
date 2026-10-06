@@ -35,6 +35,7 @@ const STATUS_OPTIONS = [
   { value: 'SUBMITTED', label: 'Submitted' },
   { value: 'STARTING', label: 'Starting' },
   { value: 'RUNNING', label: 'Running' },
+  { value: 'STOPPING', label: 'Stopping' },
   { value: 'STOPPED', label: 'Stopped' },
   { value: 'FAILED', label: 'Failed' },
 ];

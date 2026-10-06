@@ -24,6 +24,10 @@ export interface SimulationState {
   orderLatencyMakerDelayNanos: number | string;
   queueModel: 'optimistic' | 'risk_averse' | 'probabilistic';
   cancelAheadProbability: number | string;
+  // '' means unset: the orchestrator then derives these draws from the session seed.
+  networkLatencySeed: number | string;
+  orderLatencySeed: number | string;
+  selfTradePrevention: '' | 'CANCEL_INCOMING' | 'CANCEL_RESTING';
 }
 
 export const defaultSimulationState = (): SimulationState => ({
@@ -48,6 +52,9 @@ export const defaultSimulationState = (): SimulationState => ({
   orderLatencyMakerDelayNanos: 0,
   queueModel: 'risk_averse',
   cancelAheadProbability: 0.5,
+  networkLatencySeed: '',
+  orderLatencySeed: '',
+  selfTradePrevention: '',
 });
 
 // A cleared NumberInput holds '', which Number() turns into 0, so a blank fee or latency would silently simulate as
@@ -55,6 +62,14 @@ export const defaultSimulationState = (): SimulationState => ({
 function requireNumber(field: string, value: number | string): number {
   const n = typeof value === 'number' ? value : value.trim() === '' ? NaN : Number(value);
   if (!Number.isFinite(n)) throw new Error(`${field} is empty or not a number`);
+  return n;
+}
+
+// Seeds are Java longs; blank means "not set", never 0.
+function optionalSeed(field: string, value: number | string): number | undefined {
+  if (typeof value === 'string' && value.trim() === '') return undefined;
+  const n = Number(value);
+  if (!Number.isInteger(n)) throw new Error(`${field} must be a whole number`);
   return n;
 }
 
@@ -72,6 +87,8 @@ export function simulationStateToConfig(sim: SimulationState): Record<string, Co
   if (sim.networkLatencyModel === 'gaussian') {
     cfg['network.latency.mu'] = requireNumber('network.latency.mu', sim.networkLatencyMu);
     cfg['network.latency.sigma'] = requireNumber('network.latency.sigma', sim.networkLatencySigma);
+    const seed = optionalSeed('network.latency.seed', sim.networkLatencySeed);
+    if (seed !== undefined) cfg['network.latency.seed'] = seed;
   } else if (sim.networkLatencyModel === 'maker_taker') {
     cfg['network.latency.base.nanos'] = requireNumber('network.latency.base.nanos', sim.networkLatencyBaseNanos);
     cfg['network.latency.taker.delay.nanos'] = requireNumber('network.latency.taker.delay.nanos', sim.networkLatencyTakerDelayNanos);
@@ -83,6 +100,8 @@ export function simulationStateToConfig(sim: SimulationState): Record<string, Co
   if (sim.orderLatencyModel === 'gaussian') {
     cfg['order.latency.mu'] = requireNumber('order.latency.mu', sim.orderLatencyMu);
     cfg['order.latency.sigma'] = requireNumber('order.latency.sigma', sim.orderLatencySigma);
+    const seed = optionalSeed('order.latency.seed', sim.orderLatencySeed);
+    if (seed !== undefined) cfg['order.latency.seed'] = seed;
   } else if (sim.orderLatencyModel === 'maker_taker') {
     cfg['order.latency.base.nanos'] = requireNumber('order.latency.base.nanos', sim.orderLatencyBaseNanos);
     cfg['order.latency.taker.delay.nanos'] = requireNumber('order.latency.taker.delay.nanos', sim.orderLatencyTakerDelayNanos);
@@ -94,6 +113,7 @@ export function simulationStateToConfig(sim: SimulationState): Record<string, Co
   if (sim.queueModel === 'probabilistic') {
     cfg['queue.cancel.ahead.probability'] = requireNumber('queue.cancel.ahead.probability', sim.cancelAheadProbability);
   }
+  if (sim.selfTradePrevention) cfg['self.trade.prevention'] = sim.selfTradePrevention;
   return cfg;
 }
 
@@ -114,6 +134,7 @@ export function simulationStateFromConfig(sim: Record<string, ConfigValue>): Sim
   if (netModel === 'gaussian') {
     s.networkLatencyMu = Number(sim['network.latency.mu'] ?? 0);
     s.networkLatencySigma = Number(sim['network.latency.sigma'] ?? 0);
+    s.networkLatencySeed = sim['network.latency.seed'] != null ? Number(sim['network.latency.seed']) : '';
   } else if (netModel === 'maker_taker') {
     s.networkLatencyBaseNanos = Number(sim['network.latency.base.nanos'] ?? 0);
     s.networkLatencyTakerDelayNanos = Number(sim['network.latency.taker.delay.nanos'] ?? 0);
@@ -126,6 +147,7 @@ export function simulationStateFromConfig(sim: Record<string, ConfigValue>): Sim
   if (ordModel === 'gaussian') {
     s.orderLatencyMu = Number(sim['order.latency.mu'] ?? 0);
     s.orderLatencySigma = Number(sim['order.latency.sigma'] ?? 0);
+    s.orderLatencySeed = sim['order.latency.seed'] != null ? Number(sim['order.latency.seed']) : '';
   } else if (ordModel === 'maker_taker') {
     s.orderLatencyBaseNanos = Number(sim['order.latency.base.nanos'] ?? 0);
     s.orderLatencyTakerDelayNanos = Number(sim['order.latency.taker.delay.nanos'] ?? 0);
@@ -138,6 +160,8 @@ export function simulationStateFromConfig(sim: Record<string, ConfigValue>): Sim
   if (qModel === 'probabilistic') {
     s.cancelAheadProbability = Number(sim['queue.cancel.ahead.probability'] ?? 0.5);
   }
+  const stp = sim['self.trade.prevention'];
+  s.selfTradePrevention = stp === 'CANCEL_INCOMING' || stp === 'CANCEL_RESTING' ? stp : '';
   return s;
 }
 
@@ -151,8 +175,11 @@ export type ProfilesState = Record<string, SimulationState>;
 export function simulationProfilesToConfig(
   profiles: ProfilesState,
   listings: ListingProfileRow[],
+  seed: number | string = '',
 ): Record<string, ConfigValue> {
   const cfg: Record<string, ConfigValue> = {};
+  const sessionSeed = optionalSeed('simulation.seed', seed);
+  if (sessionSeed !== undefined) cfg['simulation.seed'] = sessionSeed;
   for (const [name, sim] of Object.entries(profiles)) {
     let simCfg: Record<string, ConfigValue>;
     try {
@@ -175,6 +202,7 @@ export function simulationProfilesToConfig(
 export function simulationProfilesFromConfig(config: Record<string, ConfigValue>): {
   profiles: ProfilesState;
   listings: ListingProfileRow[];
+  seed: number | string;
 } {
   const profileKeys: Record<string, Record<string, ConfigValue>> = {};
   const listingMap: Record<string, string> = {};
@@ -203,17 +231,24 @@ export function simulationProfilesFromConfig(config: Record<string, ConfigValue>
     profile,
   }));
 
-  return { profiles, listings };
+  const seed = config['simulation.seed'] != null ? Number(config['simulation.seed']) : '';
+  return { profiles, listings, seed };
 }
 
 export interface ProfilesEditorProps {
   profiles: ProfilesState;
   listings: ListingProfileRow[];
+  seed: number | string;
   onProfilesChange: (p: ProfilesState) => void;
   onListingsChange: (l: ListingProfileRow[]) => void;
+  onSeedChange: (seed: number | string) => void;
 }
 
-export function ProfilesEditor({ profiles, listings, onProfilesChange, onListingsChange }: ProfilesEditorProps) {
+// Profile names become part of property keys (simulation.profiles.<name>.…) that travel as environment variables,
+// where '.' and '_' both turn into separators, so a name using them can't be found again by the orchestrator.
+const PROFILE_NAME = /^[A-Za-z0-9-]+$/;
+
+export function ProfilesEditor({ profiles, listings, seed, onProfilesChange, onListingsChange, onSeedChange }: ProfilesEditorProps) {
   const profileNames = Object.keys(profiles);
 
   const addProfile = () => {
@@ -232,6 +267,7 @@ export function ProfilesEditor({ profiles, listings, onProfilesChange, onListing
 
   const renameProfile = (oldName: string, newName: string) => {
     if (!newName.trim() || newName === oldName) return;
+    if (!PROFILE_NAME.test(newName.trim()) || profiles[newName.trim()] !== undefined) return;
     const next: ProfilesState = {};
     for (const [k, v] of Object.entries(profiles)) {
       next[k === oldName ? newName.trim() : k] = v;
@@ -254,6 +290,13 @@ export function ProfilesEditor({ profiles, listings, onProfilesChange, onListing
 
   return (
     <Stack gap="sm">
+      <NumberInput
+        label="Simulation seed (optional)"
+        description="Blank uses the orchestrator's fixed default, so runs are reproducible; set one to vary the latency draws"
+        value={seed}
+        onChange={onSeedChange}
+        allowDecimal={false}
+      />
       <Group justify="space-between">
         <Title order={6} c="dimmed">Profiles</Title>
         <Button size="xs" variant="subtle" leftSection={<IconPlus size={12} />} onClick={addProfile}>Add Profile</Button>
@@ -267,7 +310,12 @@ export function ProfilesEditor({ profiles, listings, onProfilesChange, onListing
                 <TextInput
                   size="xs"
                   defaultValue={name}
-                  onBlur={e => renameProfile(name, e.currentTarget.value)}
+                  title="Letters, digits and '-' only"
+                  onBlur={e => {
+                    const next = e.currentTarget.value;
+                    if (!PROFILE_NAME.test(next.trim())) e.currentTarget.value = name;
+                    renameProfile(name, next);
+                  }}
                   onClick={e => e.stopPropagation()}
                   style={{ flex: 1 }}
                 />
@@ -340,6 +388,12 @@ const QUEUE_MODEL_OPTIONS = [
   { value: 'probabilistic', label: 'Probabilistic' },
 ];
 
+const SELF_TRADE_OPTIONS = [
+  { value: '', label: 'None (simulator default)' },
+  { value: 'CANCEL_INCOMING', label: 'Cancel incoming (Kalshi taker_at_cross)' },
+  { value: 'CANCEL_RESTING', label: 'Cancel resting (Kalshi maker)' },
+];
+
 interface SimulationConfigFormProps {
   sim: SimulationState;
   onChange: (sim: SimulationState) => void;
@@ -354,6 +408,7 @@ function LatencyFields({
   baseNanos,
   takerDelayNanos,
   makerDelayNanos,
+  seed,
   onModelChange,
   onNanosChange,
   onMuChange,
@@ -361,6 +416,7 @@ function LatencyFields({
   onBaseNanosChange,
   onTakerDelayChange,
   onMakerDelayChange,
+  onSeedChange,
 }: {
   prefix: string;
   model: string;
@@ -370,6 +426,7 @@ function LatencyFields({
   baseNanos: number | string;
   takerDelayNanos: number | string;
   makerDelayNanos: number | string;
+  seed: number | string;
   onModelChange: (v: string) => void;
   onNanosChange: (v: number | string) => void;
   onMuChange: (v: number | string) => void;
@@ -377,6 +434,7 @@ function LatencyFields({
   onBaseNanosChange: (v: number | string) => void;
   onTakerDelayChange: (v: number | string) => void;
   onMakerDelayChange: (v: number | string) => void;
+  onSeedChange: (v: number | string) => void;
 }) {
   return (
     <>
@@ -388,6 +446,7 @@ function LatencyFields({
         <Group grow>
           <NumberInput label="Mu (ns)" value={mu} onChange={onMuChange} step={1000} />
           <NumberInput label="Sigma (ns)" value={sigma} onChange={onSigmaChange} step={1000} />
+          <NumberInput label="Seed (optional)" placeholder="Session seed" value={seed} onChange={onSeedChange} allowDecimal={false} />
         </Group>
       )}
       {model === 'maker_taker' && (
@@ -433,6 +492,7 @@ function SimulationConfigForm({ sim, onChange }: SimulationConfigFormProps) {
         baseNanos={sim.networkLatencyBaseNanos}
         takerDelayNanos={sim.networkLatencyTakerDelayNanos}
         makerDelayNanos={sim.networkLatencyMakerDelayNanos}
+        seed={sim.networkLatencySeed}
         onModelChange={v => set('networkLatencyModel', v as SimulationState['networkLatencyModel'])}
         onNanosChange={v => set('networkLatencyNanos', v)}
         onMuChange={v => set('networkLatencyMu', v)}
@@ -440,6 +500,7 @@ function SimulationConfigForm({ sim, onChange }: SimulationConfigFormProps) {
         onBaseNanosChange={v => set('networkLatencyBaseNanos', v)}
         onTakerDelayChange={v => set('networkLatencyTakerDelayNanos', v)}
         onMakerDelayChange={v => set('networkLatencyMakerDelayNanos', v)}
+        onSeedChange={v => set('networkLatencySeed', v)}
       />
       <LatencyFields
         prefix="Order Latency"
@@ -450,6 +511,7 @@ function SimulationConfigForm({ sim, onChange }: SimulationConfigFormProps) {
         baseNanos={sim.orderLatencyBaseNanos}
         takerDelayNanos={sim.orderLatencyTakerDelayNanos}
         makerDelayNanos={sim.orderLatencyMakerDelayNanos}
+        seed={sim.orderLatencySeed}
         onModelChange={v => set('orderLatencyModel', v as SimulationState['orderLatencyModel'])}
         onNanosChange={v => set('orderLatencyNanos', v)}
         onMuChange={v => set('orderLatencyMu', v)}
@@ -457,12 +519,21 @@ function SimulationConfigForm({ sim, onChange }: SimulationConfigFormProps) {
         onBaseNanosChange={v => set('orderLatencyBaseNanos', v)}
         onTakerDelayChange={v => set('orderLatencyTakerDelayNanos', v)}
         onMakerDelayChange={v => set('orderLatencyMakerDelayNanos', v)}
+        onSeedChange={v => set('orderLatencySeed', v)}
       />
 
       <Select label="Queue Model" data={QUEUE_MODEL_OPTIONS} value={sim.queueModel} onChange={v => set('queueModel', (v ?? 'risk_averse') as SimulationState['queueModel'])} />
       {sim.queueModel === 'probabilistic' && (
         <NumberInput label="Cancel Ahead Probability" value={sim.cancelAheadProbability} onChange={v => set('cancelAheadProbability', v)} step={0.01} min={0} max={1} decimalScale={4} />
       )}
+
+      <Select
+        label="Self-trade prevention"
+        description="What the simulated exchange does when the strategy's orders would cross each other"
+        data={SELF_TRADE_OPTIONS}
+        value={sim.selfTradePrevention}
+        onChange={v => set('selfTradePrevention', (v ?? '') as SimulationState['selfTradePrevention'])}
+      />
     </Stack>
   );
 }

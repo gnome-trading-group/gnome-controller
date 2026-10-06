@@ -4,6 +4,7 @@ export enum StrategySessionStatus {
   SUBMITTED = 'SUBMITTED',
   STARTING = 'STARTING',
   RUNNING = 'RUNNING',
+  STOPPING = 'STOPPING',
   STOPPED = 'STOPPED',
   FAILED = 'FAILED',
 }
@@ -42,11 +43,14 @@ export interface CreateStrategySessionRequest {
   gnomepyVersion?: string;
 }
 
-// A session holds its strategy's slot from the moment it is requested, not only once it reports RUNNING.
+// A session holds its strategy's slot from the moment it is requested until its stop finishes, so it can be listed,
+// and its stop retried, while STOPPING. Whether its risk policies still matter is a separate question; see
+// isActiveSessionStatus in utils/policy-target.
 export const ACTIVE_SESSION_STATUSES: StrategySessionStatus[] = [
   StrategySessionStatus.SUBMITTED,
   StrategySessionStatus.STARTING,
   StrategySessionStatus.RUNNING,
+  StrategySessionStatus.STOPPING,
 ];
 
 export function isActiveSession(status: StrategySessionStatus): boolean {

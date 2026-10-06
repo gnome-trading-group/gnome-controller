@@ -11,10 +11,10 @@ import {
   Stack,
   Tabs,
   Text,
-  Title,
   Tooltip,
 } from '@mantine/core';
 import { IconExternalLink, IconRefresh } from '@tabler/icons-react';
+import { CollapsibleSection } from './CollapsibleSection';
 
 interface LogEntry {
   timestamp: number;
@@ -48,10 +48,12 @@ function LogList({ entries }: { entries: LogEntry[] }) {
   }
   const reversed = [...entries].reverse();
   return (
-    <Stack gap="xs">
+    <Stack gap={0}>
       {reversed.map((logEvent, index) => (
         <div key={index}>
-          <Group gap="xs" align="flex-start">
+          {/* Baseline, not flex-start: the code block's padding pushes its text below the box top, so top-aligning the
+              boxes left each timestamp sitting above its message's first line. */}
+          <Group gap="xs" align="baseline" wrap="nowrap" py={6}>
             <Text size="xs" c="dimmed" style={{ minWidth: '140px' }}>
               {new Date(logEvent.timestamp).toLocaleTimeString()}
             </Text>
@@ -81,69 +83,73 @@ export function ContainerLogs({ logs, loading, initialLoad, onRefresh }: Contain
 
   return (
     <Card withBorder mt="md">
-      <Group justify="space-between" mb="md">
-        <Title order={4}>Container Logs</Title>
-        <Group>
-          {activeTaskLogs?.consoleUrl && (
-            <Tooltip label="View in AWS Console" position="bottom" withArrow>
-              <ActionIcon
-                component="a"
-                href={activeTaskLogs.consoleUrl}
-                target="_blank"
-                variant="light"
-              >
-                <IconExternalLink size={16} />
+      <CollapsibleSection
+        title="Container Logs"
+        storageKey="container-logs"
+        mb="0"
+        rightSection={
+          <Group>
+            {activeTaskLogs?.consoleUrl && (
+              <Tooltip label="View in AWS Console" position="bottom" withArrow>
+                <ActionIcon
+                  component="a"
+                  href={activeTaskLogs.consoleUrl}
+                  target="_blank"
+                  variant="light"
+                >
+                  <IconExternalLink size={16} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+            <Tooltip label="Refresh Logs" position="bottom" withArrow>
+              <ActionIcon onClick={onRefresh} loading={loading} disabled={logs.length === 0}>
+                <IconRefresh size={16} />
               </ActionIcon>
             </Tooltip>
-          )}
-          <Tooltip label="Refresh Logs" position="bottom" withArrow>
-            <ActionIcon onClick={onRefresh} loading={loading} disabled={logs.length === 0}>
-              <IconRefresh size={16} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
-      </Group>
-
-      {logs.length > 1 ? (
-        <Tabs value={selectedId} onChange={v => setSelectedId(v ?? '')}>
-          <Tabs.List>
+          </Group>
+        }
+      >
+        {logs.length > 1 ? (
+          <Tabs value={selectedId} onChange={v => setSelectedId(v ?? '')}>
+            <Tabs.List>
+              {logs.map(task => (
+                <Tabs.Tab key={task.id} value={task.id}>
+                  {task.label}
+                </Tabs.Tab>
+              ))}
+            </Tabs.List>
             {logs.map(task => (
-              <Tabs.Tab key={task.id} value={task.id}>
-                {task.label}
-              </Tabs.Tab>
+              <Tabs.Panel key={task.id} value={task.id} pt="md">
+                <ScrollArea h={400}>
+                  {loading && initialLoad ? (
+                    <Center h={350}>
+                      <Stack align="center" gap="md">
+                        <Loader size="lg" color="blue" />
+                        <Text fw={500} c="dimmed">Loading Logs</Text>
+                      </Stack>
+                    </Center>
+                  ) : (
+                    <LogList entries={task.logs} />
+                  )}
+                </ScrollArea>
+              </Tabs.Panel>
             ))}
-          </Tabs.List>
-          {logs.map(task => (
-            <Tabs.Panel key={task.id} value={task.id} pt="md">
-              <ScrollArea h={400}>
-                {loading && initialLoad ? (
-                  <Center h={350}>
-                    <Stack align="center" gap="md">
-                      <Loader size="lg" color="blue" />
-                      <Text fw={500} c="dimmed">Loading Logs</Text>
-                    </Stack>
-                  </Center>
-                ) : (
-                  <LogList entries={task.logs} />
-                )}
-              </ScrollArea>
-            </Tabs.Panel>
-          ))}
-        </Tabs>
-      ) : (
-        <ScrollArea h={400}>
-          {loading && initialLoad ? (
-            <Center h={350}>
-              <Stack align="center" gap="md">
-                <Loader size="lg" color="blue" />
-                <Text fw={500} c="dimmed">Loading Logs</Text>
-              </Stack>
-            </Center>
-          ) : (
-            <LogList entries={activeTaskLogs?.logs ?? []} />
-          )}
-        </ScrollArea>
-      )}
+          </Tabs>
+        ) : (
+          <ScrollArea h={400}>
+            {loading && initialLoad ? (
+              <Center h={350}>
+                <Stack align="center" gap="md">
+                  <Loader size="lg" color="blue" />
+                  <Text fw={500} c="dimmed">Loading Logs</Text>
+                </Stack>
+              </Center>
+            ) : (
+              <LogList entries={activeTaskLogs?.logs ?? []} />
+            )}
+          </ScrollArea>
+        )}
+      </CollapsibleSection>
     </Card>
   );
 }

@@ -5,6 +5,7 @@ export const SESSION_STATUS_COLORS: Record<StrategySessionStatus, string> = {
   [StrategySessionStatus.SUBMITTED]: 'blue',
   [StrategySessionStatus.STARTING]: 'cyan',
   [StrategySessionStatus.RUNNING]: 'green',
+  [StrategySessionStatus.STOPPING]: 'orange',
   [StrategySessionStatus.STOPPED]: 'gray',
   [StrategySessionStatus.FAILED]: 'red',
 };

@@ -10,9 +10,6 @@ import { ACTIVE_SESSION_STATUSES } from '../types/strategy-sessions';
 import { describeTarget, targetPageLink, withoutEndedSessions } from '../utils/policy-target';
 
 const POLL_INTERVAL_MS = 15000;
-// Written by the session-stop flow (gnome-registry strategy-session-launcher), which kills the session before
-// shutting it down; that's routine, not something to alert on.
-const SESSION_STOP_REASON = 'session stop';
 
 interface KillAlert {
   policy: RiskPolicy;
@@ -37,11 +34,11 @@ export function KillSwitchWatcher() {
   const check = useCallback(async () => {
     let policies: RiskPolicy[];
     try {
-      const [allPolicies, activeSessions] = await Promise.all([
-        registryApi.listRiskPolicies(),
-        registryApi.listSessions({ status: ACTIVE_SESSION_STATUSES.join(',') }),
-      ]);
-      // Stopped sessions keep their kill switch on forever; only kills that still block something count.
+      // Sessions are read after policies on purpose: a stop marks its session STOPPING before killing it, so any stop
+      // kill in this policy list is guaranteed to see its session as STOPPING in the later read, and gets filtered
+      // out below as routine rather than alerted on as a halt.
+      const allPolicies = await registryApi.listRiskPolicies();
+      const activeSessions = await registryApi.listSessions({ status: ACTIVE_SESSION_STATUSES.join(',') });
       policies = withoutEndedSessions(allPolicies, activeSessions);
     } catch {
       return;
@@ -58,8 +55,7 @@ export function KillSwitchWatcher() {
       return { policy, entry };
     }));
     // The person who flipped the switch already knows.
-    const relevant = withEntries.filter((a) =>
-      !a.entry || (a.entry.actor !== me.current && a.entry.reason !== SESSION_STOP_REASON));
+    const relevant = withEntries.filter((a) => !a.entry || a.entry.actor !== me.current);
     if (relevant.length > 0) setAlerts((prev) => [...prev, ...relevant]);
   }, []);
 

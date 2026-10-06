@@ -21,6 +21,8 @@ import { IconAlertTriangle, IconPlus, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { Strategy, ConfigValue, RiskPolicy, StrategySession, StrategySessionStatus } from '../../types';
 import { registryApi } from '../../utils/api';
+import { OrchestratorOverridesEditor } from '../../components/OrchestratorOverrides';
+import { Overrides, toOverrides } from '../../utils/orchestrator-overrides';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { findKillSwitch, formatActor } from '../../utils/kill-switch';
@@ -78,6 +80,8 @@ function flattenToSessionConfig(
   latencyProfile: LatencyProfile,
   params: ParamRow[],
   profiles: ProfilesState,
+  simSeed: number | string,
+  overrides: Overrides,
 ): Record<string, ConfigValue> {
   const listingsArr: number[] = mode === 'paper'
     ? listings.map(l => parseInt(l.listingId.trim(), 10)).filter(n => !isNaN(n))
@@ -95,6 +99,9 @@ function flattenToSessionConfig(
   if (researchCommit.trim()) config['research_commit'] = researchCommit.trim();
   if (region.trim()) config['region'] = region.trim();
   config['latency.profile'] = latencyProfile;
+  for (const [property, value] of Object.entries(overrides)) {
+    config[`overrides.${property}`] = value;
+  }
   for (const { key, value, type } of params) {
     if (key.trim()) {
       let parsed: ConfigValue = value;
@@ -109,7 +116,7 @@ function flattenToSessionConfig(
     }
   }
   if (mode === 'paper') {
-    const simCfg = simulationProfilesToConfig(profiles, listings);
+    const simCfg = simulationProfilesToConfig(profiles, listings, simSeed);
     for (const [k, v] of Object.entries(simCfg)) {
       config[k] = v;
     }
@@ -132,6 +139,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   );
   const [mode, setMode] = useState<string>('paper');
   const [profiles, setProfiles] = useState<ProfilesState>(defaultProfiles());
+  const [simSeed, setSimSeed] = useState<number | string>('');
   const [listings, setListings] = useState<ListingProfileRow[]>(defaultListings());
   const [selectedLiveListingIds, setSelectedLiveListingIds] = useState<string[]>([]);
   const [selectedLiveListingItems, setSelectedLiveListingItems] = useState<Record<string, string>>({});
@@ -142,6 +150,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   const [strategyType, setStrategyType] = useState<string | null>(null);
   const [strategyClass, setStrategyClass] = useState('');
   const [params, setParams] = useState<ParamRow[]>([]);
+  const [overrides, setOverrides] = useState<Overrides>({});
   const [latencyProfile, setLatencyProfile] = useState<LatencyProfile>(defaultLatencyProfile('paper'));
   // Until someone picks a profile, it follows the mode, the way the instance type follows the listing count.
   const [profileUserChosen, setProfileUserChosen] = useState(false);
@@ -228,13 +237,14 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
       }));
     }
     if (p.simulation && typeof p.simulation === 'object') {
-      const { profiles: loadedProfiles, listings: loadedListings } = simulationProfilesFromConfig(
+      const { profiles: loadedProfiles, listings: loadedListings, seed } = simulationProfilesFromConfig(
         p.simulation as Record<string, string>
       );
       if (Object.keys(loadedProfiles).length > 0) {
         setProfiles(loadedProfiles);
         setListings(loadedListings.length > 0 ? loadedListings : defaultListings());
       }
+      setSimSeed(seed);
     }
     if (p.listings && Array.isArray(p.listings) && String(p.mode) === 'live') {
       setSelectedLiveListingIds((p.listings as number[]).map(String));
@@ -247,6 +257,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     if (p.availabilityZone) setAvailabilityZone(String(p.availabilityZone));
     if (p.orchestratorVersion) setOrchestratorVersion(String(p.orchestratorVersion));
     if (p.gnomepyVersion) setGnomepyVersion(String(p.gnomepyVersion));
+    setOverrides(toOverrides(p.overrides));
   }, []);
 
   const loadFromSession = useCallback((session: StrategySession) => {
@@ -281,6 +292,11 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
       else parsedParams.push({ key: argKey, value: String(value), type: 'string' });
     }
     setParams(parsedParams);
+    setOverrides(Object.fromEntries(
+      Object.entries(config)
+        .filter(([k]) => k.startsWith('overrides.'))
+        .map(([k, v]) => [k.slice('overrides.'.length), String(v)]),
+    ));
 
     if (session.mode === 'live') {
       const rawListings = config['listings'];
@@ -289,12 +305,14 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
       }
       setProfiles(defaultProfiles());
       setListings(defaultListings());
+      setSimSeed('');
     } else {
       const simConfig: Record<string, ConfigValue> = {};
       for (const [k, v] of Object.entries(config)) {
         if (k.startsWith('simulation.')) simConfig[k] = v;
       }
-      const { profiles: loadedProfiles, listings: loadedListings } = simulationProfilesFromConfig(simConfig);
+      const { profiles: loadedProfiles, listings: loadedListings, seed } = simulationProfilesFromConfig(simConfig);
+      setSimSeed(seed);
       setProfiles(Object.keys(loadedProfiles).length > 0 ? loadedProfiles : defaultProfiles());
       setListings(loadedListings.length > 0 ? loadedListings : defaultListings());
       setSelectedLiveListingIds([]);
@@ -344,6 +362,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     setStrategyId(preselectedStrategyId !== undefined ? String(preselectedStrategyId) : null);
     setMode('paper');
     setProfiles(defaultProfiles());
+    setSimSeed('');
     setListings(defaultListings());
     setSelectedLiveListingIds([]);
     setSelectedLiveListingItems({});
@@ -353,6 +372,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     setStrategyType(null);
     setStrategyClass('');
     setParams([]);
+    setOverrides({});
     setLatencyProfile(defaultLatencyProfile('paper'));
     setProfileUserChosen(false);
     setInstanceType(suggestInstanceType(defaultLatencyProfile('paper'), 'paper', 1));
@@ -372,6 +392,8 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   const handleSubmit = async () => {
     setError(null);
     if (!strategyId) { setError('Strategy is required'); return; }
+    if (!strategyType) { setError('Strategy type is required'); return; }
+    if (!strategyClass.trim()) { setError('Strategy class is required'); return; }
 
     if (mode === 'paper') {
       if (listings.length === 0) { setError('At least one listing is required'); return; }
@@ -391,7 +413,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     try {
       config = flattenToSessionConfig(
         strategyId, mode, strategyType, strategyClass,
-        listings, selectedLiveListingIds, researchCommit, region, latencyProfile, params, profiles,
+        listings, selectedLiveListingIds, researchCommit, region, latencyProfile, params, profiles, simSeed, overrides,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invalid session config');
@@ -442,7 +464,10 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     }
   };
 
-  const strategyOptions = strategies.map(s => ({ value: String(s.strategyId), label: s.name }));
+  // Archived strategies aren't offered, except one already chosen (e.g. relaunching its session).
+  const strategyOptions = strategies
+    .filter(s => !s.archived || String(s.strategyId) === strategyId)
+    .map(s => ({ value: String(s.strategyId), label: s.name }));
 
   return (
     <Modal opened={opened} onClose={handleClose} title={initialSession ? 'Relaunch Session' : 'Deploy Strategy Session'} size="xl">
@@ -487,8 +512,8 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
 
         <Divider />
         <Title order={6} c="dimmed">Strategy Class</Title>
-        <Select label="Strategy Type" data={STRATEGY_TYPE_OPTIONS} value={strategyType} onChange={setStrategyType} clearable placeholder="Auto-detect" />
-        <TextInput label="Strategy Class" placeholder="com.example.MyStrategy or module:ClassName" value={strategyClass} onChange={e => setStrategyClass(e.currentTarget.value)} />
+        <Select label="Strategy Type" data={STRATEGY_TYPE_OPTIONS} value={strategyType} onChange={setStrategyType} placeholder="Select a type" required />
+        <TextInput label="Strategy Class" placeholder="com.example.MyStrategy or module:ClassName" value={strategyClass} onChange={e => setStrategyClass(e.currentTarget.value)} required />
         {/* Python strategies run inside the orchestrator JVM too, so they take its version as well. */}
         <Group grow>
           <TextInput label="Orchestrator Version" placeholder="Latest" value={orchestratorVersion} onChange={e => setOrchestratorVersion(e.currentTarget.value)} />
@@ -558,11 +583,15 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
             <ProfilesEditor
               profiles={profiles}
               listings={listings}
+              seed={simSeed}
               onProfilesChange={setProfiles}
               onListingsChange={setListings}
+              onSeedChange={setSimSeed}
             />
           </>
         )}
+
+        <OrchestratorOverridesEditor value={overrides} onChange={setOverrides} version={orchestratorVersion} />
 
         {strategyKilled && strategyKillSwitch && (
           <Alert color="orange" title="Strategy is killed" icon={<IconAlertTriangle size={20} />}>

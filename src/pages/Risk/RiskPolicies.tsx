@@ -18,7 +18,7 @@ import {
 import { IconAlertTriangle, IconHelpCircle, IconHistory, IconPencil, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
-import { RiskPolicy, RISK_POLICY_TYPES } from '../../types';
+import { RiskPolicy, RISK_POLICY_TYPES, Strategy } from '../../types';
 import { registryApi } from '../../utils/api';
 import { formatRiskParameters, scaleRiskParameters } from '../../utils/risk-parameters';
 import { errorMessage, findKillSwitch, GLOBAL_TARGET, isKilled, isKillSwitch, KILL_SWITCH_TYPE, setKillSwitch } from '../../utils/kill-switch';
@@ -38,6 +38,7 @@ function RiskPolicies() {
   const [policies, setPolicies] = useState<RiskPolicy[] | null>(null);
   const [sessions, setSessions] = useState<StrategySession[]>([]);
   const [strategyNames, setStrategyNames] = useState<Record<number, string>>({});
+  const [archivedStrategyIds, setArchivedStrategyIds] = useState<Set<number>>(new Set());
   const [listingSearch, setListingSearch] = useState('');
   const { options: listingOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearch);
   const [loading, setLoading] = useState(false);
@@ -81,8 +82,10 @@ function RiskPolicies() {
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
     registryApi.listStrategies()
-      .then((strategies: { strategyId: number; name: string }[]) =>
-        setStrategyNames(Object.fromEntries(strategies.map((s) => [s.strategyId, s.name]))))
+      .then((strategies: Strategy[]) => {
+        setStrategyNames(Object.fromEntries(strategies.map((s) => [s.strategyId, s.name])));
+        setArchivedStrategyIds(new Set(strategies.filter((s) => s.archived).map((s) => s.strategyId)));
+      })
       .catch(() => setStrategyNames({}));
   }, []);
   // Polled so a kill switch flipped elsewhere (another operator, or the OMS on a risk breach) shows up quickly.
@@ -301,7 +304,9 @@ function RiskPolicies() {
             label="Strategy"
             description="Leave empty for every strategy"
             placeholder="Every strategy"
-            data={Object.entries(strategyNames).map(([id, name]) => ({ value: id, label: `${id} - ${name}` }))}
+            data={Object.entries(strategyNames)
+              .filter(([id]) => !archivedStrategyIds.has(Number(id)))
+              .map(([id, name]) => ({ value: id, label: `${id} - ${name}` }))}
             value={policyForm.strategyId || null}
             onChange={(v) => setPolicyForm((f) => ({ ...f, strategyId: v ?? '' }))}
             searchable

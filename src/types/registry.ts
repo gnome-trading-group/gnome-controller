@@ -1,14 +1,8 @@
-export enum StrategyStatus {
-  INACTIVE = 0,
-  ACTIVE = 1,
-  PAUSED = 2,
-}
-
 export interface Strategy {
   strategyId: number;
   name: string;
   description?: string;
-  status: number;
+  archived: boolean;
   parameters?: Record<string, unknown>;
   dateCreated: string;
   dateModified: string;

@@ -35,7 +35,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { PnlSnapshot, RiskPolicy, Strategy, StrategySession, isActiveSession, StrategyStatus, ACTIVE_SESSION_STATUSES } from '../../types';
+import { PnlSnapshot, RiskPolicy, Strategy, StrategySession, isActiveSession, ACTIVE_SESSION_STATUSES } from '../../types';
+import { isActiveSessionStatus } from '../../utils/policy-target';
 import { BacktestRun } from '../../types/backtests';
 import { ResearchSession } from '../../types/research';
 import { controllerApi, marketDataApi, registryApi } from '../../utils/api';
@@ -141,7 +142,11 @@ function Dashboard() {
     [riskPolicies, sessions, sessionsLoaded],
   );
 
-  const activeStrategies = useMemo(() => strategies.filter(s => s.status === StrategyStatus.ACTIVE).length, [strategies]);
+  const runningStrategies = useMemo(
+    () => new Set(sessions.filter(s => isActiveSessionStatus(s.status)).map(s => s.strategyId)).size,
+    [sessions],
+  );
+  const unarchivedStrategies = useMemo(() => strategies.filter(s => !s.archived).length, [strategies]);
 
   const activeSessions = useMemo(() =>
     sessions.filter(s => isActiveSession(s.status)),
@@ -397,9 +402,9 @@ function Dashboard() {
         <Paper withBorder p="md" radius="md" style={{ cursor: 'pointer' }} onClick={(e) => handleNavigateClick(e, navigate, '/strategies')}>
           <Group justify="space-between">
             <div>
-              <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Active Strategies</Text>
-              <Text size="xl" fw={700}>{activeStrategies}</Text>
-              <Text size="xs" c="dimmed">{strategies.length} total</Text>
+              <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Running Strategies</Text>
+              <Text size="xl" fw={700}>{runningStrategies}</Text>
+              <Text size="xs" c="dimmed">{unarchivedStrategies} total</Text>
             </div>
             <IconChartLine size={32} stroke={1.5} color="var(--mantine-color-green-6)" />
           </Group>

@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
-import { Anchor, Badge, Group, SegmentedControl, Text, Title, Tooltip } from '@mantine/core';
+import { Anchor, Badge, Group, SegmentedControl, Text, Tooltip } from '@mantine/core';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { PnlSnapshot } from '../types';
 import { formatUnscaled, unscalePrice, unscaleSize } from '../utils/security-master';
 import { useListingDetails } from '../hooks/useAsyncSearch';
+import { CollapsibleSection } from './CollapsibleSection';
 
 const MODE_COLORS: Record<string, string> = {
   paper: 'violet',
@@ -25,10 +26,11 @@ interface PnlSnapshotTableProps {
   isLoading: boolean;
   showModeColumn?: boolean;
   title?: string;
+  storageKey?: string;
   extraControls?: React.ReactNode;
 }
 
-export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, title, extraControls }: PnlSnapshotTableProps) {
+export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, title, storageKey = 'pnl-snapshot', extraControls }: PnlSnapshotTableProps) {
   const [scaled, setScaled] = useState(false);
   const [showSymbols, setShowSymbols] = useState(false);
   const listingIds = useMemo(() => [...new Set(data.map((row) => row.listingId))], [data]);
@@ -163,26 +165,35 @@ export function PnlSnapshotTable({ data, isLoading, showModeColumn = false, titl
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
   });
 
+  const controls = (
+    <Group gap="sm">
+      {extraControls}
+      <SegmentedControl
+        size="xs"
+        value={showSymbols ? 'Symbol' : 'ID'}
+        onChange={(v) => setShowSymbols(v === 'Symbol')}
+        data={['ID', 'Symbol']}
+      />
+      <SegmentedControl
+        size="xs"
+        value={scaled ? 'Scaled' : 'Unscaled'}
+        onChange={(v) => setScaled(v === 'Scaled')}
+        data={['Unscaled', 'Scaled']}
+      />
+    </Group>
+  );
+
+  if (title) {
+    return (
+      <CollapsibleSection title={title} storageKey={storageKey} rightSection={controls} mb="0">
+        <MantineReactTable table={table} />
+      </CollapsibleSection>
+    );
+  }
+
   return (
     <>
-      <Group justify="space-between" mb="xs">
-        {title && <Title order={4}>{title}</Title>}
-        <Group gap="sm">
-          {extraControls}
-          <SegmentedControl
-            size="xs"
-            value={showSymbols ? 'Symbol' : 'ID'}
-            onChange={(v) => setShowSymbols(v === 'Symbol')}
-            data={['ID', 'Symbol']}
-          />
-          <SegmentedControl
-            size="xs"
-            value={scaled ? 'Scaled' : 'Unscaled'}
-            onChange={(v) => setScaled(v === 'Scaled')}
-            data={['Unscaled', 'Scaled']}
-          />
-        </Group>
-      </Group>
+      <Group justify="flex-end" mb="xs">{controls}</Group>
       <MantineReactTable table={table} />
     </>
   );

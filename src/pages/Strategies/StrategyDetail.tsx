@@ -19,7 +19,8 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
-import { PnlSnapshot, RiskPolicy, Strategy, StrategySession, isActiveSession, StrategyStatus } from '../../types';
+import { PnlSnapshot, RiskPolicy, Strategy, StrategySession, isActiveSession } from '../../types';
+import { strategyActivity } from '../../utils/strategy-activity';
 import { registryApi } from '../../utils/api';
 import { formatRiskParameters } from '../../utils/risk-parameters';
 import DeploySessionModal from '../Sessions/DeploySessionModal';
@@ -52,18 +53,6 @@ import { SESSION_STATUS_COLORS } from '../../utils/session-status';
 const MODE_COLORS: Record<string, string> = {
   paper: 'violet',
   live: 'red',
-};
-
-const STATUS_LABELS: Record<number, string> = {
-  [StrategyStatus.INACTIVE]: 'Inactive',
-  [StrategyStatus.ACTIVE]: 'Active',
-  [StrategyStatus.PAUSED]: 'Paused',
-};
-
-const STATUS_COLORS: Record<number, string> = {
-  [StrategyStatus.INACTIVE]: 'gray',
-  [StrategyStatus.ACTIVE]: 'green',
-  [StrategyStatus.PAUSED]: 'yellow',
 };
 
 const POLL_INTERVAL_MS = 10000;
@@ -144,6 +133,8 @@ function StrategyDetail() {
   const killSwitch = findKillSwitch(policies, killSwitchTarget);
   const strategyKilled = isKilled(policiesLoaded ? policies : null, killSwitchTarget);
   const latestKillSwitchEntry = useLatestPolicyHistory(killSwitch);
+
+  const activity = strategyActivity(id, sessions, policiesLoaded ? policies : null);
 
   const confirmKillAction = async (reason: string | undefined) => {
     await setKillSwitch(killSwitch, killSwitchTarget, killAction === 'kill', reason);
@@ -360,11 +351,8 @@ function StrategyDetail() {
           <Title order={2}>
             {strategy ? strategy.name : `Strategy ${id}`}
           </Title>
-          {strategy && (
-            <Badge color={STATUS_COLORS[strategy.status]} variant="light" size="lg">
-              {STATUS_LABELS[strategy.status] ?? strategy.status}
-            </Badge>
-          )}
+          {strategy && <Badge color={activity.color} variant="light" size="lg">{activity.label}</Badge>}
+          {strategy?.archived && <Badge color="gray" variant="outline" size="lg">Archived</Badge>}
         </Group>
         <Group>
           <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={loadError !== null} />

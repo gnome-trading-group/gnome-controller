@@ -352,19 +352,19 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       body: listing,
     }),
-  listStrategies: (params?: { strategyId?: number; name?: string; status?: number }) => {
+  listStrategies: (params?: { strategyId?: number; name?: string; archived?: boolean }) => {
     const queryParams: Record<string, string | number | boolean> = {};
     if (params?.strategyId !== undefined) queryParams.strategyId = params.strategyId;
     if (params?.name) queryParams.name = params.name;
-    if (params?.status !== undefined) queryParams.status = params.status;
+    if (params?.archived !== undefined) queryParams.archived = params.archived;
     return sendApiRequest<Strategy[]>('/strategies', 'GET', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
-      preserveKeys: new Set(['args', 'config']),
+      preserveKeys: new Set(['args', 'config', 'overrides']),
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
   },
-  createStrategy: (strategy: Omit<Strategy, 'strategyId' | 'dateCreated' | 'dateModified'>) =>
+  createStrategy: (strategy: Omit<Strategy, 'strategyId' | 'dateCreated' | 'dateModified' | 'archived'>) =>
     sendApiRequest<Strategy>('/strategies', 'POST', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
@@ -540,6 +540,13 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
       queryParams: { search, limit },
+    }),
+  getOrchestratorProperties: (version?: string) =>
+    sendApiRequest<{ version: string; properties: Record<string, string> }>('/orchestrator/properties', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      preserveKeys: new Set(['properties']),
+      queryParams: version ? { version } : undefined,
     }),
   listListingsByIds: (listingIds: number[]) =>
     sendApiRequest<DenormalizedListing[]>('/listings', 'GET', {

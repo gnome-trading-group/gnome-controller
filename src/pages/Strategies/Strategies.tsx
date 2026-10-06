@@ -8,31 +8,22 @@ import {
   Group,
   Modal,
   Stack,
+  Switch,
   Text,
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconEdit, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconArchive, IconArchiveOff, IconEdit, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
-import { Strategy, StrategyStatus } from '../../types';
+import { RiskPolicy, Strategy } from '../../types';
+import { ACTIVE_SESSION_STATUSES, StrategySession } from '../../types/strategy-sessions';
+import { runningSessionCount, strategyActivity } from '../../utils/strategy-activity';
 import { registryApi } from '../../utils/api';
 import { navigateRowProps } from '../../utils/navigation';
 import { errorMessage } from '../../utils/kill-switch';
 import StrategyFormModal from './StrategyFormModal';
-
-const STATUS_LABELS: Record<number, string> = {
-  [StrategyStatus.INACTIVE]: 'Inactive',
-  [StrategyStatus.ACTIVE]: 'Active',
-  [StrategyStatus.PAUSED]: 'Paused',
-};
-
-const STATUS_COLORS: Record<number, string> = {
-  [StrategyStatus.INACTIVE]: 'gray',
-  [StrategyStatus.ACTIVE]: 'green',
-  [StrategyStatus.PAUSED]: 'yellow',
-};
 
 function Strategies() {
   const navigate = useNavigate();
@@ -44,21 +35,41 @@ function Strategies() {
   const [deleteTarget, setDeleteTarget] = useState<Strategy | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<StrategySession[]>([]);
+  const [policies, setPolicies] = useState<RiskPolicy[] | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await registryApi.listStrategies();
+      const [data, activeSessions, allPolicies] = await Promise.all([
+        registryApi.listStrategies(showArchived ? undefined : { archived: false }),
+        registryApi.listSessions({ status: ACTIVE_SESSION_STATUSES.join(',') }),
+        registryApi.listRiskPolicies(),
+      ]);
       setStrategies(data);
+      setSessions(activeSessions);
+      setPolicies(allPolicies);
       setLoadError(null);
     } catch (e) {
       setLoadError(errorMessage(e, 'Failed to load strategies'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const toggleArchived = async (strategy: Strategy) => {
+    setArchiveError(null);
+    try {
+      await registryApi.updateStrategy(strategy.strategyId, { archived: !strategy.archived });
+      refresh();
+    } catch (e) {
+      setArchiveError(errorMessage(e, `Failed to ${strategy.archived ? 'unarchive' : 'archive'} strategy`));
+    }
+  };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -84,16 +95,21 @@ function Strategies() {
       accessorKey: 'name',
       header: 'Name',
       enableSorting: true,
+      Cell: ({ row }: { row: MRT_Row<Strategy> }) => (
+        <Group gap="xs" wrap="nowrap">
+          <Text size="sm">{row.original.name}</Text>
+          {row.original.archived && <Badge color="gray" variant="outline" size="xs">Archived</Badge>}
+        </Group>
+      ),
     },
     {
-      accessorKey: 'status',
+      id: 'activity',
       header: 'Status',
-      enableSorting: true,
-      Cell: ({ row }: { row: MRT_Row<Strategy> }) => (
-        <Badge color={STATUS_COLORS[row.original.status]} variant="light">
-          {STATUS_LABELS[row.original.status] ?? row.original.status}
-        </Badge>
-      ),
+      accessorFn: (row) => strategyActivity(row.strategyId, sessions, policies).label,
+      Cell: ({ row }: { row: MRT_Row<Strategy> }) => {
+        const activity = strategyActivity(row.original.strategyId, sessions, policies);
+        return <Badge color={activity.color} variant="light">{activity.label}</Badge>;
+      },
     },
     {
       accessorKey: 'description',
@@ -109,7 +125,7 @@ function Strategies() {
           ? <ReactTimeAgo date={new Date(row.original.dateCreated)} timeStyle="round" />
           : '-',
     },
-  ], []);
+  ], [sessions, policies]);
 
   const table = useMantineReactTable({
     columns,
@@ -125,16 +141,31 @@ function Strategies() {
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     mantineTableBodyRowProps: ({ row }) => navigateRowProps(navigate, `/strategies/${row.original.strategyId}`),
     initialState: { sorting: [{ id: 'strategyId', desc: false }], density: 'xs' },
-    renderRowActions: ({ row }: { row: MRT_Row<Strategy> }) => (
-      <Group gap={4} justify="center" wrap="nowrap">
-        <ActionIcon variant="subtle" color="blue" onClick={(e) => { e.stopPropagation(); setEditTarget(row.original); setModalOpen(true); }}>
-          <IconEdit size={16} />
-        </ActionIcon>
-        <ActionIcon variant="subtle" color="red" onClick={(e) => { e.stopPropagation(); setDeleteTarget(row.original); setDeleteError(null); setDeleteModalOpen(true); }}>
-          <IconTrash size={16} />
-        </ActionIcon>
-      </Group>
-    ),
+    renderRowActions: ({ row }: { row: MRT_Row<Strategy> }) => {
+      const strategy = row.original;
+      const running = runningSessionCount(strategy.strategyId, sessions) > 0;
+      const archiveLabel = strategy.archived ? 'Unarchive' : running ? 'Stop its sessions before archiving' : 'Archive';
+      return (
+        <Group gap={4} justify="center" wrap="nowrap">
+          <ActionIcon variant="subtle" color="blue" onClick={(e) => { e.stopPropagation(); setEditTarget(strategy); setModalOpen(true); }}>
+            <IconEdit size={16} />
+          </ActionIcon>
+          <Tooltip label={archiveLabel} withArrow openDelay={500}>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              disabled={!strategy.archived && running}
+              onClick={(e) => { e.stopPropagation(); toggleArchived(strategy); }}
+            >
+              {strategy.archived ? <IconArchiveOff size={16} /> : <IconArchive size={16} />}
+            </ActionIcon>
+          </Tooltip>
+          <ActionIcon variant="subtle" color="red" onClick={(e) => { e.stopPropagation(); setDeleteTarget(strategy); setDeleteError(null); setDeleteModalOpen(true); }}>
+            <IconTrash size={16} />
+          </ActionIcon>
+        </Group>
+      );
+    },
   });
 
   return (
@@ -142,6 +173,12 @@ function Strategies() {
       <Group justify="space-between" mb="md">
         <Title order={2}>Strategies</Title>
         <Group>
+          <Switch
+            size="xs"
+            label="Show archived"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.currentTarget.checked)}
+          />
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="green" onClick={refresh}>
               <IconRefresh size={20} />
@@ -158,6 +195,11 @@ function Strategies() {
       {loadError && (
         <Alert color="red" title="Error" mb="md">
           {loadError}
+        </Alert>
+      )}
+      {archiveError && (
+        <Alert color="red" title="Error" mb="md" withCloseButton onClose={() => setArchiveError(null)}>
+          {archiveError}
         </Alert>
       )}
 
