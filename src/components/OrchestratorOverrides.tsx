@@ -46,10 +46,12 @@ export function OrchestratorOverridesEditor({ value, onChange, version }: Orches
 
   const properties = useMemo(() => catalog?.properties ?? {}, [catalog]);
 
-  // A value equal to the default isn't an override, so it's dropped rather than pinned.
-  const set = (key: string, raw: string | null) => {
+  // Typed values are only dropped when emptied: dropping one that matches the default would wipe the field mid-typing
+  // (typing 10000 passes through a 1000 default). A switch flipped back to its default is dropped, since that's
+  // "no override" rather than a value still being entered.
+  const set = (key: string, raw: string | null, dropIfDefault = false) => {
     const next = { ...value };
-    if (raw === null || raw === '' || raw === properties[key]) delete next[key];
+    if (raw === null || raw === '' || (dropIfDefault && raw === properties[key])) delete next[key];
     else next[key] = raw;
     onChange(next);
   };
@@ -68,7 +70,7 @@ export function OrchestratorOverridesEditor({ value, onChange, version }: Orches
           label={key}
           description={`Default: ${def === 'true' ? 'on' : 'off'}`}
           checked={(value[key] ?? def) === 'true'}
-          onChange={(e) => set(key, String(e.currentTarget.checked))}
+          onChange={(e) => set(key, String(e.currentTarget.checked), true)}
         />
       );
     }
