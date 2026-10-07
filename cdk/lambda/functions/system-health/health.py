@@ -256,6 +256,8 @@ def pipeline_row(name: str, region: str, structure: dict, state: dict, latest: d
         "name": name,
         "region": region,
         "status": latest.get("status") if latest else None,
+        # Each stage shows the latest run that reached it; stages this run hasn't reached show an earlier one's.
+        "runId": latest.get("pipelineExecutionId") if latest else None,
         "startedAt": _iso(latest.get("startTime")) if latest else None,
         "updatedAt": _iso(latest.get("lastUpdateTime")) if latest else None,
         "stages": stages,

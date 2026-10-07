@@ -23,6 +23,9 @@ export function ServiceStatus() {
       loading={alarms.isLoading}
       error={alarms.error}
       regionErrors={alarms.data?.errors}
+      asOf={alarms.data?.asOf}
+      onRefresh={alarms.refresh}
+      refreshing={alarms.refreshing}
     >
       {services.length === 0 ? <Text size="sm" c="dimmed">No alarms in this account.</Text> : (
         <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="sm">

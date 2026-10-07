@@ -117,7 +117,8 @@ def test_a_pipeline_reports_its_failed_stage_and_approvals_waiting_on_someone():
             {"actionName": "Deploy", "latestExecution": {"status": "InProgress"}},
         ]},
     ]}
-    row = health.pipeline_row("registry", "us-east-1", structure, state, {"status": "InProgress"}, NOW)
+    row = health.pipeline_row("registry", "us-east-1", structure, state, {"status": "InProgress", "pipelineExecutionId": "r9"}, NOW)
+    assert row["runId"] == "r9"
     assert row["waitingApprovals"] == [{"stage": "Prod", "action": "ApproveProd", "since": "2026-10-07T09:00:00+00:00",
                                         "waitingSeconds": 3 * 3600, "token": None, "executionId": None,
                                         "earlierStagesPassed": False, "revisions": []}]

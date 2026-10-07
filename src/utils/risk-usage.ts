@@ -35,3 +35,13 @@ export function formatLimit(policyType: string, value: string | null): string {
       return formatMoney(value, false).text;
   }
 }
+
+// The standing limit (not a per-order check) nearest to binding, or null when none has a reading.
+export function closestLimit(policies: PolicyUsage[] | undefined): { usage: number; label: string } | null {
+  let best: { usage: number; label: string } | null = null;
+  for (const policy of policies ?? []) {
+    if (policy.perOrder || policy.usage === null) continue;
+    if (best === null || policy.usage > best.usage) best = { usage: policy.usage, label: usageLabel(policy) };
+  }
+  return best;
+}

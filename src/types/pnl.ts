@@ -116,6 +116,8 @@ export interface PriceHistory {
 export interface DailyPnl {
   timeZone: string;
   days: { date: string; start: string; pnl: string }[];
+  // Only for the firm-wide read asked to break it down: each strategy's own days.
+  strategies?: { strategyId: number; days: { date: string; start: string; pnl: string }[] }[];
 }
 
 // How close a running session is to each risk limit that applies to it (registry /risk/usage).
@@ -190,7 +192,7 @@ export interface AttentionItem {
   since: string | null;
 }
 
-export type SeriesEventKind = 'SESSION_START' | 'SESSION_STOP' | 'RESET' | 'ADJUSTMENT' | 'GAP' | 'RECOVERY';
+export type SeriesEventKind = 'SESSION_START' | 'SESSION_STOP' | 'RESET' | 'ADJUSTMENT' | 'MANUAL' | 'GAP' | 'RECOVERY';
 
 export interface PnlSeries {
   resolutionMs: number;
@@ -213,7 +215,7 @@ export interface PnlSeries {
   strategies?: { strategyId: number; total: string[] }[];
 }
 
-export type FillSource = 'VENUE' | 'RECOVERY' | 'RESET' | 'ADJUSTMENT' | 'GAP';
+export type FillSource = 'VENUE' | 'RECOVERY' | 'RESET' | 'ADJUSTMENT' | 'MANUAL' | 'GAP';
 
 export interface LedgerFill {
   fillId: string;

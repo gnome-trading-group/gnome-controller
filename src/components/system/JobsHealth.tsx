@@ -17,6 +17,9 @@ export function JobsHealth() {
       loading={jobs.isLoading}
       error={jobs.error}
       regionErrors={jobs.data?.errors}
+      asOf={jobs.data?.asOf}
+      onRefresh={jobs.refresh}
+      refreshing={jobs.refreshing}
       right={overdue > 0 && <Badge color="red" variant="light">{overdue} overdue</Badge>}
     >
       {rows.length === 0 ? <Text size="sm" c="dimmed">No scheduled jobs in this account.</Text> : (

@@ -16,6 +16,9 @@ export function QueuesHealth() {
       loading={queues.isLoading}
       error={queues.error}
       regionErrors={queues.data?.errors}
+      asOf={queues.data?.asOf}
+      onRefresh={queues.refresh}
+      refreshing={queues.refreshing}
       right={dead > 0 && <Badge color="red" variant="light">{dead} dead-letter queue{dead > 1 ? 's' : ''} holding messages</Badge>}
     >
       {rows.length === 0 ? <Text size="sm" c="dimmed">No queues in this account.</Text> : (

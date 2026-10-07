@@ -1,4 +1,5 @@
-import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
+import { keepPreviousData, useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { controllerApi, registryApi, LedgerFilters, LedgerScope } from '../utils/api';
 import { ACTIVE_SESSION_STATUSES, isActiveSession, LedgerFill, LedgerOrder, Mode, PnlSeries, StrategySession } from '../types';
 import { mergeSeries } from './series';
@@ -116,12 +117,58 @@ export function useEventPositions(
   });
 }
 
-// System health changes slowly and its reads scan every region, so once a minute is plenty.
+// System health changes slowly and its reads scan every region, so once a minute is plenty. refresh() reads the
+// section fresh, past the backend's one-minute cache, for a section's refresh button or after an approval.
 export function useSystemHealth<T>(section: string) {
-  return useQuery({
+  const client = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+  const query = useQuery({
     queryKey: ['systemHealth', section],
     queryFn: () => controllerApi.getSystemHealth<T>(section),
     refetchInterval: 60_000,
+  });
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      client.setQueryData(['systemHealth', section], await controllerApi.getSystemHealth<T>(section, true));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [client, section]);
+  return { ...query, refresh, refreshing };
+}
+
+// The latest sessions of every strategy, newest first: enough for each strategy's last run and a week's timeline.
+const RECENT_SESSIONS = 300;
+
+export function useRecentSessions() {
+  return useQuery({
+    queryKey: ['recentSessions'],
+    queryFn: () => registryApi.listSessionsPaginated({
+      limit: RECENT_SESSIONS, offset: 0, sortBy: 'startedAt', sortOrder: 'desc',
+    }),
+    refetchInterval: POLL.sessions,
+  });
+}
+
+// Every strategy's daily PnL in a mode, for win rates and drawdowns across the strategies page.
+export function useDailyByStrategy(mode: Mode, tz: string, days: number) {
+  return useQuery({
+    queryKey: ['dailyByStrategy', mode, tz, days],
+    queryFn: () => registryApi.getDailyPnl({ mode }, tz, days, true),
+    refetchInterval: 300_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
+// Each running session's limit usage; a page of them at once.
+export function useRiskUsages(sessionIds: string[]) {
+  return useQueries({
+    queries: sessionIds.map(sessionId => ({
+      queryKey: ['riskUsage', sessionId],
+      queryFn: () => registryApi.getRiskUsage(sessionId),
+      refetchInterval: POLL.summary,
+    })),
   });
 }
 

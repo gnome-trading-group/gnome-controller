@@ -6,8 +6,9 @@ import {
 } from 'lightweight-charts';
 import { usePreferences } from '../../context/PreferencesContext';
 import { LedgerFill, PnlSeries, PriceHistory } from '../../types';
-import { formatMoney, formatPrice, formatQty, moneyToNumber, sizeToNumber } from '../../utils/format';
-import { chartPoints, chartTime, ChartPoint, snapToPoint } from './chart-data';
+import { formatMoney, formatPrice, formatQty, formatTime, moneyToNumber, sizeToNumber } from '../../utils/format';
+import { chartPoints, chartTime, ChartPoint, fromChartTime, snapToPoint } from './chart-data';
+import { ChartTooltip, TooltipState } from './ChartTooltip';
 
 // Past this many fills a marker's text would bury the price line; the markers alone still show where trading was.
 const LABELLED_FILLS = 40;
@@ -52,6 +53,23 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
 
   const price = useMemo(() => (v: number) => formatPrice(BigInt(Math.round(v * 1e9)), { tickSize, cents, derived: true }), [tickSize, cents]);
   const quantity = useMemo(() => (v: number) => formatQty(BigInt(Math.round(v * 1e6)), lotSize), [lotSize]);
+  const money = (v: number) => formatMoney(BigInt(Math.round(v * 1e9))).text;
+  const [hover, setHover] = useState<{ time: number; x: number; y: number } | null>(null);
+
+  // The chart and its tooltip read the same points.
+  const lines = useMemo(() => {
+    const listing = series?.listings[0];
+    return {
+      mark: prices ? known(chartPoints(prices.t, prices.mark.map(moneyToNumber), timeZone)) : [],
+      bid: prices ? known(chartPoints(prices.t, prices.bid.map(moneyToNumber), timeZone)) : [],
+      ask: prices ? known(chartPoints(prices.t, prices.ask.map(moneyToNumber), timeZone)) : [],
+      position: series && listing ? chartPoints(series.t, listing.netQuantity.map(sizeToNumber), timeZone) : [],
+      pnl: series && listing ? chartPoints(series.t, listing.total.map(moneyToNumber), timeZone) : [],
+    };
+  }, [prices, series, timeZone]);
+  const traded = useMemo(() => (fills ?? [])
+    .filter(f => f.fillPrice !== null && f.side !== null)
+    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt)), [fills]);
 
   useEffect(() => {
     if (!container.current) return;
@@ -86,6 +104,8 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
     }, 2);
     created.panes()[1]?.setHeight(Math.round(height * 0.2));
     created.panes()[2]?.setHeight(Math.round(height * 0.2));
+    created.subscribeCrosshairMove(param => setHover(param.time === undefined || !param.point
+      ? null : { time: Number(param.time), x: param.point.x, y: param.point.y }));
     drawn.current = { mark, bid, ask, position, pnl, markers: createSeriesMarkers(mark, []) };
     fitted.current = null;
     setChart(created);
@@ -99,17 +119,13 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
   useEffect(() => {
     const d = drawn.current;
     if (!chart || !d) return;
-    const markPoints = prices ? known(chartPoints(prices.t, prices.mark.map(moneyToNumber), timeZone)) : [];
+    const markPoints = lines.mark;
     d.mark.setData(data(markPoints));
-    d.bid.setData(data(prices ? known(chartPoints(prices.t, prices.bid.map(moneyToNumber), timeZone)) : []));
-    d.ask.setData(data(prices ? known(chartPoints(prices.t, prices.ask.map(moneyToNumber), timeZone)) : []));
-    const listing = series?.listings[0];
-    d.position.setData(data(series && listing ? chartPoints(series.t, listing.netQuantity.map(sizeToNumber), timeZone) : []));
-    d.pnl.setData(data(series && listing ? chartPoints(series.t, listing.total.map(moneyToNumber), timeZone) : []));
+    d.bid.setData(data(lines.bid));
+    d.ask.setData(data(lines.ask));
+    d.position.setData(data(lines.position));
+    d.pnl.setData(data(lines.pnl));
 
-    const traded = (fills ?? [])
-      .filter(f => f.fillPrice !== null && f.side !== null)
-      .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt));
     const labelled = traded.length <= LABELLED_FILLS;
     const markers: SeriesMarker<Time>[] = [];
     for (const f of traded) {
@@ -132,7 +148,40 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
       fitted.current = key;
       chart.timeScale().fitContent();
     }
-  }, [chart, prices, series, fills, timeZone, tickSize, lotSize, cents]);
+  }, [chart, lines, traded, prices, timeZone, tickSize, lotSize, cents]);
+
+  const at = (points: ChartPoint[], time: number) => [...points].reverse().find(p => p.time <= time);
+  const tooltip: TooltipState | null = hover && (() => {
+    const row = (label: string, color: string, points: ChartPoint[], format: (v: number) => string) => {
+      const point = at(points, hover.time);
+      return { label, color, value: point === undefined ? '—' : format(point.value) };
+    };
+    // Fills drawn at this point: those between it and the next price point.
+    const next = lines.mark.find(p => p.time > hover.time)?.time ?? Infinity;
+    const here = traded.filter(f => {
+      const t = chartTime(Date.parse(f.recordedAt), timeZone);
+      return t >= hover.time && t < next;
+    });
+    const fillRows = here.slice(0, 3).map((f, i) => ({
+      label: `${f.side === 0 ? 'Bought' : 'Sold'}${here.length > 1 ? ` #${i + 1}` : ''}`,
+      color: f.side === 0 ? '#38d9a9' : '#ff6b6b',
+      value: `${formatQty(f.fillQty, lotSize)} @ ${formatPrice(f.fillPrice, { tickSize, cents })}`,
+    }));
+    if (here.length > 3) fillRows.push({ label: `and ${here.length - 3} more fills`, color: '', value: '' });
+    return {
+      x: hover.x,
+      y: hover.y,
+      title: formatTime(fromChartTime(hover.time, timeZone), timeZone),
+      rows: [
+        row('Mark', '#4dabf7', lines.mark, price),
+        row('Bid', '#38d9a9', lines.bid, price),
+        row('Ask', '#ff6b6b', lines.ask, price),
+        row('Position', '#ffa94d', lines.position, quantity),
+        row('PnL', '#da77f2', lines.pnl, money),
+        ...fillRows,
+      ],
+    };
+  })();
 
   const empty = !loading && prices !== undefined && prices.t.length === 0;
   return (
@@ -148,6 +197,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
       </Group>
       <Box pos="relative" h={height}>
         <div ref={container} style={{ position: 'absolute', inset: 0 }} />
+        <ChartTooltip tooltip={tooltip} chartWidth={container.current?.clientWidth ?? 0} />
         {loading && !prices && <Group pos="absolute" inset={0} justify="center"><Loader size="sm" /></Group>}
         {empty && <Group pos="absolute" inset={0} justify="center"><Text size="sm" c="dimmed">No prices recorded in this window</Text></Group>}
       </Box>

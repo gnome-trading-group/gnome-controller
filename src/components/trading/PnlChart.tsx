@@ -8,6 +8,7 @@ import { usePreferences } from '../../context/PreferencesContext';
 import { PnlSeries, SeriesEventKind } from '../../types';
 import { formatMoney, formatQty, formatTime, moneyToNumber, sizeToNumber } from '../../utils/format';
 import { chartPoints, ChartPoint, chartTime, drawdown, fromChartTime, snapToPoint } from './chart-data';
+import { ChartTooltip, TooltipState } from './ChartTooltip';
 
 export type ChartView = 'total' | 'listings' | 'position' | 'fees';
 
@@ -18,6 +19,7 @@ const EVENT_STYLE: Record<SeriesEventKind, { color: string; shape: 'arrowUp' | '
   SESSION_STOP: { color: '#868e96', shape: 'arrowDown', text: 'stop' },
   RESET: { color: '#fa5252', shape: 'square', text: 'reset' },
   ADJUSTMENT: { color: '#fd7e14', shape: 'square', text: 'adjusted' },
+  MANUAL: { color: '#fab005', shape: 'square', text: 'manual trade' },
   GAP: { color: '#fa5252', shape: 'circle', text: 'gap' },
   RECOVERY: { color: '#4dabf7', shape: 'circle', text: 'recovered' },
 };
@@ -62,7 +64,7 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
   // The series drawn for the current set of lines, kept across polls so new data updates them in place.
   const drawn = useRef<{ lines: ISeriesApi<SeriesType>[]; drawdown: ISeriesApi<SeriesType> | null;
     markers: ISeriesMarkersPluginApi<Time> | null } | null>(null);
-  const [hover, setHover] = useState<number | null>(null);
+  const [hover, setHover] = useState<{ time: number; x: number; y: number } | null>(null);
 
   const lines = useMemo<Line[]>(() => {
     if (!series) return [];
@@ -88,6 +90,8 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
     }
   }, [series, view, timeZone]);
 
+  const drawdownPoints = useMemo(() => (view === 'total' && lines.length > 0 ? drawdown(lines[0].points) : []), [view, lines]);
+
   // Which series exist: a different view or a different set of listings draws new ones. Anything else (a poll's new
   // points) only updates their data, which keeps the viewer's zoom and lets the chart follow the newest point.
   const structure = `${view}|${lines.map(l => l.name).join(',')}`;
@@ -110,7 +114,8 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
       timeScale: { timeVisible: true, secondsVisible: true, borderVisible: false },
       rightPriceScale: { borderVisible: false },
     });
-    created.subscribeCrosshairMove(param => setHover(param.time === undefined ? null : Number(param.time)));
+    created.subscribeCrosshairMove(param => setHover(param.time === undefined || !param.point
+      ? null : { time: Number(param.time), x: param.point.x, y: param.point.y }));
     setChart(created);
     return () => {
       // Its series go with it; React may run the series effect's cleanup after this one, so that must not touch it.
@@ -167,7 +172,7 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
       current.lines[i].setData(line.points.map(p => ({ time: p.time as UTCTimestamp, value: p.value })));
     });
     if (current.drawdown) {
-      current.drawdown.setData(drawdown(lines[0].points).map(p => ({ time: p.time as UTCTimestamp, value: p.value })));
+      current.drawdown.setData(drawdownPoints.map(p => ({ time: p.time as UTCTimestamp, value: p.value })));
     }
     if (current.markers && series) {
       const markers: SeriesMarker<Time>[] = [];
@@ -185,15 +190,29 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
       fitted.current = key;
       chart.timeScale().fitContent();
     }
-  }, [chart, lines, series, structure, timeZone]);
+  }, [chart, lines, drawdownPoints, series, structure, timeZone]);
 
-  const legendTime = hover ?? lines[0]?.points[lines[0].points.length - 1]?.time ?? null;
+  const legendTime = hover?.time ?? lines[0]?.points[lines[0].points.length - 1]?.time ?? null;
+  const valueAt = (line: Line, time: number) => [...line.points].reverse().find(p => p.time <= time);
+  // The Total view's lower pane: how far below its best the total sits at the hovered time.
+  const drawdownLine: Line | null = view === 'total' && lines.length > 0
+    ? { name: 'Drawdown', color: 'rgba(250,82,82,0.8)', points: drawdownPoints, format: money, minMove: MONEY_STEP }
+    : null;
+  const tooltip: TooltipState | null = hover && {
+    x: hover.x,
+    y: hover.y,
+    title: formatTime(fromChartTime(hover.time, timeZone), timeZone),
+    rows: [...lines, ...(drawdownLine ? [drawdownLine] : [])].map(line => {
+      const point = valueAt(line, hover.time);
+      return { label: line.name, color: line.color, value: point === undefined ? '—' : line.format(point.value) };
+    }),
+  };
   return (
     <Box>
       <Group justify="space-between" mb={6} wrap="nowrap">
         <Group gap="md" wrap="wrap" style={{ minHeight: 22 }}>
           {legendTime !== null && lines.map(line => {
-            const point = [...line.points].reverse().find(p => p.time <= legendTime);
+            const point = valueAt(line, legendTime);
             return (
               <Group key={line.name} gap={4} wrap="nowrap">
                 <Box w={10} h={3} style={{ background: line.color, borderRadius: 2 }} />
@@ -219,6 +238,7 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
       </Group>
       <Box pos="relative" h={height}>
         <div ref={container} style={{ position: 'absolute', inset: 0 }} />
+        <ChartTooltip tooltip={tooltip} chartWidth={container.current?.clientWidth ?? 0} />
         {loading && !series && (
           <Group pos="absolute" inset={0} justify="center"><Loader size="sm" /></Group>
         )}

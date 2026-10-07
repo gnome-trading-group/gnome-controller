@@ -6,6 +6,7 @@ import {
   Container,
   Group,
   Select,
+  Text,
   Title,
   Tooltip,
 } from '@mantine/core';
@@ -13,7 +14,8 @@ import { IconAB2, IconEye, IconPlayerStop, IconPlus, IconRefresh } from '@tabler
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
-import { Strategy, StrategySession, isActiveSession } from '../../types';
+import { useQueryClient } from '@tanstack/react-query';
+import { StrategySession, StrategySessionStatus, isActiveSession } from '../../types';
 import { registryApi } from '../../utils/api';
 import { StopSessionModal } from './StopSessionModal';
 import { navigateRowProps, handleNavigateClick } from '../../utils/navigation';
@@ -21,10 +23,20 @@ import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import DeploySessionModal from './DeploySessionModal';
 import { SESSION_STATUS_COLORS } from '../../utils/session-status';
-import { MODE_COLORS } from '../../utils/mode';
 import { LastUpdated } from '../../components/LastUpdated';
+import { ModeBand, ModeSwitch } from '../../components/trading/layout';
+import { Money } from '../../components/trading/values';
+import { CollapsibleSection } from '../../components/CollapsibleSection';
+import { useModeParam } from '../../hooks/useModeParam';
+import { keys, useActiveSessions, useRecentSessions, useSessionsTotals, useStrategies } from '../../query/hooks';
+import { formatDuration } from '../../utils/format';
+import { RunningSessions } from './RunningSessions';
+import { SessionTimeline } from './SessionTimeline';
 
 const POLL_INTERVAL_MS = 5000;
+const TIMELINE_DAYS = 7;
+
+const failedReason = (s: StrategySession) => (s.status === StrategySessionStatus.FAILED ? s.failureReason : null);
 
 
 const STATUS_OPTIONS = [
@@ -37,10 +49,29 @@ const STATUS_OPTIONS = [
   { value: 'FAILED', label: 'Failed' },
 ];
 
+// What's running now, how sessions have come and gone over the last week, and the full history to search.
 function SessionsList() {
   const navigate = useNavigate();
-  const [strategyMap, setStrategyMap] = useState<Record<number, string>>({});
-  const [strategyOptions, setStrategyOptions] = useState<{ value: string; label: string }[]>([]);
+  const queryClient = useQueryClient();
+  const [mode, setMode] = useModeParam(undefined);
+  const strategies = useStrategies();
+  const active = useActiveSessions();
+  const recent = useRecentSessions();
+  const strategyMap = useMemo(
+    () => Object.fromEntries((strategies.data ?? []).map(s => [s.strategyId, s.name])) as Record<number, string>,
+    [strategies.data],
+  );
+  const strategyOptions = useMemo(
+    () => [{ value: '', label: 'All strategies' }, ...(strategies.data ?? []).map(s => ({ value: String(s.strategyId), label: s.name }))],
+    [strategies.data],
+  );
+  const strategyName = useCallback((id: number) => strategyMap[id] ?? `Strategy ${id}`, [strategyMap]);
+  const running = useMemo(
+    () => (active.data ?? []).filter(s => s.mode === mode)
+      .sort((a, b) => (b.startedAt ?? b.dateCreated).localeCompare(a.startedAt ?? a.dateCreated)),
+    [active.data, mode],
+  );
+  const timelineSessions = useMemo(() => (recent.data ?? []).filter(s => s.mode === mode), [recent.data, mode]);
   const [deployOpen, setDeployOpen] = useState(false);
   const [stopTarget, setStopTarget] = useState<StrategySession | null>(null);
   const [relaunchSession, setRelaunchSession] = useState<StrategySession | null>(null);
@@ -52,24 +83,12 @@ function SessionsList() {
   const setStatusFilter = useCallback((v: string | null) => urlState.setParam('status', v ?? ''), [urlState.setParam]);
   const setStrategyFilter = useCallback((v: string | null) => urlState.setParam('strategy', v ?? ''), [urlState.setParam]);
 
-  useEffect(() => {
-    registryApi.listStrategies().then((list: Strategy[]) => {
-      const map: Record<number, string> = {};
-      list.forEach(s => { map[s.strategyId] = s.name; });
-      setStrategyMap(map);
-      setStrategyOptions([
-        { value: '', label: 'All strategies' },
-        ...list.map(s => ({ value: String(s.strategyId), label: s.name })),
-      ]);
-    }).catch(() => {});
-  }, []);
-
   const extraParams = useMemo(() => {
-    const p: Record<string, string | number | boolean> = {};
+    const p: Record<string, string | number | boolean> = { mode };
     if (statusFilter) p.status = statusFilter;
     if (strategyFilter) p.strategyId = parseInt(strategyFilter);
     return p;
-  }, [statusFilter, strategyFilter]);
+  }, [statusFilter, strategyFilter, mode]);
 
   const { data, total, isLoading, error, lastUpdated, pagination, sorting, globalFilter, setPagination, setSorting, setGlobalFilter, refresh, silentRefresh } =
     useServerPaginatedTable<StrategySession>({
@@ -86,6 +105,10 @@ function SessionsList() {
         setGlobalFilter: urlState.setGlobalFilter,
       },
     });
+
+  const pageIds = useMemo(() => data.map(s => s.sessionId), [data]);
+  const pageTotals = useSessionsTotals(pageIds, data.some(s => isActiveSession(s.status)));
+  const totalsById = useMemo(() => new Map((pageTotals.data ?? []).map(t => [t.sessionId, t])), [pageTotals.data]);
 
   const columns = useMemo<MRT_ColumnDef<StrategySession>[]>(() => [
     {
@@ -111,21 +134,16 @@ function SessionsList() {
       accessorKey: 'status',
       header: 'Status',
       size: 110,
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
-        <Badge color={SESSION_STATUS_COLORS[row.original.status] ?? 'gray'} variant="light" size="sm">
-          {row.original.status}
-        </Badge>
-      ),
-    },
-    {
-      accessorKey: 'mode',
-      header: 'Mode',
-      size: 90,
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
-        <Badge color={MODE_COLORS[row.original.mode] ?? 'gray'} variant="light" size="sm">
-          {row.original.mode}
-        </Badge>
-      ),
+      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => {
+        const reason = failedReason(row.original);
+        return (
+          <Tooltip label={reason} disabled={!reason} multiline w={320} withArrow>
+            <Badge color={SESSION_STATUS_COLORS[row.original.status] ?? 'gray'} variant="light" size="sm">
+              {row.original.status}
+            </Badge>
+          </Tooltip>
+        );
+      },
     },
     {
       accessorKey: 'startedAt',
@@ -137,15 +155,58 @@ function SessionsList() {
           : '—',
     },
     {
-      accessorKey: 'dateCreated',
-      header: 'Created',
-      size: 130,
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) =>
-        row.original.dateCreated
-          ? <ReactTimeAgo date={new Date(row.original.dateCreated)} timeStyle="round" />
-          : '—',
+      id: 'duration',
+      header: 'Ran for',
+      size: 100,
+      enableSorting: false,
+      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => {
+        const { startedAt, stoppedAt } = row.original;
+        if (!startedAt) return '—';
+        return formatDuration((stoppedAt ? Date.parse(stoppedAt) : Date.now()) - Date.parse(startedAt));
+      },
     },
-  ], [strategyMap]);
+    {
+      id: 'pnl',
+      header: 'Session PnL',
+      size: 110,
+      enableSorting: false,
+      mantineTableHeadCellProps: { align: 'right' },
+      mantineTableBodyCellProps: { align: 'right' },
+      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
+        <Money value={totalsById.get(row.original.sessionId)?.totals.total ?? null} size="sm" />
+      ),
+    },
+    {
+      id: 'fills',
+      header: 'Fills',
+      size: 70,
+      enableSorting: false,
+      mantineTableHeadCellProps: { align: 'right' },
+      mantineTableBodyCellProps: { align: 'right' },
+      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => totalsById.get(row.original.sessionId)?.fills ?? '—',
+    },
+    {
+      id: 'opening',
+      header: 'Started with',
+      size: 110,
+      enableSorting: false,
+      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => {
+        const opening = totalsById.get(row.original.sessionId)?.opening;
+        if (opening === 'INHERITED') return <Badge size="xs" variant="outline" color="blue">Inherited</Badge>;
+        if (opening === 'FLAT') return <Text span size="xs" c="dimmed">Flat</Text>;
+        return <Text span size="xs" c="dimmed">—</Text>;
+      },
+    },
+    {
+      accessorKey: 'orchestratorVersion',
+      header: 'Version',
+      size: 90,
+      enableSorting: false,
+      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
+        <Text span size="xs" ff="monospace">{row.original.orchestratorVersion ?? '—'}</Text>
+      ),
+    },
+  ], [strategyMap, totalsById]);
 
   useEffect(() => {
     const interval = setInterval(silentRefresh, POLL_INTERVAL_MS);
@@ -153,6 +214,11 @@ function SessionsList() {
   }, [silentRefresh]);
 
   const isStoppable = (s: StrategySession) => isActiveSession(s.status);
+  const refreshAll = () => {
+    refresh();
+    queryClient.invalidateQueries({ queryKey: keys.activeSessions });
+    queryClient.invalidateQueries({ queryKey: ['recentSessions'] });
+  };
 
   const table = useMantineReactTable({
     columns,
@@ -201,9 +267,34 @@ function SessionsList() {
   return (
     <Container size="xl" py="xl">
       <Group justify="space-between" mb="md">
-        <Title order={2}>Strategy Sessions</Title>
-        <Group>
-          <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={error !== null} />
+        <Group gap="sm">
+          <Title order={2}>Sessions</Title>
+          <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={error !== null} compact />
+        </Group>
+        <Group gap="xs">
+          <ModeSwitch mode={mode} onChange={setMode} />
+          <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
+            <ActionIcon size="lg" variant="filled" color="green" onClick={refreshAll} loading={isLoading}>
+              <IconRefresh size={20} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Deploy Session" position="bottom" withArrow openDelay={500}>
+            <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setDeployOpen(true)}>
+              <IconPlus size={20} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
+      </Group>
+      <ModeBand mode={mode} />
+
+      <Title order={4} mb="xs">Running now{running.length > 0 ? ` (${running.length})` : ''}</Title>
+      <RunningSessions sessions={running} strategyName={strategyName} onStop={setStopTarget} />
+
+      <SessionTimeline sessions={timelineSessions} days={TIMELINE_DAYS} strategyName={strategyName} failedReason={failedReason} />
+
+      <CollapsibleSection title="History" storageKey="sessions-history">
+      <Group justify="flex-end" mb="xs">
+        <Group gap="xs">
           <Select
             size="sm"
             data={STATUS_OPTIONS}
@@ -221,16 +312,6 @@ function SessionsList() {
             placeholder="All strategies"
             w={180}
           />
-          <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={isLoading}>
-              <IconRefresh size={20} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Deploy Session" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="blue" onClick={() => setDeployOpen(true)}>
-              <IconPlus size={20} />
-            </ActionIcon>
-          </Tooltip>
         </Group>
       </Group>
 
@@ -241,6 +322,7 @@ function SessionsList() {
       )}
 
       <MantineReactTable table={table} />
+      </CollapsibleSection>
 
       <DeploySessionModal
         opened={deployOpen || !!relaunchSession}
@@ -250,12 +332,12 @@ function SessionsList() {
           setDeployOpen(false);
           setRelaunchSession(null);
           if (wasRelaunch) navigate(`/sessions/${newSessionId}`);
-          else refresh();
+          else refreshAll();
         }}
         initialSession={relaunchSession}
       />
 
-      <StopSessionModal session={stopTarget} onClose={() => setStopTarget(null)} onStopped={() => refresh()} />
+      <StopSessionModal session={stopTarget} onClose={() => setStopTarget(null)} onStopped={refreshAll} />
     </Container>
   );
 }

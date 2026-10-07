@@ -8,7 +8,7 @@ import { ListingLabel, Money, Price, Qty, SideLabel, Time } from './values';
 import { OrderDrawer } from './OrderDrawer';
 
 const SOURCE_COLORS: Record<string, string> = {
-  VENUE: 'gray', RECOVERY: 'blue', RESET: 'red', ADJUSTMENT: 'orange', GAP: 'red',
+  VENUE: 'gray', RECOVERY: 'blue', RESET: 'red', ADJUSTMENT: 'orange', MANUAL: 'yellow', GAP: 'red',
 };
 
 const CLOSE_COLORS: Record<string, string> = {

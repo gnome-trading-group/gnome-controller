@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Anchor, Badge, Button, Group, Stack, Table, Text } from '@mantine/core';
-import { useQueryClient } from '@tanstack/react-query';
 import ReactTimeAgo from 'react-time-ago';
 import { PipelinesSection, PipelineRow, WaitingApproval } from '../../types';
-import { controllerApi } from '../../utils/api';
 import { ApprovalDialog, ApprovalTarget } from './ApprovalDialog';
+import { PipelineFlow } from './PipelineFlow';
 import { useSystemHealth } from '../../query/hooks';
 import { formatSeconds } from '../../utils/system';
 import { SectionCard } from './SectionCard';
@@ -46,13 +45,7 @@ function Waiting({ pipeline, approval, canApprove, onDecide }: {
 
 export function DeploysHealth() {
   const pipelines = useSystemHealth<PipelinesSection>('pipelines');
-  const queryClient = useQueryClient();
   const [target, setTarget] = useState<ApprovalTarget | null>(null);
-  // The section is cached for a minute; after a decision, read it fresh so the page shows it straight away.
-  const refresh = async () => {
-    const fresh = await controllerApi.getSystemHealth<PipelinesSection>('pipelines', true);
-    queryClient.setQueryData(['systemHealth', 'pipelines'], fresh);
-  };
   const rows = pipelines.data?.pipelines ?? [];
   const waiting = rows.reduce((sum, p) => sum + p.waitingApprovals.length, 0);
   return (
@@ -62,6 +55,9 @@ export function DeploysHealth() {
       loading={pipelines.isLoading}
       error={pipelines.error}
       regionErrors={pipelines.data?.errors}
+      asOf={pipelines.data?.asOf}
+      onRefresh={pipelines.refresh}
+      refreshing={pipelines.refreshing}
       right={waiting > 0 && <Badge color="orange" variant="light">{waiting} approval{waiting > 1 ? 's' : ''} waiting</Badge>}
     >
       {rows.length === 0 ? <Text size="sm" c="dimmed">No pipelines in this account.</Text> : (
@@ -89,14 +85,7 @@ export function DeploysHealth() {
                     {p.updatedAt && <Text size="xs" c="dimmed"><ReactTimeAgo date={new Date(p.updatedAt)} timeStyle="round" /></Text>}
                   </Stack>
                 </Table.Td>
-                <Table.Td>
-                  <Group gap={4}>
-                    {p.stages.map(s => (
-                      <Badge key={s.name} size="xs" variant={s.name === p.failedStage ? 'filled' : 'light'}
-                        color={STATUS_COLORS[s.status ?? ''] ?? 'gray'}>{s.name}</Badge>
-                    ))}
-                  </Group>
-                </Table.Td>
+                <Table.Td><PipelineFlow pipeline={p} /></Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
@@ -105,7 +94,7 @@ export function DeploysHealth() {
       {pipelines.data && !pipelines.data.canApprove && waiting > 0 && (
         <Text size="xs" c="dimmed" mt="xs">Approvals can be made from the prod controller.</Text>
       )}
-      <ApprovalDialog target={target} onClose={() => setTarget(null)} onDecided={refresh} />
+      <ApprovalDialog target={target} onClose={() => setTarget(null)} onDecided={pipelines.refresh} />
     </SectionCard>
   );
 }

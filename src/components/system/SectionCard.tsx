@@ -1,16 +1,22 @@
 import { ReactNode } from 'react';
-import { Alert, Card, Group, Loader, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Card, Group, Loader, Text, Tooltip } from '@mantine/core';
+import { IconRefresh } from '@tabler/icons-react';
+import ReactTimeAgo from 'react-time-ago';
 import { RegionError } from '../../types';
 
 // One section of the System page: its title, whether it loaded, and any regions it couldn't read, so a partial view
 // never passes for a complete one.
-export function SectionCard({ title, subtitle, loading, error, regionErrors, children, right }: {
+export function SectionCard({ title, subtitle, loading, error, regionErrors, children, right, asOf, onRefresh, refreshing }: {
   title: string;
   subtitle?: string;
   loading: boolean;
   error: unknown;
   regionErrors?: RegionError[];
   right?: ReactNode;
+  // When the section was read, and how to read it again now rather than at the next minute.
+  asOf?: string;
+  onRefresh?: () => void;
+  refreshing?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -20,7 +26,17 @@ export function SectionCard({ title, subtitle, loading, error, regionErrors, chi
           <Text fw={600}>{title}</Text>
           {subtitle && <Text size="xs" c="dimmed">{subtitle}</Text>}
         </div>
-        {right}
+        <Group gap="xs" wrap="nowrap">
+          {right}
+          {asOf && <Text size="xs" c="dimmed"><ReactTimeAgo date={new Date(asOf)} timeStyle="round" /></Text>}
+          {onRefresh && (
+            <Tooltip label="Refresh this section" withArrow openDelay={400}>
+              <ActionIcon variant="subtle" color="gray" onClick={onRefresh} loading={refreshing} aria-label={`Refresh ${title}`}>
+                <IconRefresh size={16} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+        </Group>
       </Group>
       {error ? (
         <Alert color="red" variant="light">Couldn't load this section: {error instanceof Error ? error.message : String(error)}</Alert>

@@ -24,6 +24,9 @@ export function DatabaseHealth() {
       loading={databases.isLoading}
       error={databases.error}
       regionErrors={databases.data?.errors}
+      asOf={databases.data?.asOf}
+      onRefresh={() => { databases.refresh(); tables.refetch(); }}
+      refreshing={databases.refreshing || tables.isFetching}
     >
       {(databases.data?.databases ?? []).length === 0 && <Text size="sm" c="dimmed">No databases in this account.</Text>}
       <Stack gap="lg">

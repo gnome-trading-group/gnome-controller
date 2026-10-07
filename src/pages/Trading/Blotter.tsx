@@ -13,7 +13,8 @@ const SOURCES = [
   { value: 'VENUE', label: 'Venue fills' },
   { value: 'RECOVERY', label: 'Recovered' },
   { value: 'RESET', label: 'Resets' },
-  { value: 'ADJUSTMENT', label: 'Adjustments' },
+  { value: 'ADJUSTMENT', label: 'Corrections' },
+  { value: 'MANUAL', label: 'Manual trades' },
   { value: 'GAP', label: 'Gaps' },
 ];
 

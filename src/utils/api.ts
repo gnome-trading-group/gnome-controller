@@ -36,7 +36,7 @@ export type LedgerScope = { sessionId: string } | { strategyId: number; mode: Mo
 export interface LedgerFilters {
   listingId?: number;
   side?: 0 | 1;
-  // Fills only: VENUE, RECOVERY, RESET, ADJUSTMENT, GAP (comma-separated).
+  // Fills only: VENUE, RECOVERY, RESET, ADJUSTMENT, MANUAL, GAP (comma-separated).
   source?: string;
   start?: string;
   end?: string;
@@ -662,10 +662,10 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       queryParams: { mode },
     }),
-  getDailyPnl: (scope: { strategyId?: number; mode: Mode }, tz: string, days: number) =>
+  getDailyPnl: (scope: { strategyId?: number; mode: Mode }, tz: string, days: number, byStrategy = false) =>
     sendApiRequest<DailyPnl>('/pnl/daily', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      queryParams: definedParams({ ...scope, tz, days }),
+      queryParams: definedParams({ ...scope, tz, days, byStrategy: byStrategy ? 'true' : undefined }),
     }),
   getMarks: (listingId: number, start?: string) =>
     sendApiRequest<PriceHistory>('/ledger/marks', 'GET', {
@@ -697,9 +697,11 @@ export const registryApi = {
       queryParams: definedParams({ ...scope, ...page }),
     }),
   // Cognito only and audited: sets what a strategy holds on a listing, while no session holds it.
-  adjustPosition: (adjustment: {
-    strategyId: number; listingId: number; mode: Mode; netQuantity: string; totalCost: string; reason: string;
-  }) =>
+  // Either a trade booked by hand or a correction setting the position outright; see AdjustPositionModal.
+  adjustPosition: (adjustment: { strategyId: number; listingId: number; mode: Mode; reason: string } & (
+    | { trade: { side: 0 | 1; qty: string; price: string; fee: string } }
+    | { netQuantity: string; totalCost: string }
+  )) =>
     sendApiRequest<unknown>('/ledger/adjustments', 'POST', {
       apiUrl: REGISTRY_API_URL,
       body: adjustment,

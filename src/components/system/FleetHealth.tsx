@@ -19,6 +19,9 @@ export function FleetHealth() {
       loading={fleet.isLoading}
       error={fleet.error}
       regionErrors={fleet.data?.errors}
+      asOf={fleet.data?.asOf}
+      onRefresh={fleet.refresh}
+      refreshing={fleet.refreshing}
     >
       {rows.length === 0 ? <Text size="sm" c="dimmed">No instances running.</Text> : (
         <Table verticalSpacing={6} fz="sm" striped>

@@ -94,6 +94,8 @@ export interface PipelineRow {
   name: string;
   region: string;
   status: string | null;
+  // The latest run; a stage whose executionId differs last ran in an earlier run.
+  runId: string | null;
   startedAt: string | null;
   updatedAt: string | null;
   stages: { name: string; status: string | null; executionId: string | null }[];
