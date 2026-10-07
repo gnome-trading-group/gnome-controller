@@ -1,6 +1,6 @@
 import { fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
-import { AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
+import { AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse, ResearchArtifactListResponse, ResearchDatasetListResponse } from '../types/research';
 import { PipelineListResponse, PipelineDetailResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
@@ -650,6 +650,8 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       queryParams: scope,
     }),
+  getTableSizes: () =>
+    sendApiRequest<TableSizes>('/monitoring/tables', 'GET', { apiUrl: REGISTRY_API_URL }),
   getRiskUsage: (sessionId: string) =>
     sendApiRequest<RiskUsage>('/risk/usage', 'GET', {
       apiUrl: REGISTRY_API_URL,
@@ -890,6 +892,20 @@ export const registryApi = {
 
 
 export const controllerApi = {
+  // One section of the System page; see types/system.
+  getSystemHealth: <T,>(section: string, fresh = false) =>
+    sendApiRequest<T>('/system/health', 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      queryParams: fresh ? { section, fresh: true } : { section },
+    }),
+  // Prod controller only; the signed-in person and their reason are recorded on the approval.
+  decideApproval: (decision: {
+    pipeline: string; stage: string; action: string; token: string; decision: 'Approved' | 'Rejected'; reason: string;
+  }) =>
+    sendApiRequest<{ status: string; by: string }>('/system/approvals', 'POST', {
+      apiUrl: CONTROLLER_API_URL,
+      body: decision,
+    }),
   runLatencyProbe: (request: LatencyProbeRequest) =>
     sendApiRequest<LatencyProbeResponse>('/latency-probe/run', 'POST', {
       apiUrl: CONTROLLER_API_URL,

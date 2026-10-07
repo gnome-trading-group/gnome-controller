@@ -1,0 +1,5 @@
+# Tests for the controller's Python Lambdas, one function at a time (each names its handler module index):
+#   python3 -m pytest lambda/tests/system-health
+#   python3 -m pytest lambda/tests/system-approvals
+pytest>=8
+boto3>=1.34.0

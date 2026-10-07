@@ -1,5 +1,7 @@
-import { IconGauge, IconLockSquareRounded, IconNotes, IconTool, IconChartLine, IconTestPipe, IconFlask, IconScale, IconRocket } from "@tabler/icons-react";
-import { AppShell, Paper, Group, ScrollArea, Code, Title, UnstyledButton } from '@mantine/core';
+import { IconGauge, IconHeartbeat, IconLockSquareRounded, IconNotes, IconTool, IconChartLine, IconTestPipe, IconFlask, IconScale, IconRocket } from "@tabler/icons-react";
+import { AppShell, Box, Paper, Group, ScrollArea, Code, Title, Tooltip, UnstyledButton } from '@mantine/core';
+import { useSystemHealth } from '../../query/hooks';
+import { AlarmsSection } from '../../types';
 import { useLocation } from 'react-router-dom';
 import logo from '../../assets/logo.svg';
 import classes from './Navbar.module.css';
@@ -63,6 +65,7 @@ const routes = [
       { label: 'Pipelines', link: '/research/pipelines' },
     ],
   },
+  { icon: IconHeartbeat, label: 'System', link: '/system' },
   {
     label: 'Tools',
     icon: IconTool,
@@ -76,7 +79,19 @@ const routes = [
 function Navbar({ onToggle }: NavbarProps) {
   const location = useLocation();
 
-  const links = routes.map((item) => <LinksGroup {...item} key={item.label} activePath={location.pathname} />);
+  const alarms = useSystemHealth<AlarmsSection>('alarms');
+  const firing = alarms.data?.services.reduce((sum, s) => sum + s.firing, 0) ?? 0;
+  const indicators: Record<string, React.ReactNode> = {
+    System: firing > 0 && (
+      <Tooltip label={`${firing} alarm${firing > 1 ? 's' : ''} firing`} withArrow position="right">
+        <Box w={9} h={9} mr="xs" style={{ borderRadius: '50%', background: 'var(--mantine-color-red-6)' }} />
+      </Tooltip>
+    ),
+  };
+
+  const links = routes.map((item) => (
+    <LinksGroup {...item} key={item.label} activePath={location.pathname} indicator={indicators[item.label]} />
+  ));
 
   return (
     <AppShell.Navbar p="md" className={classes.navbar}>

@@ -27,6 +27,7 @@ const Strategies = lazy(() => import('./pages/Strategies/Strategies'));
 const StrategyDetail = lazy(() => import('./pages/Strategies/StrategyDetail'));
 const PositionDetail = lazy(() => import('./pages/Strategies/PositionDetail'));
 const Blotter = lazy(() => import('./pages/Trading/Blotter'));
+const SystemHealth = lazy(() => import('./pages/System/SystemHealth'));
 const RiskPolicies = lazy(() => import('./pages/Risk/RiskPolicies'));
 const CollectorDetail = lazy(() => import('./pages/CollectorDetail/CollectorDetail'));
 const QualityIssues = lazy(() => import('./pages/MarketData/QualityIssues/QualityIssues'));
@@ -191,6 +192,7 @@ function AppContent() {
                 <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
                 <Route path="/strategies/:strategyId/listings/:listingId" element={<PositionDetail />} />
                 <Route path="/trading/blotter" element={<Blotter />} />
+                <Route path="/system" element={<SystemHealth />} />
                 <Route path="/risk/policies" element={<RiskPolicies />} />
                 <Route path="/backtests" element={<BacktestList />} />
                 <Route path="/backtests/:runId" element={<BacktestDetail />} />

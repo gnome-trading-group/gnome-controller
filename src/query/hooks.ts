@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { registryApi, LedgerFilters, LedgerScope } from '../utils/api';
+import { controllerApi, registryApi, LedgerFilters, LedgerScope } from '../utils/api';
 import { ACTIVE_SESSION_STATUSES, isActiveSession, LedgerFill, LedgerOrder, Mode, PnlSeries, StrategySession } from '../types';
 import { mergeSeries } from './series';
 
@@ -113,6 +113,15 @@ export function useEventPositions(
     enabled,
     refetchInterval: live ? POLL.summary : false,
     placeholderData: keepPreviousData,
+  });
+}
+
+// System health changes slowly and its reads scan every region, so once a minute is plenty.
+export function useSystemHealth<T>(section: string) {
+  return useQuery({
+    queryKey: ['systemHealth', section],
+    queryFn: () => controllerApi.getSystemHealth<T>(section),
+    refetchInterval: 60_000,
   });
 }
 

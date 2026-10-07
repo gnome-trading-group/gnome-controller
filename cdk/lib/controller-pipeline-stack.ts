@@ -3,8 +3,10 @@ import * as pipelines from "aws-cdk-lib/pipelines";
 import * as secrets from 'aws-cdk-lib/aws-secretsmanager';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from "constructs";
-import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
-import { CONFIGS, GITHUB_BRANCH, GITHUB_REPO, ControllerConfig } from "./config";
+import { GnomeAccount, Stage } from "@gnome-trading-group/gnome-shared-cdk";
+import {
+  CONFIGS, GITHUB_BRANCH, GITHUB_REPO, ControllerConfig, SYSTEM_HEALTH_APPROVALS_ROLE, SYSTEM_HEALTH_PIPELINES_ROLE,
+} from "./config";
 import { FrontendStack } from "./stacks/frontend-stack";
 import { BackendStack } from "./stacks/backend-stack";
 import { BacktestStack } from "./stacks/backtest-stack";
@@ -13,6 +15,7 @@ import { ServiceConfigStack } from "./stacks/service-config-stack";
 import { MonitoringStack } from "./stacks/monitoring-stack";
 import { LatencyProbeStack, PROBE_REGIONS } from "./stacks/latency-probe-stack";
 import { PipelineStack } from "./stacks/pipeline-stack";
+import { SystemHealthStack } from "./stacks/system-health-stack";
 
 class AppStage extends cdk.Stage {
   constructor(scope: Construct, id: string, config: ControllerConfig) {
@@ -51,6 +54,17 @@ class AppStage extends cdk.Stage {
     new ServiceConfigStack(this, "ControllerServiceConfigStack", {
       apiGateway: backendStack.apiGateway,
       cognitoAuthorizer: backendStack.cognitoAuthorizer,
+    });
+
+    const pipelinesAccount = GnomeAccount.InfraPipelines.environment;
+    new SystemHealthStack(this, "ControllerSystemHealthStack", {
+      apiGateway: backendStack.apiGateway,
+      cognitoAuthorizer: backendStack.cognitoAuthorizer,
+      pipelinesRoleArn: `arn:aws:iam::${pipelinesAccount.account}:role/${SYSTEM_HEALTH_PIPELINES_ROLE}`,
+      pipelinesRegion: pipelinesAccount.region!,
+      approvalsRoleArn: config.approvesPipelines
+        ? `arn:aws:iam::${pipelinesAccount.account}:role/${SYSTEM_HEALTH_APPROVALS_ROLE}`
+        : undefined,
     });
 
     new MonitoringStack(this, "ControllerMonitoringStack", {

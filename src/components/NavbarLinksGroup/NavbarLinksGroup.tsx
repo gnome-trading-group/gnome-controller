@@ -11,6 +11,8 @@ interface LinksGroupProps {
   initiallyOpened?: boolean;
   link?: string;
   links?: { label: string; link: string }[];
+  // Shown at the end of a single link, e.g. a status dot.
+  indicator?: React.ReactNode;
 }
 
 function ExpandableLinks({ icon: Icon, label, initiallyOpened, activePath, links }: LinksGroupProps) {
@@ -50,7 +52,7 @@ function ExpandableLinks({ icon: Icon, label, initiallyOpened, activePath, links
   );
 }
 
-function SingleLink({ icon: Icon, label, activePath, link }: LinksGroupProps) {
+function SingleLink({ icon: Icon, label, activePath, link, indicator }: LinksGroupProps) {
   return (
     <UnstyledButton
       component={Link}
@@ -65,6 +67,7 @@ function SingleLink({ icon: Icon, label, activePath, link }: LinksGroupProps) {
           </ThemeIcon>
           <Box ml="md">{label}</Box>
         </Box>
+        {indicator}
       </Group>
     </UnstyledButton>
   );
