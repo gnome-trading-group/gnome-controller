@@ -5,6 +5,7 @@ import { IconLogout } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import classes from './UserButton.module.css';
+import { DisplaySettings } from '../DisplaySettings';
 
 type Claims = Record<string, unknown>;
 
@@ -72,6 +73,7 @@ export function UserButton() {
           <Text size="sm" fw={500} truncate>{name}</Text>
           <Text c="dimmed" size="xs" truncate>{email}</Text>
         </UnstyledButton>
+        <DisplaySettings />
         <Tooltip label="Sign out" withArrow openDelay={500}>
           <ActionIcon component={Link} to="/logout" variant="subtle" color="gray" mr="md" aria-label="Sign out">
             <IconLogout size={16} stroke={1.5} />

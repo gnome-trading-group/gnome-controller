@@ -6,3 +6,4 @@ export * from './latency-probe';
 export * from './regions';
 export * from './coverage';
 export * from './registry';
+export * from './pnl';

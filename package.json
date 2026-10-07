@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "vitest run",
     "preview": "vite preview",
     "bump:patch": "npm version patch --no-git-tag-version",
     "bump:minor": "npm version minor --no-git-tag-version",
@@ -20,11 +21,13 @@
     "@mantine/form": "^7.17.8",
     "@mantine/hooks": "^7.17.7",
     "@tabler/icons-react": "^3.31.0",
+    "@tanstack/react-query": "^5.104.1",
     "@xyflow/react": "^12.11.2",
     "aws-amplify": "^6.14.4",
     "dagre": "^0.8.5",
     "dayjs": "^1.11.13",
     "javascript-time-ago": "^2.5.11",
+    "lightweight-charts": "^5.2.1",
     "mantine-react-table": "^2.0.0-beta.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -48,6 +51,7 @@
     "postcss-simple-vars": "^7.0.1",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.26.1",
-    "vite": "^6.3.1"
+    "vite": "^6.3.1",
+    "vitest": "^3.2.7"
   }
 }

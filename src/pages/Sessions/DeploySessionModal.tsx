@@ -83,6 +83,7 @@ function flattenToSessionConfig(
   profiles: ProfilesState,
   simSeed: number | string,
   overrides: Overrides,
+  inherit: boolean,
 ): Record<string, ConfigValue> {
   const listingsArr: number[] = mode === 'paper'
     ? listings.map(l => parseInt(l.listingId.trim(), 10)).filter(n => !isNaN(n))
@@ -92,6 +93,7 @@ function flattenToSessionConfig(
     'strategy.id': strategyId,
     mode,
     listings: listingsArr,
+    'recovery.inherit': inherit,
   };
   if (strategyType) {
     config['strategy.type'] = strategyType;
@@ -139,6 +141,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     preselectedStrategyId !== undefined ? String(preselectedStrategyId) : null
   );
   const [mode, setMode] = useState<string>('paper');
+  const [inherit, setInherit] = useState(true);
   const [profiles, setProfiles] = useState<ProfilesState>(defaultProfiles());
   const [simSeed, setSimSeed] = useState<number | string>('');
   const [listings, setListings] = useState<ListingProfileRow[]>(defaultListings());
@@ -265,6 +268,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     const config = session.config;
     setStrategyId(String(session.strategyId));
     setMode(session.mode);
+    setInherit(config['recovery.inherit'] !== false && config['recovery.inherit'] !== 'false');
     if (config['strategy.type']) setStrategyType(String(config['strategy.type']));
     else setStrategyType(null);
     if (config['strategy.class']) setStrategyClass(String(config['strategy.class']));
@@ -362,6 +366,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     setLiveConfirmText('');
     setStrategyId(preselectedStrategyId !== undefined ? String(preselectedStrategyId) : null);
     setMode('paper');
+    setInherit(true);
     setProfiles(defaultProfiles());
     setSimSeed('');
     setListings(defaultListings());
@@ -417,6 +422,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
       config = flattenToSessionConfig(
         strategyId, mode, strategyType, strategyClass,
         listings, selectedLiveListingIds, researchCommit, region, latencyProfile, params, profiles, simSeed, overrides,
+        inherit,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invalid session config');
@@ -486,6 +492,16 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
           searchable
         />
         <Select label="Mode" data={MODE_OPTIONS} value={mode} onChange={v => { setMode(v ?? 'paper'); setLiveConfirmText(''); }} required />
+        <Switch
+          label="Inherit the position earlier sessions left"
+          checked={inherit}
+          onChange={e => setInherit(e.currentTarget.checked)}
+          description={inherit
+            ? 'Starts holding what earlier sessions of this strategy left on these listings, at their cost.'
+            : mode === 'live'
+              ? 'Starts flat. Refused while the strategy still holds anything on these listings: flatten it, or adjust it to 0, first.'
+              : 'Starts flat; the discarded position is recorded as a reset, so it is never silently forgotten.'}
+        />
         <Group grow>
           <TextInput label="Region Override" placeholder="e.g. us-east-1 (optional)" value={region} onChange={e => setRegion(e.currentTarget.value)} />
           <TextInput label="Availability Zone" placeholder="Auto, or e.g. us-east-1a" value={availabilityZone} onChange={e => setAvailabilityZone(e.currentTarget.value)} />

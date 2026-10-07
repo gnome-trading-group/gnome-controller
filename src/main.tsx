@@ -4,6 +4,9 @@ import 'mantine-react-table/styles.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { MantineProvider } from '@mantine/core';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './query/client';
+import { PreferencesProvider } from './context/PreferencesContext';
 import { theme } from './theme';
 import App from './App';
 import TimeAgo from 'javascript-time-ago'
@@ -16,7 +19,11 @@ TimeAgo.addDefaultLocale(en)
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="dark">
-      <App />
+      <QueryClientProvider client={queryClient}>
+        <PreferencesProvider>
+          <App />
+        </PreferencesProvider>
+      </QueryClientProvider>
     </MantineProvider>
   </React.StrictMode>
 );

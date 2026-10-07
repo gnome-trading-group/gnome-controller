@@ -21,14 +21,11 @@ import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import DeploySessionModal from './DeploySessionModal';
 import { SESSION_STATUS_COLORS } from '../../utils/session-status';
+import { MODE_COLORS } from '../../utils/mode';
 import { LastUpdated } from '../../components/LastUpdated';
 
 const POLL_INTERVAL_MS = 5000;
 
-const MODE_COLORS: Record<string, string> = {
-  paper: 'violet',
-  live: 'red',
-};
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },

@@ -39,6 +39,7 @@ const routes = [
     links: [
       { label: 'Strategies', link: '/strategies' },
       { label: 'Sessions', link: '/sessions' },
+      { label: 'Fills & Orders', link: '/trading/blotter' },
       { label: 'Risk Policies', link: '/risk/policies' },
     ],
   },

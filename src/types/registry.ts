@@ -8,24 +8,6 @@ export interface Strategy {
   dateModified: string;
 }
 
-export interface PnlSnapshot {
-  snapshotId: number;
-  strategyId: number;
-  listingId: number;
-  netQuantity: number;
-  avgEntryPrice: number;
-  realizedPnl: number;
-  totalFees: number;
-  leavesBuyQty: number;
-  leavesSellQty: number;
-  markPrice: number;
-  unrealizedPnl: number;
-  totalPnl: number;
-  snapshotTime: string;
-  sessionId?: string;
-  mode?: string;
-}
-
 export const RISK_POLICY_TYPES = [
   { value: 'KILL_SWITCH', label: 'Kill Switch', parametersTemplate: '{}', parametersHint: '' },
   { value: 'MAX_NOTIONAL', label: 'Max Notional', parametersTemplate: '{"maxNotionalValue": 0}', parametersHint: 'Per order. maxNotionalValue in dollars, e.g. 5000 for $5,000' },

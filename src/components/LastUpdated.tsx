@@ -7,6 +7,8 @@ interface LastUpdatedProps {
   at: Date | null;
   intervalMs: number;
   failing?: boolean;
+  // Just the dot, beside a page title; the state is in its tooltip.
+  compact?: boolean;
 }
 
 const STALE_INTERVALS = 3;
@@ -14,7 +16,7 @@ const TICK_MS = 5000;
 
 // Shows the data's state rather than a ticking "Xs ago": the label only changes when the state does, so it doesn't
 // jitter on every refresh. The pulse is the "still live" signal; a still dot means updates have stopped.
-export function LastUpdated({ at, intervalMs, failing = false }: LastUpdatedProps) {
+export function LastUpdated({ at, intervalMs, failing = false, compact = false }: LastUpdatedProps) {
   const [now, setNow] = useState(() => Date.now());
 
   // The page only re-renders when its data changes, so staleness needs its own clock to surface when updates stop.
@@ -51,14 +53,20 @@ export function LastUpdated({ at, intervalMs, failing = false }: LastUpdatedProp
 
   return (
     <Tooltip
-      label={at ? <>Last updated <ReactTimeAgo date={at} timeStyle="round" /> ({at.toLocaleTimeString()})</> : 'No successful update yet'}
+      label={at
+        ? <>{compact && `${label} · `}Last updated <ReactTimeAgo date={at} timeStyle="round" /> ({at.toLocaleTimeString()})</>
+        : label}
       position="bottom"
       withArrow
       openDelay={300}
     >
-      <Badge color={color} variant="light" size="sm" tt="none" leftSection={dot}>
-        {label}
-      </Badge>
+      {compact ? (
+        <span style={{ display: 'inline-flex', cursor: 'default', padding: 4 }} aria-label={label}>{dot}</span>
+      ) : (
+        <Badge color={color} variant="light" size="sm" tt="none" leftSection={dot}>
+          {label}
+        </Badge>
+      )}
     </Tooltip>
   );
 }

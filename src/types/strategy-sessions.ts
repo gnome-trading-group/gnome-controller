@@ -1,3 +1,5 @@
+import { SessionHealth } from './pnl';
+
 export type ConfigValue = string | number | boolean | Record<string, unknown> | unknown[];
 
 export enum StrategySessionStatus {
@@ -23,6 +25,9 @@ export interface StrategySession {
   orchestratorVersion: string | null;
   gnomepyVersion: string | null;
   failureReason: string | null;
+  // The session's latest heartbeat and the health it reported; null until its process first reports.
+  lastHeartbeatAt: string | null;
+  health: SessionHealth | null;
   startedAt: string | null;
   stoppedAt: string | null;
   dateCreated: string;

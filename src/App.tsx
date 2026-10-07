@@ -25,6 +25,8 @@ const SecurityDetail = lazy(() => import('./pages/SecurityMaster/SecurityDetail'
 const LatencyProbe = lazy(() => import('./pages/LatencyProbe/LatencyProbe'));
 const Strategies = lazy(() => import('./pages/Strategies/Strategies'));
 const StrategyDetail = lazy(() => import('./pages/Strategies/StrategyDetail'));
+const PositionDetail = lazy(() => import('./pages/Strategies/PositionDetail'));
+const Blotter = lazy(() => import('./pages/Trading/Blotter'));
 const RiskPolicies = lazy(() => import('./pages/Risk/RiskPolicies'));
 const CollectorDetail = lazy(() => import('./pages/CollectorDetail/CollectorDetail'));
 const QualityIssues = lazy(() => import('./pages/MarketData/QualityIssues/QualityIssues'));
@@ -187,6 +189,8 @@ function AppContent() {
                 <Route path="/tools/latency-probe" element={<LatencyProbe />} />
                 <Route path="/strategies" element={<Strategies />} />
                 <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
+                <Route path="/strategies/:strategyId/listings/:listingId" element={<PositionDetail />} />
+                <Route path="/trading/blotter" element={<Blotter />} />
                 <Route path="/risk/policies" element={<RiskPolicies />} />
                 <Route path="/backtests" element={<BacktestList />} />
                 <Route path="/backtests/:runId" element={<BacktestDetail />} />

@@ -1,6 +1,6 @@
 import { fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
-import { ContractRelationship, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, HedgeKeyword, Listing, ListingSpec, PaginationParams, PnlSnapshot, RiskPolicy, RiskPolicyHistory, Security, Strategy } from '../types';
+import { AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse, ResearchArtifactListResponse, ResearchDatasetListResponse } from '../types/research';
 import { PipelineListResponse, PipelineDetailResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
@@ -27,6 +27,29 @@ export interface ServiceConfigVersion {
 
 export interface ServiceConfigHistoryResponse {
   versions: ServiceConfigVersion[];
+}
+
+// Which ledger rows to read: one session's, one strategy's in one mode, or every strategy's in one mode.
+export type LedgerScope = { sessionId: string } | { strategyId: number; mode: Mode } | { mode: Mode };
+
+// Narrows a fills or orders list; everything is optional.
+export interface LedgerFilters {
+  listingId?: number;
+  side?: 0 | 1;
+  // Fills only: VENUE, RECOVERY, RESET, ADJUSTMENT, GAP (comma-separated).
+  source?: string;
+  start?: string;
+  end?: string;
+}
+
+export interface LedgerPageParams extends LedgerFilters {
+  before?: string;
+  after?: string;
+  limit?: number;
+}
+
+function definedParams(params: Record<string, string | number | undefined>): Record<string, string | number> {
+  return Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined)) as Record<string, string | number>;
 }
 
 const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
@@ -601,27 +624,84 @@ export const registryApi = {
       convertToCamelCase: true,
       body: { listingId },
     }),
-  // A session's PnL over time, derived from its fills and the listings' marks.
-  listPnlSeries: (sessionId: string, startTime?: string) => {
-    const qp: Record<string, string> = { sessionId };
-    if (startTime) qp.startTime = startTime;
-    return sendApiRequest<PnlSnapshot[]>('/pnl/series', 'GET', {
+  // PnL is derived by the registry from the ledger's fills and marks; see types/pnl for the shapes.
+  getSessionSummary: (sessionId: string) =>
+    sendApiRequest<SessionSummary>('/pnl/summary', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: { sessionId },
+    }),
+  getStrategySummary: (strategyId: number, mode: Mode, tz: string) =>
+    sendApiRequest<StrategySummary>('/pnl/summary', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: { strategyId, mode, tz },
+    }),
+  getFirmSummary: (mode: Mode, tz: string) =>
+    sendApiRequest<FirmSummary>('/pnl/summary', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: { mode, tz },
+    }),
+  getSessionsTotals: (sessionIds: string[]) =>
+    sendApiRequest<SessionTotals[]>('/pnl/summary', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: { sessionIds: sessionIds.join(',') },
+    }),
+  getEventPositions: (scope: { strategyId: number; mode: Mode } | { sessionId: string }) =>
+    sendApiRequest<EventPositions>('/pnl/events', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: scope,
+    }),
+  getRiskUsage: (sessionId: string) =>
+    sendApiRequest<RiskUsage>('/risk/usage', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: { sessionId },
+    }),
+  getAttention: (mode: Mode) =>
+    sendApiRequest<{ asOf: string; items: AttentionItem[] }>('/monitoring/attention', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: { mode },
+    }),
+  getDailyPnl: (scope: { strategyId?: number; mode: Mode }, tz: string, days: number) =>
+    sendApiRequest<DailyPnl>('/pnl/daily', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: definedParams({ ...scope, tz, days }),
+    }),
+  getMarks: (listingId: number, start?: string) =>
+    sendApiRequest<PriceHistory>('/ledger/marks', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: definedParams({ listingId, start }),
+    }),
+  getPnlSeries: (scope: LedgerScope, window: { start?: string; resolution?: number; since?: number; listingId?: number }) =>
+    sendApiRequest<PnlSeries>('/pnl/series', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: definedParams({ ...scope, ...window }),
+    }),
+  listFills: (scope: LedgerScope, page: LedgerPageParams = {}) =>
+    sendApiRequest<LedgerPage<LedgerFill>>('/ledger/fills', 'GET', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
-      queryParams: qp,
-    });
-  },
-  listPnlLatest: (strategyId?: number, mode?: string, sessionId?: string) => {
-    const qp: Record<string, string | number | boolean> = {};
-    if (strategyId !== undefined) qp.strategyId = strategyId;
-    if (mode !== undefined) qp.mode = mode;
-    if (sessionId !== undefined) qp.sessionId = sessionId;
-    return sendApiRequest<PnlSnapshot[]>('/pnl/latest', 'GET', {
+      queryParams: definedParams({ ...scope, ...page }),
+    }),
+  // One order's fills, oldest first, including any a later session recovered from the venue for it.
+  listOrderFills: (sessionId: string, clientOidCounter: string) =>
+    sendApiRequest<LedgerPage<LedgerFill>>('/ledger/fills', 'GET', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
-      queryParams: Object.keys(qp).length ? qp : undefined,
-    });
-  },
+      queryParams: { orderSessionId: sessionId, clientOidCounter },
+    }),
+  listOrders: (scope: LedgerScope, page: LedgerPageParams & { status?: 'OPEN' | 'CLOSED' | 'ANY' } = {}) =>
+    sendApiRequest<LedgerPage<LedgerOrder>>('/ledger/orders/list', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: definedParams({ ...scope, ...page }),
+    }),
+  // Cognito only and audited: sets what a strategy holds on a listing, while no session holds it.
+  adjustPosition: (adjustment: {
+    strategyId: number; listingId: number; mode: Mode; netQuantity: string; totalCost: string; reason: string;
+  }) =>
+    sendApiRequest<unknown>('/ledger/adjustments', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      body: adjustment,
+    }),
   listRiskPolicies: () =>
     sendApiRequest<RiskPolicy[]>('/risk/policies', 'GET', {
       apiUrl: REGISTRY_API_URL,
