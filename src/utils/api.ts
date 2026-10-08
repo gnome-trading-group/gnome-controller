@@ -36,7 +36,7 @@ export type LedgerScope = { sessionId: string } | { strategyId: number; mode: Mo
 export interface LedgerFilters {
   listingId?: number;
   side?: 0 | 1;
-  // Fills only: VENUE, RECOVERY, RESET, ADJUSTMENT, MANUAL, GAP (comma-separated).
+  // Fills only: VENUE, RECOVERY, RESET, ADJUSTMENT, MANUAL, SETTLEMENT, GAP (comma-separated).
   source?: string;
   start?: string;
   end?: string;

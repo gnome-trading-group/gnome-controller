@@ -131,6 +131,9 @@ export interface EventContract {
   outcomeLabel: string;
   dateCreated: string;
   securitySymbol?: string;
+  // What the outcome paid once its result was final (1e9 = $1), and when that was recorded; null until then.
+  settlementPrice: string | null;
+  settledAt: string | null;
 }
 
 export interface ContractRelationship {

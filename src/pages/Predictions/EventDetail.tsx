@@ -43,6 +43,8 @@ import {
   Legend,
 } from 'recharts';
 import { ContractRelationship, ContractRelationshipType, DenormalizedListing, Event, EventContract } from '../../types';
+import { SETTLEMENT_COLORS, SettlementBadge } from '../../components/trading/SettlementBadge';
+import { settlementState } from '../../utils/format';
 import { BboDataPoint } from '../../types/bbo-timeline';
 import { marketDataApi, registryApi } from '../../utils/api';
 import { useGlobalState } from '../../context/GlobalStateContext';
@@ -172,6 +174,8 @@ function EventDetail() {
     return () => { cancelled = true; };
   }, [id, beginRelationshipsRequest]);
 
+  const settledCount = contracts.filter(c => c.settlementPrice !== null && c.settlementPrice !== undefined).length;
+
   const contractColumns = useMemo<MRT_ColumnDef<EnrichedContract>[]>(() => [
     {
       accessorKey: 'securityId',
@@ -188,6 +192,18 @@ function EventDetail() {
     {
       accessorKey: 'outcomeLabel',
       header: 'Outcome',
+    },
+    {
+      accessorKey: 'settlementPrice',
+      header: 'Settlement',
+      size: 140,
+      Cell: ({ row }) => (
+        <SettlementBadge
+          settlementPrice={row.original.settlementPrice}
+          settledAt={row.original.settledAt}
+          exchangeId={event?.exchangeId}
+        />
+      ),
     },
     {
       accessorKey: 'eventContractId',
@@ -216,7 +232,7 @@ function EventDetail() {
           <ReactTimeAgo date={new Date(row.original.dateCreated)} timeStyle="round" />
         ) : '-',
     },
-  ], []);
+  ], [event?.exchangeId]);
 
   const requestDelete = (relationship: ContractRelationship) => {
     setDeleteError(null);
@@ -392,6 +408,11 @@ function EventDetail() {
     enableBottomToolbar: true,
     enableTopToolbar: false,
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
+    // Settled outcomes are tinted by what they paid, so the winner stands out from the losers at a glance.
+    mantineTableBodyRowProps: ({ row }) => {
+      const state = settlementState(row.original.settlementPrice);
+      return state ? { style: { backgroundColor: `var(--mantine-color-${SETTLEMENT_COLORS[state]}-light)` } } : {};
+    },
     initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 25 } },
     renderDetailPanel: ({ row }: { row: MRT_Row<EnrichedContract> }) => {
       const listings = listingsBySecurityId[row.original.securityId] ?? [];
@@ -583,7 +604,14 @@ function EventDetail() {
 
       <Paper withBorder p="md" mb="md">
         <Group justify="space-between" mb="sm">
-          <Title order={5}>Contracts ({contracts.length})</Title>
+          <Group gap="xs">
+            <Title order={5}>Contracts ({contracts.length})</Title>
+            {settledCount > 0 && (
+              <Badge color={settledCount === contracts.length ? 'green' : 'gray'} variant="light" size="sm">
+                {settledCount} of {contracts.length} settled
+              </Badge>
+            )}
+          </Group>
           {contracts.length === 2 && (
             <Badge color="teal" variant="light" size="sm">Binary · Contracts are complements</Badge>
           )}

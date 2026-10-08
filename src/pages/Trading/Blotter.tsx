@@ -15,6 +15,7 @@ const SOURCES = [
   { value: 'RESET', label: 'Resets' },
   { value: 'ADJUSTMENT', label: 'Corrections' },
   { value: 'MANUAL', label: 'Manual trades' },
+  { value: 'SETTLEMENT', label: 'Settlements' },
   { value: 'GAP', label: 'Gaps' },
 ];
 

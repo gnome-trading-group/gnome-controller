@@ -35,12 +35,14 @@ import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal';
 import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
+import { SettlementBadge } from '../../components/trading/SettlementBadge';
+import { Time } from '../../components/trading/values';
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <Group justify="space-between" py={4} style={{ borderBottom: '1px solid var(--mantine-color-dark-5)' }}>
       <Text size="sm" c="dimmed">{label}</Text>
-      <Text size="sm">{value}</Text>
+      <Text size="sm" component="div">{value}</Text>
     </Group>
   );
 }
@@ -271,6 +273,18 @@ function ListingDetail() {
                       </Anchor>
                     } />
                     <InfoRow label="Outcome" value={eventContract.outcomeLabel} />
+                    {eventContract.settlementPrice !== null && (
+                      <>
+                        <InfoRow label="Settlement" value={
+                          <SettlementBadge
+                            settlementPrice={eventContract.settlementPrice}
+                            settledAt={eventContract.settledAt}
+                            exchangeId={listing.exchangeId}
+                          />
+                        } />
+                        <InfoRow label="Settled At" value={<Time value={eventContract.settledAt} size="sm" />} />
+                      </>
+                    )}
                   </>
                 )}
                 {security.description && <InfoRow label="Description" value={security.description} />}

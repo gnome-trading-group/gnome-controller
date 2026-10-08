@@ -20,6 +20,7 @@ const EVENT_STYLE: Record<SeriesEventKind, { color: string; shape: 'arrowUp' | '
   RESET: { color: '#fa5252', shape: 'square', text: 'reset' },
   ADJUSTMENT: { color: '#fd7e14', shape: 'square', text: 'adjusted' },
   MANUAL: { color: '#fab005', shape: 'square', text: 'manual trade' },
+  SETTLEMENT: { color: '#7950f2', shape: 'square', text: 'settled' },
   GAP: { color: '#fa5252', shape: 'circle', text: 'gap' },
   RECOVERY: { color: '#4dabf7', shape: 'circle', text: 'recovered' },
 };

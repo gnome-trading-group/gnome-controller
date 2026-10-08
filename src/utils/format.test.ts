@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, formatMoney, formatPrice, formatQty, formatTime, parseScaled, plainDecimal } from './format';
+import {
+  formatDuration, formatMoney, formatPrice, formatQty, formatSettlement, formatTime, parseScaled, plainDecimal,
+  settlementState,
+} from './format';
 
 const CENT_TICK = '10000000';
 const TENTH_CENT_TICK = '1000000';
@@ -77,5 +80,23 @@ describe('prefilling inputs', () => {
   it('writes the exact value with no separators', () => {
     expect([plainDecimal('-12500000', 'size'), plainDecimal('430000000', 'price'), plainDecimal('1234000000000', 'price')])
       .toEqual(['-12.5', '0.43', '1234']);
+  });
+});
+
+describe('settlements', () => {
+  it('writes out a settlement of 0 instead of showing it as unknown', () => {
+    expect(formatSettlement('0', true)).toBe('0¢');
+    expect(formatSettlement('0', false)).toBe('$0.00');
+    expect(formatSettlement('1000000000', true)).toBe('100¢');
+    expect(formatSettlement('470000000', true)).toBe('47¢');
+    expect(formatSettlement('475000000', false)).toBe('$0.475');
+    expect(formatSettlement(null, true)).toBe('—');
+  });
+
+  it('tells a full payout from nothing and from a partial one', () => {
+    expect(settlementState('1000000000')).toBe('full');
+    expect(settlementState('0')).toBe('none');
+    expect(settlementState('470000000')).toBe('partial');
+    expect(settlementState(null)).toBeNull();
   });
 });

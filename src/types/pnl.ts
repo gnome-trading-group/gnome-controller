@@ -192,7 +192,8 @@ export interface AttentionItem {
   since: string | null;
 }
 
-export type SeriesEventKind = 'SESSION_START' | 'SESSION_STOP' | 'RESET' | 'ADJUSTMENT' | 'MANUAL' | 'GAP' | 'RECOVERY';
+export type SeriesEventKind = 'SESSION_START' | 'SESSION_STOP' | 'RESET' | 'ADJUSTMENT' | 'MANUAL' | 'SETTLEMENT' | 'GAP'
+  | 'RECOVERY';
 
 export interface PnlSeries {
   resolutionMs: number;
@@ -215,7 +216,7 @@ export interface PnlSeries {
   strategies?: { strategyId: number; total: string[] }[];
 }
 
-export type FillSource = 'VENUE' | 'RECOVERY' | 'RESET' | 'ADJUSTMENT' | 'MANUAL' | 'GAP';
+export type FillSource = 'VENUE' | 'RECOVERY' | 'RESET' | 'ADJUSTMENT' | 'MANUAL' | 'SETTLEMENT' | 'GAP';
 
 export interface LedgerFill {
   fillId: string;

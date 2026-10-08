@@ -103,6 +103,25 @@ export function formatPrice(value: Scaled, format: PriceFormat = {}): string {
   return `$${decimalString(v, PRICE_DIGITS, displayDecimals(v, PRICE_DIGITS, base))}`;
 }
 
+// What an outcome paid when its market settled. Unlike a price, 0 is a real value here (the outcome paid nothing),
+// so it is written out rather than shown as unknown.
+export function formatSettlement(value: Scaled, cents: boolean): string {
+  const v = toBig(value);
+  if (v === null) return '—';
+  if (cents) return `${decimalString(v, PRICE_DIGITS - 2, exactDecimals(v, PRICE_DIGITS - 2))}¢`;
+  return `$${decimalString(v, PRICE_DIGITS, Math.max(2, exactDecimals(v, PRICE_DIGITS)))}`;
+}
+
+export type SettlementState = 'full' | 'none' | 'partial';
+
+// Whether a settled outcome paid its full $1, nothing, or something in between (scalar and "fair value" settlements).
+export function settlementState(value: Scaled): SettlementState | null {
+  const v = toBig(value);
+  if (v === null) return null;
+  if (v === 10n ** BigInt(PRICE_DIGITS)) return 'full';
+  return v === 0n ? 'none' : 'partial';
+}
+
 export function formatQty(value: Scaled, lotSize?: string | null, signed = false): string {
   const v = toBig(value);
   if (v === null) return '—';
