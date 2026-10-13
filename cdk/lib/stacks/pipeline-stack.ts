@@ -57,8 +57,9 @@ export class PipelineStack extends cdk.Stack {
       assumedBy: new iam.WebIdentityPrincipal(githubOidc.openIdConnectProviderArn, {
         StringEquals: {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          // gnome-pipelines gets GitHub's ID-qualified subject (owner@id/repo@id), not the older owner/repo form.
           "token.actions.githubusercontent.com:sub":
-            "repo:gnome-trading-group/gnome-pipelines:ref:refs/heads/main",
+            "repo:gnome-trading-group@160680294/gnome-pipelines@1410629960:ref:refs/heads/main",
         },
       }),
       description: "Assumed by GitHub Actions gnome-pipelines CI to push pipelines image to ECR",
