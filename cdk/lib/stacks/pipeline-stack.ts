@@ -11,6 +11,7 @@ import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import { Construct } from "constructs";
 import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
+import { grantResearchTables } from "../constructs/research-tables";
 
 export interface PipelineStackProps extends cdk.StackProps {
   stage: Stage;
@@ -57,16 +58,16 @@ export class PipelineStack extends cdk.Stack {
         StringEquals: {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
           "token.actions.githubusercontent.com:sub":
-            "repo:gnome-trading-group/gnomepy-research:ref:refs/heads/main",
+            "repo:gnome-trading-group/gnome-pipelines:ref:refs/heads/main",
         },
       }),
-      description: "Assumed by GitHub Actions gnomepy-research CI to push pipelines image to ECR",
+      description: "Assumed by GitHub Actions gnome-pipelines CI to push pipelines image to ECR",
     });
     ecrRepo.grantPush(githubEcrRole);
 
     new cdk.CfnOutput(this, "GithubActionsEcrRoleArn", {
       value: githubEcrRole.roleArn,
-      description: "Set as AWS_ECR_ROLE_ARN_DEV / AWS_ECR_ROLE_ARN_PROD secret in gnomepy-research repo",
+      description: "Set as AWS_ECR_ROLE_ARN_DEV / AWS_ECR_ROLE_ARN_PROD secret in gnome-pipelines repo",
     });
 
     // ---------------------------------------------------------------------------
@@ -95,6 +96,7 @@ export class PipelineStack extends cdk.Stack {
     });
     researchTable.grantReadWriteData(taskRole);
     researchBucket.grantReadWrite(taskRole);
+    grantResearchTables(this, taskRole, { write: true });
 
     const executionRole = new iam.Role(this, "PipelineExecutionRole", {
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
@@ -116,7 +118,6 @@ export class PipelineStack extends cdk.Stack {
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: "pipeline" }),
       environment: {
         DYNAMODB_TABLE: researchTable.tableName,
-        S3_BUCKET: bucketName,
         STAGE: props.stage,
       },
     });
