@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { controllerApi, registryApi, LedgerFilters, LedgerScope } from '../utils/api';
-import { ACTIVE_SESSION_STATUSES, isActiveSession, LedgerFill, LedgerOrder, Mode, PnlSeries, StrategySession } from '../types';
+import { ACTIVE_SESSION_STATUSES, AlertFilters, isActiveSession, LedgerFill, LedgerOrder, Mode, PnlSeries, StrategySession } from '../types';
 import { mergeSeries } from './series';
 
 // How often each kind of data is re-read while it can still change; nothing polls once a session has ended.
@@ -13,6 +13,7 @@ export const POLL = {
   policies: 5_000,
   sessions: 10_000,
   attention: 10_000,
+  alerts: 30_000,
   treasury: 30_000,
 };
 
@@ -22,6 +23,7 @@ export const keys = {
   strategies: ['strategies'] as const,
   activeSessions: ['activeSessions'] as const,
   attention: (mode: Mode) => ['attention', mode] as const,
+  alerts: (filters: AlertFilters) => ['alerts', filters] as const,
   sparklines: (mode: Mode) => ['sparklines', mode] as const,
   session: (id: string) => ['session', id] as const,
   strategySessions: (strategyId: number) => ['strategySessions', strategyId] as const,
@@ -344,4 +346,18 @@ export function useSessionAccounts(sessionId: string, enabled: boolean) {
 
 export function isLive(session: StrategySession | null | undefined): boolean {
   return !!session && isActiveSession(session.status);
+}
+
+// Alerts, newest first. Open ones (FIRING) are what the System page and the navbar show.
+export function useAlerts(filters: AlertFilters) {
+  return useQuery({
+    queryKey: keys.alerts(filters),
+    queryFn: () => registryApi.listAlerts(filters),
+    refetchInterval: POLL.alerts,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useOpenAlerts() {
+  return useAlerts({ status: ['FIRING'] });
 }

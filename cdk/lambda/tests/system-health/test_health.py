@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import health
 
@@ -65,6 +65,17 @@ def test_a_job_is_overdue_after_two_missed_intervals_unless_disabled_or_unmeasur
     shared = health.target_row({"Arn": "arn:aws:lambda:us-east-1:1:function:transform", "Input": '{"schemaType":"mbp-1"}'})
     assert (shared["type"], shared["name"], shared["input"]) == ("lambda", "transform", '{"schemaType":"mbp-1"}')
     assert row(None, targets=step)["overdue"], "a rule's own metrics say whether it fired, whatever it targets"
+
+
+def test_a_minutely_job_is_not_overdue_just_because_its_metrics_lag():
+    rule = {"Name": "AlertTickRule", "ScheduleExpression": "rate(1 minute)", "State": "ENABLED"}
+
+    def row(minutes_ago, period):
+        return health.job_row(rule, "us-east-1", [], NOW - timedelta(minutes=minutes_ago), None, 0, 0, NOW, period)
+
+    assert not row(4, 60)["overdue"], "a minute's period, still being reported"
+    assert not row(7, 300)["overdue"], "the start of a five-minute period"
+    assert row(7, 60)["overdue"], "two missed runs past the delay"
 
 
 def test_jobs_list_overdue_then_failing_then_the_rest():

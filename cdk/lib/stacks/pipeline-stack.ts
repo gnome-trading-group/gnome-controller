@@ -19,7 +19,14 @@ export interface PipelineStackProps extends cdk.StackProps {
   cognitoAuthorizer: apigateway.CognitoUserPoolsAuthorizer;
 }
 
+// The registry's alerting stack names its bus, so any service here can put alerts on it without depending on that stack.
+const ALERT_BUS_NAME = "gnome-alerts";
+
 export class PipelineStack extends cdk.Stack {
+  // For the monitoring stack: a scheduled run that fails to start never reaches the task-stopped rule.
+  public readonly triggerLambda: cdk.aws_lambda.IFunction;
+  public readonly statusLambda: cdk.aws_lambda.IFunction;
+
   constructor(scope: Construct, id: string, props: PipelineStackProps) {
     super(scope, id, props);
 
@@ -223,6 +230,13 @@ export class PipelineStack extends cdk.Stack {
       environment: commonEnv,
     });
     researchTable.grantReadWriteData(pipelineStatusLambda.function);
+    // A failed run is reported as an alert.
+    pipelineStatusLambda.function.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["events:PutEvents"],
+      resources: [`arn:aws:events:${this.region}:${this.account}:event-bus/${ALERT_BUS_NAME}`],
+    }));
+    this.triggerLambda = triggerPipelineLambda.function;
+    this.statusLambda = pipelineStatusLambda.function;
 
     // ---------------------------------------------------------------------------
     // EventBridge rule: ECS task STOPPED → pipeline-status Lambda

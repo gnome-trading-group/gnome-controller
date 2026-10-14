@@ -62,6 +62,8 @@ def group_alarms(rows: list[dict]) -> list[dict]:
 _RATE_UNITS = {"minute": 60, "minutes": 60, "hour": 3600, "hours": 3600, "day": 86400, "days": 86400}
 # A job counts as overdue once it has gone this many schedule intervals without running.
 OVERDUE_INTERVALS = 2
+# EventBridge's metrics land a few minutes after the run they count.
+METRIC_DELAY_SECONDS = 180
 
 
 def schedule_interval_seconds(expression: str | None) -> int | None:
@@ -101,14 +103,18 @@ def schedule_interval_seconds(expression: str | None) -> int | None:
 
 
 def job_row(rule: dict, region: str, targets: list[dict], last_run: datetime | None, last_error: datetime | None,
-            runs_24h: int | None, errors_24h: int | None, now: datetime) -> dict:
+            runs_24h: int | None, errors_24h: int | None, now: datetime, period_seconds: int = 0) -> dict:
     """One scheduled EventBridge rule: when it last fired (its own metrics, whatever its targets are) and when it or
     its Lambda targets last failed. Several rules can share a Lambda, so a Lambda's errors are the function's, not
-    only this rule's."""
+    only this rule's.
+
+    last_run is the start of the metric period it was counted in, and the metrics arrive minutes late, so a job runs
+    late only past both: otherwise a rule that fires every minute, read in 5-minute periods, always looks overdue."""
     interval = schedule_interval_seconds(rule.get("ScheduleExpression"))
     enabled = rule.get("State") == "ENABLED"
+    allowed = (OVERDUE_INTERVALS * interval + period_seconds + METRIC_DELAY_SECONDS) if interval else None
     overdue = bool(
-        enabled and interval and (last_run is None or (now - last_run).total_seconds() > OVERDUE_INTERVALS * interval))
+        enabled and allowed and (last_run is None or (now - last_run).total_seconds() > allowed))
     return {
         "name": rule["Name"],
         "description": rule.get("Description"),

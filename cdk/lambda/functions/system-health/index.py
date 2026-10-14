@@ -116,7 +116,8 @@ def scan_jobs(region: str) -> list[dict]:
                        events.list_targets_by_rule(Rule=rule["Name"], EventBusName=rule.get("EventBusName", "default"))["Targets"]]
             interval = health.schedule_interval_seconds(rule["ScheduleExpression"]) or 3600
             window = min(MAX_JOB_WINDOW, max(MIN_JOB_WINDOW, timedelta(seconds=3 * interval)))
-            period = 300 if window <= timedelta(days=3) else 3600
+            # Per minute for jobs that run that often, so their last run isn't lost in a coarse period.
+            period = 60 if interval < 300 else 300 if window <= timedelta(days=3) else 3600
             queries = [
                 {"id": "fired", "namespace": "AWS/Events", "metric": "Invocations",
                  "dimensions": {"RuleName": rule["Name"]}, "stat": "Sum", "period": period},
@@ -134,7 +135,7 @@ def scan_jobs(region: str) -> list[dict]:
             failures = [values for key, values in series.items() if key != "fired"]
             last_error = max((t for values in failures for t, v in values if v > 0), default=None)
             errors = int(sum(v for values in failures for t, v in values if t >= day_ago))
-            rows.append(health.job_row(rule, region, targets, last_run, last_error, runs, errors, now))
+            rows.append(health.job_row(rule, region, targets, last_run, last_error, runs, errors, now, period))
     return rows
 
 

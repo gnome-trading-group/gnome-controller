@@ -197,6 +197,9 @@ export interface AttentionItem {
   exchangeName: string | null;
   accountId: number | null;
   accountLabel: string | null;
+  // Who last turned a kill switch on (halts only), and the agent, gateway or account a session item is about.
+  actor: string | null;
+  subject: string | null;
   since: string | null;
 }
 
@@ -292,5 +295,8 @@ export interface SessionHealth {
   agents: { name: string; hotPath: boolean; stalledMs: number; exited: boolean }[];
   listings: { listingId: number; priceUnchangedMs: number }[];
   ledger: { lastAcceptedAgoMs: number | null; consecutiveFailures: number; fenced: boolean } | null;
-  gateways: { name: string; reconnecting: boolean }[];
+  // Older sessions don't report the rest.
+  gateways: { name: string; reconnecting: boolean; resyncsLast5m?: number }[];
+  risk?: { stale: boolean; unguarded: boolean; unbuildablePolicies: number; droppedLatches: number } | null;
+  rateLimit?: { account: string; throttling: boolean }[];
 }

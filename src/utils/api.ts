@@ -1,6 +1,6 @@
 import { fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
-import { AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
+import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse, ResearchArtifactListResponse, ResearchDatasetListResponse } from '../types/research';
 import { PipelineListResponse, PipelineDetailResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
@@ -660,6 +660,19 @@ export const registryApi = {
     sendApiRequest<RiskUsage>('/risk/usage', 'GET', {
       apiUrl: REGISTRY_API_URL,
       queryParams: { sessionId },
+    }),
+  listAlerts: (filters: AlertFilters = {}) =>
+    sendApiRequest<Alert[]>('/alerts', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: definedParams({
+        status: filters.status?.join(','), severity: filters.severity?.join(','), type: filters.type,
+        sessionId: filters.sessionId, sinceId: filters.sinceId, limit: filters.limit, offset: filters.offset,
+      }),
+    }),
+  closeAlert: (alertId: number) =>
+    sendApiRequest<{ alertId: number; status: string }>('/alerts', 'PATCH', {
+      apiUrl: REGISTRY_API_URL,
+      body: { alertId },
     }),
   getAttention: (mode: Mode) =>
     sendApiRequest<{ asOf: string; items: AttentionItem[] }>('/monitoring/attention', 'GET', {

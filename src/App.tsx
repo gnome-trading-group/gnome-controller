@@ -9,7 +9,7 @@ import logo from './assets/logo.svg';
 import './App.css';
 import './amplify-config';
 import Navbar from './components/Navbar/Navbar';
-import { KillSwitchWatcher } from './components/KillSwitchWatcher';
+import { AlertWatcher } from './components/AlertWatcher';
 import { GlobalStateProvider } from './context/GlobalStateContext';
 
 // Each page is its own chunk, so the first load only downloads the shell and the page being opened.
@@ -29,6 +29,7 @@ const StrategyDetail = lazy(() => import('./pages/Strategies/StrategyDetail'));
 const PositionDetail = lazy(() => import('./pages/Strategies/PositionDetail'));
 const Blotter = lazy(() => import('./pages/Trading/Blotter'));
 const SystemHealth = lazy(() => import('./pages/System/SystemHealth'));
+const Alerts = lazy(() => import('./pages/System/Alerts'));
 const RiskPolicies = lazy(() => import('./pages/Risk/RiskPolicies'));
 const Treasury = lazy(() => import('./pages/Treasury/Treasury'));
 const CollectorDetail = lazy(() => import('./pages/CollectorDetail/CollectorDetail'));
@@ -123,7 +124,7 @@ function AppContent() {
       <Router>
         <PageTitle />
         <CloseOnNavigate onNavigate={closeMobileNav} />
-        <KillSwitchWatcher />
+        <AlertWatcher />
         <AppShell
           header={{ height: 56, collapsed: !isMobile }}
           navbar={{
@@ -196,6 +197,7 @@ function AppContent() {
                 <Route path="/strategies/:strategyId/listings/:listingId" element={<PositionDetail />} />
                 <Route path="/trading/blotter" element={<Blotter />} />
                 <Route path="/system" element={<SystemHealth />} />
+                <Route path="/system/alerts" element={<Alerts />} />
                 <Route path="/risk/policies" element={<RiskPolicies />} />
                 <Route path="/treasury" element={<Treasury />} />
                 <Route path="/backtests" element={<BacktestList />} />

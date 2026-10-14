@@ -45,7 +45,7 @@ class AppStage extends cdk.Stage {
       cognitoAuthorizer: backendStack.cognitoAuthorizer,
     });
 
-    new PipelineStack(this, "ControllerPipelineStack", {
+    const pipelineStack = new PipelineStack(this, "ControllerPipelineStack", {
       stage: config.account.stage,
       apiGateway: backendStack.apiGateway,
       cognitoAuthorizer: backendStack.cognitoAuthorizer,
@@ -69,6 +69,8 @@ class AppStage extends cdk.Stage {
 
     new MonitoringStack(this, "ControllerMonitoringStack", {
       apiGateway: backendStack.apiGateway,
+      pipelineTriggerLambda: pipelineStack.triggerLambda,
+      pipelineStatusLambda: pipelineStack.statusLambda,
     });
 
     for (const region of PROBE_REGIONS) {

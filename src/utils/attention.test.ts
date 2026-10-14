@@ -5,7 +5,7 @@ import { AttentionItem } from '../types';
 const item = (fields: Partial<AttentionItem>): AttentionItem => ({
   severity: 'warning', kind: 'NEEDS_REVIEW', title: '', detail: null, strategyId: null, strategyName: null,
   sessionId: null, listingId: null, symbol: null, exchangeId: null, exchangeName: null, accountId: null,
-  accountLabel: null, since: null, ...fields,
+  accountLabel: null, actor: null, subject: null, since: null, ...fields,
 });
 
 describe('where an attention item is dealt with', () => {

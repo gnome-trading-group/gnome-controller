@@ -1,6 +1,6 @@
 import { IconGauge, IconHeartbeat, IconLockSquareRounded, IconNotes, IconTool, IconChartLine, IconTestPipe, IconFlask, IconScale, IconRocket } from "@tabler/icons-react";
 import { AppShell, Box, Paper, Group, ScrollArea, Code, Title, Tooltip, UnstyledButton } from '@mantine/core';
-import { useSystemHealth } from '../../query/hooks';
+import { useOpenAlerts, useSystemHealth } from '../../query/hooks';
 import { AlarmsSection } from '../../types';
 import { useLocation } from 'react-router-dom';
 import logo from '../../assets/logo.svg';
@@ -83,9 +83,15 @@ function Navbar({ onToggle }: NavbarProps) {
 
   const alarms = useSystemHealth<AlarmsSection>('alarms');
   const firing = alarms.data?.services.reduce((sum, s) => sum + s.firing, 0) ?? 0;
+  const openAlerts = useOpenAlerts();
+  const serious = openAlerts.data?.filter(a => a.severity === 'CRITICAL' || a.severity === 'ERROR').length ?? 0;
+  const reasons = [
+    firing > 0 && `${firing} alarm${firing > 1 ? 's' : ''} firing`,
+    serious > 0 && `${serious} open alert${serious > 1 ? 's' : ''}`,
+  ].filter(Boolean).join(', ');
   const indicators: Record<string, React.ReactNode> = {
-    System: firing > 0 && (
-      <Tooltip label={`${firing} alarm${firing > 1 ? 's' : ''} firing`} withArrow position="right">
+    System: reasons && (
+      <Tooltip label={reasons} withArrow position="right">
         <Box w={9} h={9} mr="xs" style={{ borderRadius: '50%', background: 'var(--mantine-color-red-6)' }} />
       </Tooltip>
     ),
