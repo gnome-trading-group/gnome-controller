@@ -24,7 +24,9 @@ export function AttentionList({ items, mode, loading }: { items: AttentionItem[]
         <Stack gap={8}>
           {items.map((item, i) => {
             const style = STYLE[item.severity];
-            const subject = [item.strategyName, item.symbol, item.sessionId?.slice(0, 8)].filter(Boolean).join(' · ');
+            // Account items already name their account in the title.
+            const account = item.accountLabel && !item.title.includes(item.accountLabel) ? item.accountLabel : null;
+            const subject = [item.strategyName, item.symbol, account, item.sessionId?.slice(0, 8)].filter(Boolean).join(' · ');
             return (
               <Group key={`${item.kind}/${item.sessionId}/${item.strategyId}/${item.listingId}/${i}`} gap="sm" wrap="nowrap" align="flex-start">
                 <ThemeIcon color={style.color} variant="light" size="md" radius="xl">{style.icon}</ThemeIcon>

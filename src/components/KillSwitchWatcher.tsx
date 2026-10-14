@@ -8,6 +8,7 @@ import { registryApi } from '../utils/api';
 import { formatActor, KILL_SWITCH_TYPE } from '../utils/kill-switch';
 import { ACTIVE_SESSION_STATUSES } from '../types/strategy-sessions';
 import { describeTarget, targetPageLink, withoutEndedSessions } from '../utils/policy-target';
+import { useExchangeName } from '../hooks/useExchangeName';
 
 const POLL_INTERVAL_MS = 15000;
 
@@ -24,6 +25,7 @@ export function KillSwitchWatcher() {
   const [alerts, setAlerts] = useState<KillAlert[]>([]);
   const known = useRef<Set<number> | null>(null);
   const me = useRef<string | null>(null);
+  const exchangeName = useExchangeName();
 
   useEffect(() => {
     fetchAuthSession()
@@ -74,10 +76,11 @@ export function KillSwitchWatcher() {
           key={`${policy.policyId}-${entry?.historyId ?? policy.dateModified}`}
           color="red"
           icon={<IconAlertTriangle size={18} />}
-          title="Kill switch turned on"
+          title={policy.exchangeId != null && policy.strategyId == null && policy.sessionId == null
+            ? 'Venue halted' : 'Kill switch turned on'}
           onClose={() => setAlerts((prev) => prev.filter((a) => a.policy.policyId !== policy.policyId))}
         >
-          <Text size="sm">{describeTarget(policy)}</Text>
+          <Text size="sm">{describeTarget(policy, undefined, undefined, exchangeName)}</Text>
           {entry && (
             <Text size="xs" c="dimmed">
               by {formatActor(entry.actor)}{entry.reason ? `: ${entry.reason}` : ''}

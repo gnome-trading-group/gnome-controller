@@ -13,29 +13,36 @@ export function isActiveSessionStatus(status: StrategySessionStatus): boolean {
   return ACTIVE_SESSION_STATUSES.has(status);
 }
 
-// Names what a policy applies to, from exactly the ids it carries.
-export function targetPageLink(policy: Pick<RiskPolicy, 'sessionId' | 'strategyId' | 'listingId'>): string {
+type PolicyTarget = Pick<RiskPolicy, 'sessionId' | 'strategyId' | 'listingId' | 'exchangeId'>;
+
+// Names what a policy applies to, from exactly the ids it carries. A venue-wide row is managed from the treasury
+// page, where its halt lives beside the venue's accounts.
+export function targetPageLink(policy: PolicyTarget): string {
   if (policy.sessionId != null) return `/sessions/${policy.sessionId}`;
   if (policy.strategyId != null) return `/strategies/${policy.strategyId}`;
   if (policy.listingId != null) return `/security-master/listings/${policy.listingId}`;
+  if (policy.exchangeId != null) return '/treasury';
   return '/risk/policies';
 }
 
 export function describeTarget(
-  policy: Pick<RiskPolicy, 'sessionId' | 'strategyId' | 'listingId'>,
+  policy: PolicyTarget,
   strategyName?: (strategyId: number) => string | undefined,
   listingLabel?: (listingId: number) => string | undefined,
+  exchangeName?: (exchangeId: number) => string | undefined,
 ): string {
   const strategy = policy.strategyId != null
     ? (strategyName?.(policy.strategyId) ?? `Strategy ${policy.strategyId}`)
     : undefined;
-  const listing = policy.listingId != null
+  const place = policy.listingId != null
     ? (listingLabel?.(policy.listingId) ?? `Listing ${policy.listingId}`)
-    : undefined;
+    : policy.exchangeId != null
+      ? (exchangeName?.(policy.exchangeId) ?? `Exchange ${policy.exchangeId}`)
+      : undefined;
   const subject = policy.sessionId != null ? `Session ${policy.sessionId}` : strategy;
-  if (subject && listing) return `${subject} on ${listing}`;
+  if (subject && place) return `${subject} on ${place}`;
   if (subject) return subject;
-  if (listing) return `${listing} (all strategies)`;
+  if (place) return `${place} (all strategies)`;
   return 'Global';
 }
 
@@ -47,35 +54,37 @@ export function withoutEndedSessions(policies: RiskPolicy[], sessions: StrategyS
 }
 
 export interface PolicyLevel {
-  label: 'Global' | 'Listing' | 'Strategy' | 'Session';
+  label: 'Global' | 'Exchange' | 'Listing' | 'Strategy' | 'Session';
   color: string;
 }
 
-// How wide a policy reaches, read from the ids it carries.
-export function policyLevel(policy: Pick<RiskPolicy, 'sessionId' | 'strategyId' | 'listingId'>): PolicyLevel {
+// How wide a policy reaches, read from the ids it carries. A strategy or session narrowed to an exchange or listing
+// keeps its own level; describeTarget names the narrowing.
+export function policyLevel(policy: PolicyTarget): PolicyLevel {
   if (policy.sessionId != null) return { label: 'Session', color: 'violet' };
   if (policy.strategyId != null) return { label: 'Strategy', color: 'blue' };
   if (policy.listingId != null) return { label: 'Listing', color: 'orange' };
+  if (policy.exchangeId != null) return { label: 'Exchange', color: 'cyan' };
   return { label: 'Global', color: 'gray' };
 }
 
-// Every policy that can restrict this strategy: global and listing-wide rows, its own, and its running sessions'.
-// A global kill switch only matters while it's on, so the always-present off row is left out.
+// Every policy that can restrict this strategy: global, exchange- and listing-wide rows, its own, and its running
+// sessions'. A global kill switch only matters while it's on, so the always-present off row is left out.
 export function policiesForStrategy(policies: RiskPolicy[], strategyId: number): RiskPolicy[] {
   return policies.filter((p) =>
     (p.strategyId === strategyId || (p.strategyId == null && p.sessionId == null)) && !isIdleGlobalKill(p));
 }
 
-// Every policy that can restrict this session: global and listing-wide rows, its strategy's, and its own.
+// Every policy that can restrict this session: global, exchange- and listing-wide rows, its strategy's, and its own.
 export function policiesForSession(policies: RiskPolicy[], sessionId: string, strategyId: number): RiskPolicy[] {
   return policies.filter((p) =>
     (p.sessionId == null ? p.strategyId == null || p.strategyId === strategyId : p.sessionId === sessionId)
     && !isIdleGlobalKill(p));
 }
 
-function isIdleGlobalKill(policy: RiskPolicy): boolean {
+export function isIdleGlobalKill(policy: RiskPolicy): boolean {
   return policy.policyType === 'KILL_SWITCH' && !policy.enabled && policy.strategyId == null
-    && policy.listingId == null && policy.sessionId == null;
+    && policy.listingId == null && policy.sessionId == null && policy.exchangeId == null;
 }
 
 // The listings these sessions trade, as recorded in their launch config.

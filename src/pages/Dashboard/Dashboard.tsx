@@ -85,6 +85,7 @@ function Dashboard() {
   );
   const running = modeSessions.filter(s => s.status === StrategySessionStatus.RUNNING);
   const globalHalt = attention.data?.items.find(i => i.kind === 'GLOBAL_HALT');
+  const venueHalts = attention.data?.items.filter(i => i.kind === 'EXCHANGE_HALT') ?? [];
   const totals = firm.data?.totals;
   const openPositions = firm.data?.strategies.reduce((sum, s) => sum + s.openPositions, 0);
 
@@ -169,6 +170,14 @@ function Dashboard() {
         <Alert mb="md" color="red" icon={<IconAlertOctagon size={20} />} title="All trading is halted">
           The global kill switch is on: every strategy's orders are blocked.{' '}
           <Anchor component={Link} to="/risk/policies" size="sm">Risk policies</Anchor>
+        </Alert>
+      )}
+
+      {venueHalts.length > 0 && (
+        <Alert mb="md" color="red" icon={<IconAlertOctagon size={20} />}
+          title={`Trading is halted on ${venueHalts.map(h => h.exchangeName ?? `exchange ${h.exchangeId}`).join(', ')}`}>
+          Every strategy's orders on {venueHalts.length === 1 ? 'that venue' : 'those venues'} are blocked.{' '}
+          <Anchor component={Link} to="/treasury" size="sm">Treasury &amp; Accounts</Anchor>
         </Alert>
       )}
 

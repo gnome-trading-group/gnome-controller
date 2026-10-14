@@ -19,6 +19,7 @@ const SecurityCoverage = lazy(() => import('./pages/MarketData/Coverage/Security
 const SecurityExchangeCoverage = lazy(() => import('./pages/MarketData/Coverage/SecurityExchangeCoverage'));
 const TransformJobs = lazy(() => import('./pages/MarketData/TransformJobs/TransformJobs'));
 const Gaps = lazy(() => import('./pages/MarketData/Gaps/Gaps'));
+const MarketDataCredentials = lazy(() => import('./pages/MarketData/Credentials/Credentials'));
 const SecurityMaster = lazy(() => import('./pages/SecurityMaster/SecurityMaster'));
 const ListingDetail = lazy(() => import('./pages/SecurityMaster/ListingDetail'));
 const SecurityDetail = lazy(() => import('./pages/SecurityMaster/SecurityDetail'));
@@ -29,6 +30,7 @@ const PositionDetail = lazy(() => import('./pages/Strategies/PositionDetail'));
 const Blotter = lazy(() => import('./pages/Trading/Blotter'));
 const SystemHealth = lazy(() => import('./pages/System/SystemHealth'));
 const RiskPolicies = lazy(() => import('./pages/Risk/RiskPolicies'));
+const Treasury = lazy(() => import('./pages/Treasury/Treasury'));
 const CollectorDetail = lazy(() => import('./pages/CollectorDetail/CollectorDetail'));
 const QualityIssues = lazy(() => import('./pages/MarketData/QualityIssues/QualityIssues'));
 const MinuteInvestigation = lazy(() => import('./pages/MarketData/QualityIssues/MinuteInvestigation'));
@@ -184,6 +186,7 @@ function AppContent() {
                 <Route path="/market-data/coverage/:securityId/:exchangeId" element={<SecurityExchangeCoverage />} />
                 <Route path="/market-data/transform-jobs" element={<TransformJobs />} />
                 <Route path="/market-data/gaps" element={<Gaps />} />
+                <Route path="/market-data/credentials" element={<MarketDataCredentials />} />
                 <Route path="/market-data/quality-issues" element={<QualityIssues />} />
                 <Route path="/market-data/quality-issues/investigate/:listingId/:timestamp" element={<MinuteInvestigation />} />
                 <Route path="/tools/service-config" element={<ServiceConfig />} />
@@ -194,6 +197,7 @@ function AppContent() {
                 <Route path="/trading/blotter" element={<Blotter />} />
                 <Route path="/system" element={<SystemHealth />} />
                 <Route path="/risk/policies" element={<RiskPolicies />} />
+                <Route path="/treasury" element={<Treasury />} />
                 <Route path="/backtests" element={<BacktestList />} />
                 <Route path="/backtests/:runId" element={<BacktestDetail />} />
                 <Route path="/research" element={<Navigate to="/research/sessions" replace />} />

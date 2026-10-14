@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { navigateRowProps } from '../../../utils/navigation';
 import { marketDataApi, registryApi, ApiError } from '../../../utils/api';
 import { DenormalizedListing, Event, EventContract } from '../../../types';
 import {
+  Alert,
+  Anchor,
   Button,
   ActionIcon,
   Group,
@@ -31,6 +33,8 @@ import { CPU_OPTIONS, VALID_MEMORY_OPTIONS, suggestCollectorSizing } from '../..
 import { useLatestRequest } from '../../../hooks/useLatestRequest';
 import { errorMessage } from '../../../utils/kill-switch';
 import { LastUpdated } from '../../../components/LastUpdated';
+import { useMarketDataKeys } from '../../../query/hooks';
+import { unusableKeys } from '../../../utils/credentials';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -51,6 +55,8 @@ function Collectors() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { exchanges } = useGlobalState();
+  const marketDataKeys = useMarketDataKeys();
+  const brokenKeys = unusableKeys(marketDataKeys.data ?? []);
   const [collectors, setCollectors] = useState<Collector[]>([]);
   const [hideInactive, setHideInactive] = useState(true);
   const [listingIdSearch, setListingIdSearch] = useState('');
@@ -566,6 +572,13 @@ function Collectors() {
             </ActionIcon>
           </Tooltip>
         </Group>
+      {brokenKeys.length > 0 && (
+        <Alert color="orange" variant="light" mb="md">
+          {brokenKeys.map((k) => `${exchanges.find((e) => e.exchangeCode === k.exchangeCode)?.exchangeName ?? k.exchangeCode}${k.exists ? ' (out of sync)' : ''}`).join(', ')}{' '}
+          market data can&apos;t connect without a usable key. Set it on the{' '}
+          <Anchor component={Link} to="/market-data/credentials">Credentials</Anchor> page.
+        </Alert>
+      )}
       </Group>
 
       {loadError && (

@@ -14,8 +14,11 @@ const LABELS: Record<string, string> = {
   MAX_OPEN_ORDERS: 'Max open orders',
   MAX_TOTAL_PNL_LOSS: 'Max loss',
   MAX_ORDER_SIZE: 'Max order size',
-  MAX_NOTIONAL: 'Max order notional',
+  MAX_ORDER_NOTIONAL: 'Max order notional',
   PRICE_COLLAR: 'Price collar',
+  MARKET_ORDER_SLIPPAGE: 'Market order slippage',
+  MAX_COMMITTED_CAPITAL: 'Committed capital',
+  MAX_CONSECUTIVE_REJECTS: 'Consecutive rejects',
 };
 
 export function usageLabel(policy: PolicyUsage): string {
@@ -30,6 +33,7 @@ export function formatLimit(policyType: string, value: string | null): string {
     case 'MAX_ORDER_SIZE':
       return formatQty(value);
     case 'MAX_OPEN_ORDERS':
+    case 'MAX_CONSECUTIVE_REJECTS':
       return value;
     default:
       return formatMoney(value, false).text;

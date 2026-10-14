@@ -1,11 +1,13 @@
 import { PRICE_SCALING_FACTOR, SIZE_SCALING_FACTOR, formatUnscaled } from './security-master';
 
 // The OMS compares limits against scaled integers, so each limit is stored at its field's scale while
-// operators read and type dollars and units.
+// operators read and type dollars and units. Counts (maxOpenOrders, maxRejects) are stored as typed.
 const PARAMETER_SCALES: Record<string, { factor: number; unit: 'dollars' | 'units' }> = {
-  maxNotionalValue: { factor: PRICE_SCALING_FACTOR, unit: 'dollars' },
+  maxOrderNotional: { factor: PRICE_SCALING_FACTOR, unit: 'dollars' },
+  maxCapital: { factor: PRICE_SCALING_FACTOR, unit: 'dollars' },
   maxLoss: { factor: PRICE_SCALING_FACTOR, unit: 'dollars' },
   maxDeviation: { factor: PRICE_SCALING_FACTOR, unit: 'dollars' },
+  maxSlippage: { factor: PRICE_SCALING_FACTOR, unit: 'dollars' },
   maxOrderSize: { factor: SIZE_SCALING_FACTOR, unit: 'units' },
   maxPosition: { factor: SIZE_SCALING_FACTOR, unit: 'units' },
 };
@@ -34,7 +36,7 @@ export function unscaleRiskParameters(parameters: Record<string, unknown>): Reco
   return unscaled;
 }
 
-/** Shows stored limits as dollars and units, e.g. "maxNotionalValue: $5000". */
+/** Shows stored limits as dollars and units, e.g. "maxOrderNotional: $5000". */
 export function formatRiskParameters(parameters: Record<string, unknown>): string {
   const entries = Object.entries(parameters ?? {});
   if (entries.length === 0) return '-';

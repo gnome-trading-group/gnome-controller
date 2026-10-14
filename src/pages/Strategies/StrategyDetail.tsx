@@ -352,7 +352,10 @@ function StrategyDetail() {
             rows={summary.data?.listings ?? []}
             loading={summary.isLoading}
             onAdjust={setAdjustTarget}
-            rowHref={row => `/strategies/${id}/listings/${row.listingId}?mode=${mode}`}
+            rowHref={row => {
+              const accountId = 'accountId' in row ? row.accountId : null;
+              return `/strategies/${id}/listings/${row.listingId}?mode=${mode}${accountId !== null ? `&account=${accountId}` : ''}`;
+            }}
           />
           )}
         </Tabs.Panel>

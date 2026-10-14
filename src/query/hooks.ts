@@ -13,6 +13,7 @@ export const POLL = {
   policies: 5_000,
   sessions: 10_000,
   attention: 10_000,
+  treasury: 30_000,
 };
 
 const PAGE_SIZE = 100;
@@ -32,6 +33,12 @@ export const keys = {
   series: (scope: LedgerScope, start: string | undefined) => ['pnlSeries', scope, start] as const,
   fills: (scope: LedgerScope) => ['ledgerFills', scope] as const,
   orders: (scope: LedgerScope, status: string) => ['ledgerOrders', scope, status] as const,
+  venueAccounts: ['venueAccounts'] as const,
+  treasury: ['treasury'] as const,
+  marketDataKeys: ['marketDataKeys'] as const,
+  transfers: (accountId: number | null) => ['treasury', 'transfers', accountId] as const,
+  recon: (accountId: number) => ['treasury', 'recon', accountId] as const,
+  sessionAccounts: (sessionId: string) => ['sessionAccounts', sessionId] as const,
 };
 
 export function useActiveSessions() {
@@ -291,6 +298,47 @@ export function useOrders(
     getNextPageParam: last => (last.rows.length === PAGE_SIZE ? last.nextBefore ?? undefined : undefined),
     select: data => data.pages.flatMap(page => page.rows) as LedgerOrder[],
     refetchInterval: live ? POLL.ledger : false,
+  });
+}
+
+// Every venue account in any status; the treasury summary leaves retired ones out.
+export function useVenueAccounts() {
+  return useQuery({ queryKey: keys.venueAccounts, queryFn: () => registryApi.listVenueAccounts(), refetchInterval: POLL.treasury });
+}
+
+// Balances move with the venue poller's snapshots, every few minutes.
+export function useMarketDataKeys() {
+  return useQuery({ queryKey: keys.marketDataKeys, queryFn: () => registryApi.listMarketDataKeys(), refetchInterval: 60_000 });
+}
+
+export function useTreasurySummary() {
+  return useQuery({ queryKey: keys.treasury, queryFn: () => registryApi.getTreasurySummary(), refetchInterval: POLL.treasury });
+}
+
+export function useTransfers(accountId: number | null) {
+  return useQuery({
+    queryKey: keys.transfers(accountId),
+    queryFn: () => registryApi.listTransfers(accountId ?? undefined),
+    refetchInterval: POLL.treasury,
+  });
+}
+
+export function useRecon(accountId: number | null) {
+  return useQuery({
+    queryKey: keys.recon(accountId ?? 0),
+    queryFn: () => registryApi.getRecon(accountId as number),
+    enabled: accountId !== null,
+    refetchInterval: POLL.treasury,
+  });
+}
+
+// A live session's accounts are bound once, at launch.
+export function useSessionAccounts(sessionId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.sessionAccounts(sessionId),
+    queryFn: () => registryApi.getSessionAccounts(sessionId),
+    enabled,
+    staleTime: 60_000,
   });
 }
 

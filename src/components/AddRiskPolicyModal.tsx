@@ -5,18 +5,19 @@ import { registryApi } from '../utils/api';
 import { scaleRiskParameters } from '../utils/risk-parameters';
 import { errorMessage } from '../utils/kill-switch';
 import { useListingSearch } from '../hooks/useAsyncSearch';
+import { useGlobalState } from '../context/GlobalStateContext';
 
 interface AddRiskPolicyModalProps {
   opened: boolean;
   onClose: () => void;
-  // The strategy or session the policy applies to; an optional listing narrows it to that listing only.
+  // The strategy or session the policy applies to; an optional exchange or listing narrows it to that one only.
   target: { strategyId: number } | { sessionId: string };
   // Names the target in the listing hint, e.g. "this strategy" or "this session".
   targetLabel: string;
   onCreated: () => void;
 }
 
-const EMPTY_FORM = { policyType: '', listingId: '', parametersJson: '{}', enabled: true };
+const EMPTY_FORM = { policyType: '', exchangeId: '', listingId: '', parametersJson: '{}', enabled: true };
 
 export function AddRiskPolicyModal({ opened, onClose, target, targetLabel, onCreated }: AddRiskPolicyModalProps) {
   const [form, setForm] = useState(EMPTY_FORM);
@@ -24,6 +25,7 @@ export function AddRiskPolicyModal({ opened, onClose, target, targetLabel, onCre
   const [creating, setCreating] = useState(false);
   const [listingSearch, setListingSearch] = useState('');
   const { options: listingOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearch);
+  const { exchanges } = useGlobalState();
 
   useEffect(() => {
     if (opened) {
@@ -40,6 +42,7 @@ export function AddRiskPolicyModal({ opened, onClose, target, targetLabel, onCre
       await registryApi.createRiskPolicy({
         policyType: form.policyType,
         ...target,
+        exchangeId: form.exchangeId ? parseInt(form.exchangeId) : undefined,
         listingId: form.listingId ? parseInt(form.listingId) : undefined,
         parameters: scaleRiskParameters(JSON.parse(form.parametersJson)),
         enabled: form.enabled,
@@ -67,8 +70,22 @@ export function AddRiskPolicyModal({ opened, onClose, target, targetLabel, onCre
           required
         />
         <Select
+          label="Exchange"
+          description={form.policyType === 'MAX_COMMITTED_CAPITAL'
+            ? `A per-session cap on this exchange: each of ${targetLabel}'s sessions is held to it on its own`
+            : `Only ${targetLabel}'s listings on this exchange; leave empty for all of them`}
+          placeholder="Every exchange"
+          data={exchanges.map((e) => ({ value: String(e.exchangeId), label: e.exchangeName }))}
+          value={form.exchangeId || null}
+          onChange={(v) => setForm((f) => ({ ...f, exchangeId: v ?? '' }))}
+          disabled={!!form.listingId}
+          clearable
+        />
+        <Select
           label="Listing"
-          description={`Leave empty for all of ${targetLabel}'s listings`}
+          description={form.exchangeId ? 'A listing implies its exchange: clear the exchange to pick one'
+            : `Leave empty for all of ${targetLabel}'s listings`}
+          disabled={!!form.exchangeId}
           placeholder="Search listings..."
           data={listingOptions}
           value={form.listingId || null}

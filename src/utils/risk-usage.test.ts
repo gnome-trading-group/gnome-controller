@@ -12,6 +12,8 @@ describe('limit usage', () => {
     expect(formatLimit('MAX_OPEN_ORDERS', '2')).toBe('2');
     expect(formatLimit('MAX_TOTAL_PNL_LOSS', '510000000')).toBe('$0.51');
     expect(formatLimit('MAX_ORDER_SIZE', null)).toBe('—');
+    expect(formatLimit('MAX_COMMITTED_CAPITAL', '1500000000000')).toBe('$1,500.00');
+    expect(formatLimit('MAX_CONSECUTIVE_REJECTS', '5')).toBe('5');
   });
 
   it('picks the standing limit nearest to binding, ignoring per-order checks and unread ones', () => {

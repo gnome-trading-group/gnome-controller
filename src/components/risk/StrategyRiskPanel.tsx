@@ -11,6 +11,7 @@ import {
   configuredListings, describeTarget, isActiveSessionStatus, isUnrelatedListingPolicy, policyLevel,
 } from '../../utils/policy-target';
 import { useListingLabels } from '../../hooks/useAsyncSearch';
+import { useExchangeName } from '../../hooks/useExchangeName';
 import { ReasonConfirmModal } from '../ReasonConfirmModal';
 import { RiskPolicyHistoryModal } from '../RiskPolicyHistoryModal';
 import { KillOnListingModal } from '../KillOnListingModal';
@@ -50,6 +51,7 @@ export function StrategyRiskPanel({
     () => (showAllListingPolicies ? policies : policies.filter((p) => !isUnrelatedListingPolicy(p, tradedListings))),
     [policies, tradedListings, showAllListingPolicies],
   );
+  const exchangeName = useExchangeName();
   const listingLabels = useListingLabels(shownPolicies.flatMap((p) => (p.listingId != null ? [p.listingId] : [])));
 
   const confirmToggleEnabled = async (reason: string | undefined) => {
@@ -81,7 +83,7 @@ export function StrategyRiskPanel({
       header: 'Applies to',
       enableSorting: false,
       Cell: ({ row }: { row: MRT_Row<RiskPolicy> }) =>
-        describeTarget(row.original, () => strategyName, (listingId) => listingLabels[listingId]),
+        describeTarget(row.original, () => strategyName, (listingId) => listingLabels[listingId], exchangeName),
     },
     {
       id: 'parameters',
@@ -111,7 +113,7 @@ export function StrategyRiskPanel({
           ? <ReactTimeAgo date={new Date(row.original.dateModified)} timeStyle="round" />
           : '-',
     },
-  ], [strategyName, listingLabels]);
+  ], [strategyName, listingLabels, exchangeName]);
 
   const policyTable = useMantineReactTable({
     columns: policyColumns,
@@ -178,7 +180,7 @@ export function StrategyRiskPanel({
       </Group>
       <ListingKillList
         kills={listingKills(policies)}
-        describe={(p) => describeTarget(p, () => strategyName, (listingId) => listingLabels[listingId])}
+        describe={(p) => describeTarget(p, () => strategyName, (listingId) => listingLabels[listingId], exchangeName)}
         level={policyLevel}
         onResumed={onChanged}
       />

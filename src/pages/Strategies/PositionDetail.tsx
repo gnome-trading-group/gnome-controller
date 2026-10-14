@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Anchor, Button, Card, Container, Group, SegmentedControl, Tabs, Text, Tooltip } from '@mantine/core';
+import { Anchor, Badge, Button, Card, Container, Group, SegmentedControl, Table, Tabs, Text, Tooltip } from '@mantine/core';
 import { IconAdjustments, IconRefresh } from '@tabler/icons-react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { isActiveSession } from '../../types';
+import { isActiveSession, StrategyListingPnl } from '../../types';
 import { useDayZone } from '../../context/PreferencesContext';
 import { useModeParam } from '../../hooks/useModeParam';
 import { useCents } from '../../hooks/useCents';
@@ -19,6 +19,7 @@ import { PriceChart } from '../../components/trading/PriceChart';
 import { FillsTable, OrdersTable } from '../../components/trading/LedgerTables';
 import { AdjustPositionModal } from '../../components/trading/AdjustPositionModal';
 import { formatDuration } from '../../utils/format';
+import { treasuryLink } from '../../utils/attention';
 
 const RANGES: Record<string, number | null> = { '1h': 3_600_000, '1d': 86_400_000, '7d': 7 * 86_400_000, All: null };
 
@@ -46,7 +47,18 @@ function PositionDetail() {
   const live = (sessions.data ?? []).some(s => s.mode === mode && isActiveSession(s.status)
     && Array.isArray(s.config.listings) && (s.config.listings as unknown[]).map(Number).includes(listingId));
   const summary = useStrategySummary(strategyId, mode, tz);
-  const row = summary.data?.listings.find(l => l.listingId === listingId) ?? null;
+  // Live, the strategy may hold the listing on several venue accounts (one it was relaunched off, still draining):
+  // the figures are one account's, picked in the URL, else the one with a position.
+  const [search, setSearch] = useSearchParams();
+  const accountRows = summary.data?.listings.filter(l => l.listingId === listingId) ?? [];
+  const row = accountRows.find(l => String(l.accountId) === search.get('account'))
+    ?? accountRows.find(l => BigInt(l.netQuantity) !== 0n) ?? accountRows[0] ?? null;
+  const selectAccount = (r: StrategyListingPnl) => setSearch(current => {
+    const updated = new URLSearchParams(current);
+    if (r.accountId === null) updated.delete('account');
+    else updated.set('account', String(r.accountId));
+    return updated;
+  }, { replace: true });
   const cents = useCents(row?.exchangeId);
 
   const [range, setRange] = useState('1d');
@@ -94,6 +106,9 @@ function PositionDetail() {
           <Anchor component={Link} to={`/strategies/${strategyId}?mode=${mode}`} size="sm">{strategy?.name ?? `Strategy ${strategyId}`}</Anchor>,
           <Anchor component={Link} to={`/security-master/listings/${listingId}`} size="sm">listing {listingId}</Anchor>,
           row?.tickSize && <>tick <Price value={row.tickSize} exchangeId={row.exchangeId} tickSize={row.tickSize} size="sm" /></>,
+          row?.accountLabel && (
+            <>account <Anchor component={Link} to={treasuryLink(row.accountId)} size="sm" ff="monospace">{row.accountLabel}</Anchor></>
+          ),
           live ? 'trading now' : 'no session trading it',
         ]}
       />
@@ -109,6 +124,39 @@ function PositionDetail() {
         <Kpi label="Lifetime PnL" value={<Money value={row?.total} arrow />} footer={row && <>fees <Money value={row.fees} pnl={false} size="xs" /></>} />
         <Kpi label="Today" value={<Money value={row?.today} arrow />} />
       </KpiStrip>
+      {accountRows.length > 1 && (
+        <Card withBorder mb="md" p="sm">
+          <Text fw={600} mb="xs">By venue account</Text>
+          <Table highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Account</Table.Th>
+                <Table.Th ta="right">Position</Table.Th>
+                <Table.Th ta="right">Avg entry</Table.Th>
+                <Table.Th ta="right">Unrealized</Table.Th>
+                <Table.Th ta="right">Lifetime PnL</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {accountRows.map(r => (
+                <Table.Tr key={r.accountId ?? 'none'} onClick={() => selectAccount(r)} style={{ cursor: 'pointer' }}
+                  bg={r === row ? 'var(--mantine-color-blue-light)' : undefined}>
+                  <Table.Td>
+                    <Group gap={6}>
+                      <Text span size="sm" ff="monospace">{r.accountLabel ?? '—'}</Text>
+                      {r.needsReview && <Badge color="red" size="xs">review</Badge>}
+                    </Group>
+                  </Table.Td>
+                  <Table.Td ta="right"><Qty value={r.netQuantity} lotSize={r.lotSize} signed size="sm" /></Table.Td>
+                  <Table.Td ta="right"><Price value={r.avgEntryPrice} exchangeId={r.exchangeId} tickSize={r.tickSize} derived size="sm" /></Table.Td>
+                  <Table.Td ta="right"><Money value={r.unrealized} size="sm" /></Table.Td>
+                  <Table.Td ta="right"><Money value={r.total} size="sm" /></Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Card>
+      )}
       {!summary.isLoading && !row && (
         <Text c="dimmed" size="sm" mb="md">The strategy has never traded this listing in {mode}.</Text>
       )}

@@ -129,9 +129,10 @@ function Strategies() {
   const columns = useMemo<MRT_ColumnDef<Row>[]>(() => {
     const right = { mantineTableHeadCellProps: { align: 'right' as const }, mantineTableBodyCellProps: { align: 'right' as const } };
     const big = (v: bigint | null) => (v === null ? Number.NEGATIVE_INFINITY : Number(v));
+    // While loading, the table fills its skeleton with blank rows, so the accessors can't assume a row's fields.
     return [
       {
-        id: 'name', header: 'Strategy', size: 190, accessorFn: r => r.strategy.name,
+        id: 'name', header: 'Strategy', size: 190, accessorFn: r => r.strategy?.name,
         Cell: ({ row }) => (
           <Group gap={6} wrap="nowrap">
             <Anchor component={Link} to={`/strategies/${row.original.strategy.strategyId}?mode=${mode}`} size="sm" fw={600}
@@ -147,7 +148,7 @@ function Strategies() {
         ),
       },
       {
-        id: 'status', header: 'Status', size: 120, accessorFn: r => r.activity.label,
+        id: 'status', header: 'Status', size: 120, accessorFn: r => r.activity?.label,
         Cell: ({ row }) => <Badge color={row.original.activity.color} variant="light" size="sm">{row.original.activity.label}</Badge>,
       },
       { id: 'today', header: 'Today', size: 100, ...right, accessorFn: r => big(r.today), Cell: ({ row }) => <Money value={row.original.today} size="sm" /> },

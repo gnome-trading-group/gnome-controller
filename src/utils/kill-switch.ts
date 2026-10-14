@@ -4,10 +4,11 @@ import { registryApi } from './api';
 export const KILL_SWITCH_TYPE = 'KILL_SWITCH';
 
 // A policy applies to exactly the ids it carries: none is global, a strategy covers every session of it, a listing
-// covers every strategy on it, a session narrows a strategy to one running instance.
+// covers every strategy on it, an exchange every listing on it, a session narrows a strategy to one running instance.
 export interface KillSwitchTarget {
   sessionId?: string;
   strategyId?: number;
+  exchangeId?: number;
   listingId?: number;
 }
 
@@ -19,6 +20,7 @@ export function isKillSwitch(policy: RiskPolicy, target: KillSwitchTarget): bool
   if (policy.policyType !== KILL_SWITCH_TYPE) return false;
   if ((policy.sessionId ?? undefined) !== target.sessionId) return false;
   if ((policy.listingId ?? undefined) !== target.listingId) return false;
+  if ((policy.exchangeId ?? undefined) !== target.exchangeId) return false;
   return target.sessionId != null || (policy.strategyId ?? undefined) === target.strategyId;
 }
 
@@ -55,6 +57,7 @@ export async function setKillSwitch(
     policyType: KILL_SWITCH_TYPE,
     sessionId: target.sessionId,
     strategyId: target.strategyId,
+    exchangeId: target.exchangeId,
     listingId: target.listingId,
     parameters: {},
     enabled: true,

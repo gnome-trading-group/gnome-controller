@@ -68,7 +68,11 @@ export interface SessionSummary {
   listings: SessionListingPnl[];
 }
 
+// One per listing and venue account: a strategy relaunched onto another account holds the listing on each separately.
+// Paper positions belong to no account.
 export interface StrategyListingPnl extends ValuedListing {
+  accountId: number | null;
+  accountLabel: string | null;
   today: string;
 }
 
@@ -124,7 +128,7 @@ export interface DailyPnl {
 export interface PolicyUsage {
   policyId: number;
   policyType: string;
-  level: 'session' | 'strategy' | 'listing' | 'global';
+  level: 'session' | 'strategy' | 'strategy-exchange' | 'exchange' | 'listing' | 'global';
   listingId: number | null;
   limit: string;
   value: string | null;
@@ -189,6 +193,10 @@ export interface AttentionItem {
   sessionId: string | null;
   listingId: number | null;
   symbol: string | null;
+  exchangeId: number | null;
+  exchangeName: string | null;
+  accountId: number | null;
+  accountLabel: string | null;
   since: string | null;
 }
 

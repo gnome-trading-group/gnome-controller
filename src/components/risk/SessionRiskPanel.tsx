@@ -8,6 +8,7 @@ import {
 } from '../../utils/policy-target';
 import { formatRiskParameters } from '../../utils/risk-parameters';
 import { useListingLabels } from '../../hooks/useAsyncSearch';
+import { useExchangeName } from '../../hooks/useExchangeName';
 import { KillOnListingModal } from '../KillOnListingModal';
 import { AddRiskPolicyModal } from '../AddRiskPolicyModal';
 import { EditRiskPolicyModal } from '../EditRiskPolicyModal';
@@ -37,9 +38,10 @@ export function SessionRiskPanel({ session, strategyName, policies, policiesLoad
   const sessionPolicies = showAllListingPolicies
     ? applicablePolicies
     : applicablePolicies.filter((p) => !isUnrelatedListingPolicy(p, tradedListings));
+  const exchangeName = useExchangeName();
   const listingLabels = useListingLabels(sessionPolicies.flatMap((p) => (p.listingId != null ? [p.listingId] : [])));
   const describePolicy = (p: RiskPolicy) =>
-    describeTarget(p, () => strategyName, (listingId) => listingLabels[listingId]);
+    describeTarget(p, () => strategyName, (listingId) => listingLabels[listingId], exchangeName);
 
   return (
     <>

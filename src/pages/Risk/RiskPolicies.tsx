@@ -31,6 +31,8 @@ import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal'
 import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
 import { EditRiskPolicyModal } from '../../components/EditRiskPolicyModal';
 import { LastUpdated } from '../../components/LastUpdated';
+import { useGlobalState } from '../../context/GlobalStateContext';
+import { useExchangeName } from '../../hooks/useExchangeName';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -53,12 +55,15 @@ function RiskPolicies() {
   const [policyForm, setPolicyForm] = useState({
     policyType: '',
     strategyId: '',
+    exchangeId: '',
     listingId: '',
     parametersJson: '{}',
     enabled: true,
   });
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const { exchanges } = useGlobalState();
+  const exchangeName = useExchangeName();
 
   const refresh = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -117,12 +122,13 @@ function RiskPolicies() {
       await registryApi.createRiskPolicy({
         policyType: policyForm.policyType,
         strategyId: policyForm.strategyId ? parseInt(policyForm.strategyId) : undefined,
+        exchangeId: policyForm.exchangeId ? parseInt(policyForm.exchangeId) : undefined,
         listingId: policyForm.listingId ? parseInt(policyForm.listingId) : undefined,
         parameters,
         enabled: policyForm.enabled,
       });
       setCreateModalOpen(false);
-      setPolicyForm({ policyType: '', strategyId: '', listingId: '', parametersJson: '{}', enabled: true });
+      setPolicyForm({ policyType: '', strategyId: '', exchangeId: '', listingId: '', parametersJson: '{}', enabled: true });
       refresh();
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Failed to create policy');
@@ -153,7 +159,7 @@ function RiskPolicies() {
       header: 'Applies to',
       enableSorting: false,
       Cell: ({ row }: { row: MRT_Row<RiskPolicy> }) =>
-        describeTarget(row.original, (id) => strategyNames[id], (id) => listingLabels[id]),
+        describeTarget(row.original, (id) => strategyNames[id], (id) => listingLabels[id], exchangeName),
     },
     {
       id: 'parameters',
@@ -181,7 +187,7 @@ function RiskPolicies() {
           ? <ReactTimeAgo date={new Date(row.original.dateModified)} timeStyle="round" />
           : '-',
     },
-  ], [strategyNames, listingLabels]);
+  ], [strategyNames, listingLabels, exchangeName]);
 
   const table = useMantineReactTable({
     columns,
@@ -313,8 +319,21 @@ function RiskPolicies() {
             clearable
           />
           <Select
+            label="Exchange"
+            description={policyForm.policyType === 'MAX_COMMITTED_CAPITAL'
+              ? "A per-session cap on this exchange: each session is held to it on its own. The venue's real budget is its accounts' allocation check at launch"
+              : 'Leave empty for every exchange; a kill switch here halts the whole venue'}
+            placeholder="Every exchange"
+            data={exchanges.map((e) => ({ value: String(e.exchangeId), label: e.exchangeName }))}
+            value={policyForm.exchangeId || null}
+            onChange={(v) => setPolicyForm((f) => ({ ...f, exchangeId: v ?? '' }))}
+            disabled={!!policyForm.listingId}
+            clearable
+          />
+          <Select
             label="Listing"
-            description="Leave empty for every listing"
+            description={policyForm.exchangeId ? 'A listing implies its exchange: clear the exchange to pick one' : 'Leave empty for every listing'}
+            disabled={!!policyForm.exchangeId}
             placeholder="Search listings..."
             data={listingOptions}
             value={policyForm.listingId || null}
@@ -329,9 +348,12 @@ function RiskPolicies() {
             Applies to {describeTarget(
               {
                 strategyId: policyForm.strategyId ? parseInt(policyForm.strategyId) : null,
+                exchangeId: policyForm.exchangeId ? parseInt(policyForm.exchangeId) : null,
                 listingId: policyForm.listingId ? parseInt(policyForm.listingId) : null,
               },
               (id) => strategyNames[id],
+              undefined,
+              exchangeName,
             )}
           </Text>
           <Textarea
@@ -368,7 +390,7 @@ function RiskPolicies() {
         opened={killSwitchAction === 'resume'}
         onClose={() => setKillSwitchAction(null)}
         title="Resume Trading"
-        message="This will turn off the global kill switch and allow all strategies to send orders again (strategy- and listing-level kill switches still apply). Are you sure?"
+        message="This will turn off the global kill switch and allow all strategies to send orders again (strategy-, exchange- and listing-level kill switches still apply). Are you sure?"
         confirmLabel="RESUME TRADING"
         confirmColor="green"
         onConfirm={confirmKillSwitch}
@@ -401,7 +423,7 @@ function RiskPolicies() {
 
       <EditRiskPolicyModal
         policy={editTarget}
-        targetDescription={editTarget ? describeTarget(editTarget, (id) => strategyNames[id], (id) => listingLabels[id]) : undefined}
+        targetDescription={editTarget ? describeTarget(editTarget, (id) => strategyNames[id], (id) => listingLabels[id], exchangeName) : undefined}
         onClose={() => setEditTarget(null)}
         onSaved={() => refresh(false)}
       />

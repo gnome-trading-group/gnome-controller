@@ -10,6 +10,10 @@ import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsLi
 import { GapsListResponse, GapsListParams, GapsByListingParams, GapsUpdateRequest, GapsUpdateResponse } from '../types/gaps';
 import { QualityIssuesListResponse, QualityIssuesListParams, QualityIssuesByListingParams, QualityIssuesUpdateRequest, QualityIssuesUpdateResponse, QualityBackfillRequest, QualityBackfillResponse, ListingStatisticsResponse, ListingStatisticsHistoryResponse, MinuteInvestigationResponse } from '../types/quality-issues';
 import { BboTimelineResponse } from '../types/bbo-timeline';
+import {
+  AccountConfigUpdate, AccountStatus, AccountStatusChange, CreateAccountRequest, CreatedAccount, DeletedSecrets, UpdateCredentialsRequest, ManualSnapshot, ReconDetail, SessionAccount, Transfer, TransferKind, TreasurySummary, VenueAccount,
+} from '../types/treasury';
+import { MarketDataKey } from '../types/credentials';
 
 export interface ServiceConfigResponse {
   config: Record<string, unknown>;
@@ -696,15 +700,97 @@ export const registryApi = {
       convertToCamelCase: true,
       queryParams: definedParams({ ...scope, ...page }),
     }),
-  // Cognito only and audited: sets what a strategy holds on a listing, while no session holds it.
-  // Either a trade booked by hand or a correction setting the position outright; see AdjustPositionModal.
-  adjustPosition: (adjustment: { strategyId: number; listingId: number; mode: Mode; reason: string } & (
+  // Cognito only and audited: sets what a strategy holds on a listing, while no session holds it there.
+  // Either a trade booked by hand or a correction setting the position outright; see AdjustPositionModal. A live
+  // position is held on one venue account, which must be named; a paper one belongs to none.
+  adjustPosition: (adjustment: { strategyId: number; listingId: number; mode: Mode; accountId?: number; reason: string } & (
     | { trade: { side: 0 | 1; qty: string; price: string; fee: string } }
     | { netQuantity: string; totalCost: string }
   )) =>
     sendApiRequest<unknown>('/ledger/adjustments', 'POST', {
       apiUrl: REGISTRY_API_URL,
       body: adjustment,
+    }),
+  listVenueAccounts: (exchangeId?: number) =>
+    sendApiRequest<VenueAccount[]>('/venue-accounts', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      preserveKeys: new Set(['venueRef']),
+      queryParams: exchangeId !== undefined ? { exchangeId } : undefined,
+    }),
+  changeAccountStatus: (accountId: number, status: AccountStatus, reason: string) =>
+    sendApiRequest<AccountStatusChange>('/venue-accounts/status', 'PATCH', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      preserveKeys: new Set(['venueRef']),
+      body: { accountId, status, reason },
+    }),
+  createVenueAccount: (request: CreateAccountRequest) =>
+    sendApiRequest<CreatedAccount>('/venue-accounts/create', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      preserveKeys: new Set(['venueRef']),
+      body: request,
+    }),
+  updateAccountCredentials: (request: UpdateCredentialsRequest) =>
+    sendApiRequest<CreatedAccount>('/venue-accounts/credentials', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      preserveKeys: new Set(['venueRef']),
+      body: request,
+    }),
+  listMarketDataKeys: () =>
+    sendApiRequest<MarketDataKey[]>('/market-data-keys', 'GET', { apiUrl: REGISTRY_API_URL }),
+  setMarketDataKey: (exchangeCode: string, credentials: Record<string, string>) =>
+    sendApiRequest<MarketDataKey>('/market-data-keys', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      body: { exchangeCode, credentials },
+    }),
+  deleteAccountSecrets: (accountId: number) =>
+    sendApiRequest<DeletedSecrets>('/venue-accounts/delete-secrets', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      body: { accountId },
+    }),
+  getSessionAccounts: (sessionId: string) =>
+    sendApiRequest<SessionAccount[]>('/strategy-sessions/accounts', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      preserveKeys: new Set(['venueRef']),
+      queryParams: { sessionId },
+    }),
+  getTreasurySummary: () =>
+    sendApiRequest<TreasurySummary>('/treasury/summary', 'GET', { apiUrl: REGISTRY_API_URL }),
+  listTransfers: (accountId?: number) =>
+    sendApiRequest<Transfer[]>('/treasury/transfers', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: accountId !== undefined ? { accountId } : undefined,
+    }),
+  // Amounts are signed price-unit strings: money in is positive, a withdrawal negative.
+  recordTransfer: (transfer: {
+    accountId: number; kind: TransferKind; amount: string; occurredAt?: string; externalRef?: string; reason: string;
+  }) =>
+    sendApiRequest<Transfer>('/treasury/transfers', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      body: transfer,
+    }),
+  updateAccountConfig: (update: AccountConfigUpdate) =>
+    sendApiRequest<unknown>('/treasury/account-config', 'PUT', {
+      apiUrl: REGISTRY_API_URL,
+      body: update,
+    }),
+  getRecon: (accountId: number) =>
+    sendApiRequest<ReconDetail>('/treasury/recon', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: { accountId },
+    }),
+  // An operator's reading of the venue's balances, for when the poller can't read them.
+  recordSnapshot: (snapshot: ManualSnapshot) =>
+    sendApiRequest<unknown>('/treasury/snapshots', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      body: snapshot,
     }),
   listRiskPolicies: () =>
     sendApiRequest<RiskPolicy[]>('/risk/policies', 'GET', {

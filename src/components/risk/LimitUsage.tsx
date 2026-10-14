@@ -6,10 +6,21 @@ import { registryApi } from '../../utils/api';
 import { POLL, useRiskUsage } from '../../query/hooks';
 import { formatLimit, usageColor, usageLabel } from '../../utils/risk-usage';
 
+// An exchange row is still this session's own cap on that exchange (each OMS sees only its own positions), never a
+// budget shared by the venue's sessions; the account allocation check at launch is the venue budget.
+const LEVEL_SCOPES: Record<PolicyUsage['level'], string> = {
+  global: 'all strategies',
+  exchange: 'this session on its exchange',
+  'strategy-exchange': 'this session on its exchange',
+  strategy: 'strategy',
+  session: 'session',
+  listing: 'listing',
+};
+
 function scope(policy: PolicyUsage): string {
   if (policy.bindingSymbol) return `closest: ${policy.bindingSymbol}`;
   if (policy.listingId !== null) return `listing ${policy.listingId}`;
-  return policy.level === 'global' ? 'all strategies' : policy.level;
+  return LEVEL_SCOPES[policy.level] ?? policy.level;
 }
 
 function UsageBar({ policy }: { policy: PolicyUsage }) {

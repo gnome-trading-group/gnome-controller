@@ -19,12 +19,15 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle, IconPlus, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
+import { useQuery } from '@tanstack/react-query';
+import { keys } from '../../query/hooks';
 import { Strategy, ConfigValue, RiskPolicy, StrategySession, StrategySessionStatus } from '../../types';
 import { registryApi } from '../../utils/api';
 import { strategyClassError, strategyClassHint } from '../../utils/strategy-class';
 import { OrchestratorOverridesEditor } from '../../components/OrchestratorOverrides';
 import { Overrides, toOverrides } from '../../utils/orchestrator-overrides';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
+import { useGlobalState } from '../../context/GlobalStateContext';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { findKillSwitch, formatActor } from '../../utils/kill-switch';
 import {
@@ -84,6 +87,7 @@ function flattenToSessionConfig(
   simSeed: number | string,
   overrides: Overrides,
   inherit: boolean,
+  accountPins: Record<string, string>,
 ): Record<string, ConfigValue> {
   const listingsArr: number[] = mode === 'paper'
     ? listings.map(l => parseInt(l.listingId.trim(), 10)).filter(n => !isNaN(n))
@@ -102,6 +106,7 @@ function flattenToSessionConfig(
   if (researchCommit.trim()) config['research_commit'] = researchCommit.trim();
   if (region.trim()) config['region'] = region.trim();
   config['latency.profile'] = latencyProfile;
+  if (mode === 'live' && Object.keys(accountPins).length > 0) config.accounts = accountPins;
   for (const [property, value] of Object.entries(overrides)) {
     config[`overrides.${property}`] = value;
   }
@@ -172,6 +177,9 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   const [strategyKillSwitch, setStrategyKillSwitch] = useState<RiskPolicy | undefined>(undefined);
   const [resumeOnLaunch, setResumeOnLaunch] = useState(false);
   const [killCheckFailed, setKillCheckFailed] = useState(false);
+  // Exchange code -> account label, for exchanges where the operator chose the account rather than the registry.
+  const [accountPins, setAccountPins] = useState<Record<string, string>>({});
+  const { exchanges } = useGlobalState();
 
   const strategyKilled = strategyKillSwitch?.enabled ?? false;
   const latestKillSwitchEntry = useLatestPolicyHistory(strategyKilled ? strategyKillSwitch : undefined);
@@ -303,6 +311,9 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
         .map(([k, v]) => [k.slice('overrides.'.length), String(v)]),
     ));
 
+    const pinned = config['accounts'];
+    setAccountPins(pinned && typeof pinned === 'object' && !Array.isArray(pinned)
+      ? Object.fromEntries(Object.entries(pinned).map(([code, label]) => [code, String(label)])) : {});
     if (session.mode === 'live') {
       const rawListings = config['listings'];
       if (Array.isArray(rawListings)) {
@@ -388,12 +399,32 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     setSizingUserOverridden(false);
     setError(null);
     setResumeOnLaunch(false);
+    setAccountPins({});
   };
 
   const handleClose = () => { resetForm(); onClose(); };
 
   const selectedStrategyName = strategies.find(s => String(s.strategyId) === strategyId)?.name ?? strategyId ?? '';
   const isLive = mode === 'live';
+
+  // The exchanges the chosen live listings trade on, each of which may have its account pinned.
+  const liveListings = useQuery({
+    queryKey: ['listingsByIds', selectedLiveListingIds],
+    queryFn: () => registryApi.listListingsByIds(selectedLiveListingIds.map(Number)),
+    enabled: opened && isLive && selectedLiveListingIds.length > 0,
+    staleTime: 300_000,
+  });
+  const venueAccounts = useQuery({
+    queryKey: keys.venueAccounts,
+    queryFn: () => registryApi.listVenueAccounts(),
+    enabled: opened && isLive,
+  });
+  const pinnableExchanges = useMemo(() => {
+    const ids = new Set((liveListings.data ?? []).map(l => l.exchangeId));
+    return exchanges.filter(e => ids.has(e.exchangeId));
+  }, [liveListings.data, exchanges]);
+  const pinsInPlay = useMemo(() => Object.fromEntries(Object.entries(accountPins)
+    .filter(([code]) => pinnableExchanges.some(e => e.exchangeCode === code))), [accountPins, pinnableExchanges]);
 
   const handleSubmit = async () => {
     setError(null);
@@ -422,7 +453,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
       config = flattenToSessionConfig(
         strategyId, mode, strategyType, strategyClass,
         listings, selectedLiveListingIds, researchCommit, region, latencyProfile, params, profiles, simSeed, overrides,
-        inherit,
+        inherit, pinsInPlay,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invalid session config');
@@ -600,6 +631,31 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
               nothingFoundMessage={liveListingSearchLoading ? 'Loading...' : 'No listings found'}
               required
             />
+            {pinnableExchanges.map(exchange => {
+              const active = (venueAccounts.data ?? []).filter(a => a.exchangeId === exchange.exchangeId && a.status === 'ACTIVE');
+              const pinned = accountPins[exchange.exchangeCode];
+              // A relaunch may carry a pin to an account that has since been drained; show it so it can be cleared.
+              const options = active.map(a => ({ value: a.label, label: a.label }));
+              if (pinned && !options.some(o => o.value === pinned)) options.push({ value: pinned, label: `${pinned} (not active)` });
+              return (
+                <Select
+                  key={exchange.exchangeId}
+                  label={`Account on ${exchange.exchangeName}`}
+                  description="Leave empty to let the registry choose: the account the strategy already holds positions on, else the one with the most free capital"
+                  placeholder={venueAccounts.isLoading ? 'Loading…' : active.length === 0 ? 'No active account' : 'Automatic'}
+                  data={options}
+                  value={pinned ?? null}
+                  onChange={v => setAccountPins(p => {
+                    const updated = { ...p };
+                    if (v) updated[exchange.exchangeCode] = v;
+                    else delete updated[exchange.exchangeCode];
+                    return updated;
+                  })}
+                  error={pinned && !active.some(a => a.label === pinned) ? 'Only an ACTIVE account can be bound' : undefined}
+                  clearable
+                />
+              );
+            })}
           </>
         )}
 

@@ -18,8 +18,9 @@ interface AdjustPositionModalProps {
   onAdjusted: () => void;
 }
 
-// Changes what the strategy holds on a listing outside any session, attributed to the signed-in operator. Refused
-// while a session holds the listing, since its OMS owns the position then.
+// Changes what the strategy holds on a listing outside any session, attributed to the signed-in operator. A live
+// position is held on one venue account, and only that account's position changes. Refused while a session holds the
+// listing on that account, since its OMS owns the position then.
 //   Book a trade      one made by hand (e.g. closing on the venue's own site): realizes PnL like any fill
 //   Correct position  sets the position outright for a ledger that was wrong; realizes nothing, so whatever
 //                     unrealized PnL it removes is written off
@@ -37,7 +38,7 @@ export function AdjustPositionModal({ strategyId, mode, position, onClose, onAdj
 
   // Filled in when the dialog opens for a listing, and only then: the position it's given is re-read every few
   // seconds, and refilling on each read would wipe what's being typed. A trade starts as the one that closes it.
-  const openFor = position?.listingId ?? null;
+  const openFor = position ? `${position.listingId}/${position.accountId}` : null;
   const latest = useRef(position);
   latest.current = position;
   useEffect(() => {
@@ -83,7 +84,10 @@ export function AdjustPositionModal({ strategyId, mode, position, onClose, onAdj
     setSaving(true);
     setError(null);
     try {
-      const target = { strategyId, listingId: position.listingId, mode, reason: reason.trim() };
+      const target = {
+        strategyId, listingId: position.listingId, mode, reason: reason.trim(),
+        accountId: mode === 'live' ? position.accountId ?? undefined : undefined,
+      };
       await registryApi.adjustPosition(kind === 'trade'
         ? { ...target, trade: { side: side === '0' ? 0 : 1, qty: String(qty), price: String(at), fee: String(feeValue) } }
         : { ...target, netQuantity: String(net), totalCost: String(totalCost) });
@@ -104,7 +108,7 @@ export function AdjustPositionModal({ strategyId, mode, position, onClose, onAdj
         <Text size="sm">
           Holds <b>{formatQty(held, lot, true)}</b>
           {held !== 0n && <> at <b>{formatPrice(position?.avgEntryPrice ?? '0', tick)}</b> (mark {formatPrice(position?.markPrice ?? '0', tick)})</>}
-          {' '}in {mode}.
+          {' '}in {mode}{position?.accountLabel && <> on account <b>{position.accountLabel}</b></>}.
         </Text>
         <SegmentedControl fullWidth value={kind} onChange={v => setKind(v as Kind)}
           data={[{ value: 'trade', label: 'Book a trade' }, { value: 'correction', label: 'Correct position' }]} />

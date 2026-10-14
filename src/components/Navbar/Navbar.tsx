@@ -23,6 +23,7 @@ const routes = [
       { label: 'Transform Jobs', link: '/market-data/transform-jobs' },
       { label: 'Gaps', link: '/market-data/gaps' },
       { label: 'Quality Issues', link: '/market-data/quality-issues' },
+      { label: 'Credentials', link: '/market-data/credentials' },
     ],
   },
   { icon: IconLockSquareRounded, label: 'Security Master', link: '/security-master' },
@@ -43,6 +44,7 @@ const routes = [
       { label: 'Sessions', link: '/sessions' },
       { label: 'Fills & Orders', link: '/trading/blotter' },
       { label: 'Risk Policies', link: '/risk/policies' },
+      { label: 'Treasury & Accounts', link: '/treasury' },
     ],
   },
   {

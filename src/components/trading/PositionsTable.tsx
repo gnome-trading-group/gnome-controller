@@ -65,6 +65,8 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
   const navigate = useNavigate();
   const [showFlat, setShowFlat] = useState(false);
   const session = rows.length > 0 && isSessionRow(rows[0]);
+  // A strategy's live rows are one per listing and venue account; paper ones belong to no account.
+  const byAccount = rows.some(r => !isSessionRow(r) && r.accountLabel !== null);
   const shown = useMemo(
     () => (showFlat ? rows : rows.filter(r => BigInt(r.netQuantity) !== 0n || r.needsReview)),
     [rows, showFlat],
@@ -91,6 +93,13 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
           </Group>
         ),
       },
+      ...(byAccount ? [{
+        id: 'account', header: 'Account', size: 130,
+        Cell: ({ row }) => {
+          const label = (row.original as StrategyListingPnl).accountLabel;
+          return label ? <Text span size="sm" ff="monospace">{label}</Text> : <Text span size="sm" c="dimmed">—</Text>;
+        },
+      } as MRT_ColumnDef<Row>] : []),
       {
         id: 'position', header: 'Position', size: 90,
         mantineTableHeadCellProps: { align: 'right' }, mantineTableBodyCellProps: { align: 'right' },
@@ -136,7 +145,7 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
     }
     cols.push({ id: 'outcomes', header: 'Settles between', size: 150, Cell: ({ row }) => <Outcomes row={row.original} /> });
     return cols;
-  }, [session]);
+  }, [session, byAccount]);
 
   const table = useMantineReactTable({
     columns,
