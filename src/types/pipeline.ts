@@ -10,6 +10,8 @@ export interface PipelineSchedule {
   params: Record<string, unknown>;
   enabled: boolean;
   synced: boolean;
+  // When a switched-on cron schedule fires next; null when it's off (or a rate(...) expression).
+  nextRun: string | null;
 }
 
 export type RunStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';

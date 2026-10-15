@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Alert, Badge, Container, Group, Text, Title, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Anchor, Badge, Container, Group, Text, Title, Tooltip } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ArtifactSummary } from '../../types/data';
 import { controllerApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 
 // Versioned files (models and the like) indexed in Iceberg; strategies reference them as artifact://type/name.
 function ArtifactList() {
-  const navigate = useNavigate();
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,12 +36,9 @@ function ArtifactList() {
       header: 'Name',
       size: 240,
       Cell: ({ row }) => (
-        <span
-          style={{ fontFamily: 'monospace', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--mantine-color-blue-4)' }}
-          onClick={() => navigate(`/research/artifacts/${row.original.artifactType}/${row.original.name}`)}
-        >
+        <Anchor component={Link} to={`/research/artifacts/${row.original.artifactType}/${row.original.name}`} size="sm" ff="monospace">
           {row.original.name}
-        </span>
+        </Anchor>
       ),
     },
     { accessorKey: 'versions', header: 'Versions', size: 90 },
@@ -68,7 +64,7 @@ function ArtifactList() {
       ),
     },
     { accessorKey: 'description', header: 'Description', size: 300 },
-  ], [navigate]);
+  ], []);
 
   const table = useMantineReactTable({
     columns,

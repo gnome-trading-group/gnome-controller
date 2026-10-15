@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Alert, Code, Container, Group, Text, Title, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Anchor, Code, Container, Group, Text, Title, Tooltip } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Dataset } from '../../types/data';
 import { controllerApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
@@ -11,7 +11,6 @@ import { RunLink } from '../Pipelines/RunBits';
 
 // Append-only Iceberg tables written by gnome-pipelines; research reads them through gnomepy.data.
 function DatasetList() {
-  const navigate = useNavigate();
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,15 +36,12 @@ function DatasetList() {
       header: 'Dataset',
       size: 240,
       Cell: ({ row }) => (
-        <span
-          style={{ fontFamily: 'monospace', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--mantine-color-blue-4)' }}
-          onClick={() => navigate(`/research/datasets/${row.original.name}`)}
-        >
+        <Anchor component={Link} to={`/research/datasets/${row.original.name}`} size="sm" ff="monospace">
           {row.original.name}
-        </span>
+        </Anchor>
       ),
     },
-    { id: 'key', header: 'Key', size: 200, accessorFn: d => d.key.join(', '), Cell: ({ cell }) => <Code>{cell.getValue<string>()}</Code> },
+    { id: 'key', header: 'Key', size: 200, accessorFn: d => d.key?.join(', ') ?? '', Cell: ({ cell }) => <Code>{cell.getValue<string>()}</Code> },
     {
       accessorKey: 'storedRows',
       header: 'Stored rows',
@@ -57,7 +53,7 @@ function DatasetList() {
       id: 'lastPublish',
       header: 'Last publish',
       size: 120,
-      accessorFn: d => d.lastPublish?.at ?? '',
+      accessorFn: d => d?.lastPublish?.at ?? '',
       Cell: ({ row }) => row.original.lastPublish
         ? <ReactTimeAgo date={new Date(row.original.lastPublish.at)} timeStyle="round" />
         : '—',
@@ -68,7 +64,7 @@ function DatasetList() {
       size: 260,
       Cell: ({ row }) => <RunLink runId={row.original.lastPublish?.runId} />,
     },
-  ], [navigate]);
+  ], []);
 
   const table = useMantineReactTable({
     columns,

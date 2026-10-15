@@ -28,8 +28,9 @@ import { useLatestRequest } from '../../hooks/useLatestRequest';
 import { LastUpdated } from '../../components/LastUpdated';
 import RunPipelineModal from './RunPipelineModal';
 import RunLogsDrawer from './RunLogsDrawer';
+import ScheduleConfirmModal from './ScheduleConfirmModal';
 import { CodeVersion, RunStatusBadge } from './RunBits';
-import { duration, isActive } from './runs';
+import { duration, isActive, nextScheduled, utcTime } from './runs';
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -54,7 +55,7 @@ function PipelineDetail() {
   const [failing, setFailing] = useState(false);
   const [runModal, setRunModal] = useState(false);
   const [logsFor, setLogsFor] = useState<PipelineRun | null>(null);
-  const [switching, setSwitching] = useState<string | null>(null);
+  const [confirmingSchedule, setConfirmingSchedule] = useState<PipelineSchedule | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const beginRefresh = useLatestRequest();
 
@@ -96,16 +97,8 @@ function PipelineDetail() {
 
   const switchSchedule = async (schedule: PipelineSchedule) => {
     if (!pipelineName) return;
-    setSwitching(schedule.name);
-    setActionError(null);
-    try {
-      await controllerApi.setPipelineSchedule(pipelineName, schedule.name, !schedule.enabled);
-      await refresh(true);
-    } catch (e) {
-      setActionError(errorMessage(e, 'Failed to switch the schedule'));
-    } finally {
-      setSwitching(null);
-    }
+    await controllerApi.setPipelineSchedule(pipelineName, schedule.name, !schedule.enabled);
+    await refresh(true);
   };
 
   const cancel = useCallback(async (run: PipelineRun) => {
@@ -217,6 +210,7 @@ function PipelineDetail() {
   }
 
   const properties = Object.entries(pipeline?.paramsSchema.properties ?? {});
+  const upcoming = pipeline ? nextScheduled(pipeline.schedules) : null;
   return (
     <Container size="xl" py="xl">
       <Group mb="md">
@@ -224,11 +218,11 @@ function PipelineDetail() {
           <IconArrowLeft size={18} />
         </ActionIcon>
         <Title order={2} style={{ flex: 1 }}>{pipelineName}</Title>
+        {inProgress && <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={failing} />}
         <Button size="sm" variant="light" color="green" leftSection={<IconPlayerPlay size={14} />}
                 onClick={() => setRunModal(true)} disabled={!pipeline}>
           Run
         </Button>
-        {inProgress && <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={failing} />}
         <Tooltip label="Refresh" withArrow openDelay={500}>
           <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
             <IconRefresh size={20} />
@@ -261,11 +255,16 @@ function PipelineDetail() {
                     <Table.Td w={200}><Code>{s.expression}</Code></Table.Td>
                     <Table.Td><Text size="xs" c="dimmed">{s.description}</Text></Table.Td>
                     <Table.Td w={220}><Code>{JSON.stringify(s.params)}</Code></Table.Td>
+                    <Table.Td w={200}>
+                      {s.nextRun
+                        ? <Text size="xs">Next {utcTime(s.nextRun)} (<ReactTimeAgo date={new Date(s.nextRun)} timeStyle="round" />)</Text>
+                        : <Text size="xs" c="dimmed">{s.enabled ? 'rate schedule' : '—'}</Text>}
+                    </Table.Td>
                     <Table.Td w={90}>
                       <Tooltip label="Not yet created; it appears once the next image publish syncs the schedules"
                                disabled={s.synced} withArrow>
-                        <Switch label={s.enabled ? 'On' : 'Off'} checked={s.enabled} disabled={!s.synced || switching === s.name}
-                                onChange={() => switchSchedule(s)} />
+                        <Switch label={s.enabled ? 'On' : 'Off'} checked={s.enabled} disabled={!s.synced}
+                                onChange={() => setConfirmingSchedule(s)} />
                       </Tooltip>
                     </Table.Td>
                   </Table.Tr>
@@ -299,8 +298,20 @@ function PipelineDetail() {
       )}
 
       <Title order={4} mb="xs">Runs</Title>
+      {upcoming && (
+        <Card withBorder p="xs" mb="xs" style={{ borderStyle: 'dashed' }}>
+          <Group gap="sm">
+            <Badge size="sm" variant="outline" color="gray">SCHEDULED</Badge>
+            <Text size="sm">
+              Next run {utcTime(upcoming.nextRun!)} (<ReactTimeAgo date={new Date(upcoming.nextRun!)} timeStyle="round" />)
+            </Text>
+            <Badge size="xs" variant="outline" color="gray">schedule · {upcoming.name}</Badge>
+            <Code>{JSON.stringify(upcoming.params)}</Code>
+          </Group>
+        </Card>
+      )}
       {runs.length === 0 && !loading ? (
-        <Text size="sm" c="dimmed">No runs yet.</Text>
+        <Text size="sm" c="dimmed">No runs yet{upcoming ? '' : ' — start one with Run, or switch on a schedule'}.</Text>
       ) : (
         <MantineReactTable table={table} />
       )}
@@ -308,6 +319,8 @@ function PipelineDetail() {
       <RunPipelineModal pipeline={pipeline} opened={runModal} onClose={() => setRunModal(false)}
                         onStarted={runId => { navigate(`/research/pipelines/${pipelineName}?run=${runId}`); refresh(); }} />
       <RunLogsDrawer run={logsRun} onClose={() => setLogsFor(null)} />
+      <ScheduleConfirmModal pipelineName={pipelineName ?? ''} schedule={confirmingSchedule}
+                            onClose={() => setConfirmingSchedule(null)} onConfirm={switchSchedule} />
     </Container>
   );
 }

@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ActionIcon, Alert, Badge, Button, Container, Group, Text, Title, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Anchor, Badge, Button, Container, Group, Text, Title, Tooltip } from '@mantine/core';
 import { IconRefresh, IconPlayerPlay } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Pipeline } from '../../types/pipeline';
 import { controllerApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import RunPipelineModal from './RunPipelineModal';
 import { RunStatusBadge } from './RunBits';
+import { nextScheduled, utcTime } from './runs';
 
 // Pipelines are declared in gnome-pipelines' code and published with each image; this page only runs them.
 function PipelineList() {
@@ -39,12 +40,9 @@ function PipelineList() {
       header: 'Name',
       size: 200,
       Cell: ({ row }) => (
-        <span
-          style={{ fontFamily: 'monospace', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--mantine-color-blue-4)' }}
-          onClick={() => navigate(`/research/pipelines/${row.original.name}`)}
-        >
+        <Anchor component={Link} to={`/research/pipelines/${row.original.name}`} size="sm" ff="monospace">
           {row.original.name}
-        </span>
+        </Anchor>
       ),
     },
     { accessorKey: 'description', header: 'Description', size: 340 },
@@ -80,6 +78,20 @@ function PipelineList() {
       },
     },
     {
+      id: 'nextRun',
+      header: 'Next run',
+      size: 170,
+      Cell: ({ row }) => {
+        const upcoming = nextScheduled(row.original.schedules);
+        if (!upcoming) return <Text size="xs" c="dimmed">—</Text>;
+        return (
+          <Tooltip label={utcTime(upcoming.nextRun!)} withArrow>
+            <Text size="xs"><ReactTimeAgo date={new Date(upcoming.nextRun!)} timeStyle="round" /> · {upcoming.name}</Text>
+          </Tooltip>
+        );
+      },
+    },
+    {
       id: 'actions',
       header: '',
       size: 80,
@@ -90,7 +102,7 @@ function PipelineList() {
         </Button>
       ),
     },
-  ], [navigate]);
+  ], []);
 
   const table = useMantineReactTable({
     columns,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Alert, Badge, Code, Container, Group, Stack, Table, Text, Title, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Anchor, Badge, Code, Container, Group, Stack, Table, Text, Title, Tooltip } from '@mantine/core';
 import { IconArrowLeft, IconDownload } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
@@ -96,7 +96,10 @@ function ArtifactDetail() {
     enableTopToolbar: false,
     initialState: { density: 'xs' },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    renderDetailPanel: ({ row }: { row: MRT_Row<ArtifactVersion> }) => (
+    renderDetailPanel: ({ row }: { row: MRT_Row<ArtifactVersion> }) => {
+      // The table also renders panels for its loading placeholder rows, which carry none of these fields.
+      const inputs = row.original.inputs ?? [];
+      return (
       <Stack p="md" gap="xs" style={{ maxWidth: 900 }}>
         <Text size="xs" c="dimmed">
           Reference: <Code>{`artifact://${artifactType}/${name}:${row.original.version}`}</Code>
@@ -110,7 +113,7 @@ function ArtifactDetail() {
             <Code block style={{ fontSize: '0.72rem' }}>{JSON.stringify(row.original.metrics, null, 2)}</Code></>
         )}
         <Text size="xs" fw={600} c="dimmed" tt="uppercase">Trained on</Text>
-        {row.original.inputs.length === 0 ? (
+        {inputs.length === 0 ? (
           <Text size="xs" c="dimmed">No inputs recorded.</Text>
         ) : (
           <Table withTableBorder verticalSpacing={2} style={{ fontSize: '0.75rem' }}>
@@ -118,9 +121,9 @@ function ArtifactDetail() {
               <Table.Tr><Table.Th>Dataset</Table.Th><Table.Th>As of</Table.Th><Table.Th>Rows</Table.Th><Table.Th>Rows hash</Table.Th></Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {row.original.inputs.map(i => (
+              {inputs.map(i => (
                 <Table.Tr key={i.dataset}>
-                  <Table.Td><Link to={`/research/datasets/${i.dataset}`}>{i.dataset}</Link></Table.Td>
+                  <Table.Td><Anchor component={Link} to={`/research/datasets/${i.dataset}`} size="xs">{i.dataset}</Anchor></Table.Td>
                   <Table.Td>{new Date(i.asOf).toLocaleString()}</Table.Td>
                   <Table.Td>{i.rowCount.toLocaleString()}</Table.Td>
                   <Table.Td ff="monospace">{i.rowsHash.slice(0, 12)}</Table.Td>
@@ -130,7 +133,8 @@ function ArtifactDetail() {
           </Table>
         )}
       </Stack>
-    ),
+      );
+    },
   });
 
   return (

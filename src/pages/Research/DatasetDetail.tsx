@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActionIcon, Alert, Badge, Card, Code, Container, Group, ScrollArea, SimpleGrid, Table, Text, Title } from '@mantine/core';
+import { ActionIcon, Alert, Badge, Card, Code, Container, Group, ScrollArea, SimpleGrid, Skeleton, Stack, Table, Text, Title } from '@mantine/core';
 import { IconArrowLeft } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -13,19 +13,42 @@ function cellText(value: unknown): string {
   return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
+// The page's shape while the data API answers (a cold start takes a few seconds), so nothing jumps when it does.
+function DatasetDetailSkeleton() {
+  return (
+    <>
+      <SimpleGrid cols={{ base: 2, md: 4 }} mb="md">
+        {[0, 1, 2, 3].map(i => (
+          <Card key={i} withBorder p="sm"><Skeleton h={10} w="40%" mb={8} /><Skeleton h={16} w="70%" /></Card>
+        ))}
+      </SimpleGrid>
+      {['Columns', 'Publishes', 'Sample'].map(section => (
+        <Stack key={section} gap={6} mb="lg">
+          <Title order={4}>{section}</Title>
+          {[0, 1, 2, 3, 4].map(i => <Skeleton key={i} h={22} />)}
+        </Stack>
+      ))}
+    </>
+  );
+}
+
 function DatasetDetail() {
   const navigate = useNavigate();
   const { name } = useParams<{ name: string }>();
   const [dataset, setDataset] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     if (!name) return;
+    setLoading(true);
     try {
       setDataset(await controllerApi.getDataset(name));
       setError(null);
     } catch (e) {
       setError(errorMessage(e, 'Failed to load the dataset'));
+    } finally {
+      setLoading(false);
     }
   }, [name]);
 
@@ -39,6 +62,7 @@ function DatasetDetail() {
         <Title order={2} ff="monospace" style={{ flex: 1 }}>{name}</Title>
       </Group>
       {error && <Alert color="red" mb="md">{error}</Alert>}
+      {loading && !dataset && <DatasetDetailSkeleton />}
       {dataset && (
         <>
           <SimpleGrid cols={{ base: 2, md: 4 }} mb="md">
