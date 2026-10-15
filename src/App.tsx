@@ -41,6 +41,8 @@ const ResearchList = lazy(() => import('./pages/Research/ResearchList'));
 const ResearchDetail = lazy(() => import('./pages/Research/ResearchDetail'));
 const ArtifactList = lazy(() => import('./pages/Research/ArtifactList'));
 const DatasetList = lazy(() => import('./pages/Research/DatasetList'));
+const DatasetDetail = lazy(() => import('./pages/Research/DatasetDetail'));
+const ArtifactDetail = lazy(() => import('./pages/Research/ArtifactDetail'));
 const EventsList = lazy(() => import('./pages/Predictions/EventsList'));
 const EventDetail = lazy(() => import('./pages/Predictions/EventDetail'));
 const ContractRelationships = lazy(() => import('./pages/Predictions/ContractRelationships'));
@@ -206,7 +208,9 @@ function AppContent() {
                 <Route path="/research/sessions" element={<ResearchList />} />
                 <Route path="/research/sessions/:sessionName" element={<ResearchDetail />} />
                 <Route path="/research/artifacts" element={<ArtifactList />} />
+                <Route path="/research/artifacts/:artifactType/:name" element={<ArtifactDetail />} />
                 <Route path="/research/datasets" element={<DatasetList />} />
+                <Route path="/research/datasets/:name" element={<DatasetDetail />} />
                 <Route path="/research/pipelines" element={<PipelineList />} />
                 <Route path="/research/pipelines/:pipelineName" element={<PipelineDetail />} />
                 <Route path="/predictions/events" element={<EventsList />} />

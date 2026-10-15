@@ -1,158 +1,96 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ActionIcon, Alert, Badge, Container, Group, TextInput, Title, Tooltip } from '@mantine/core';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActionIcon, Alert, Badge, Container, Group, Text, Title, Tooltip } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
-import { ResearchArtifact } from '../../types/research';
+import { useNavigate } from 'react-router-dom';
+import { ArtifactSummary } from '../../types/data';
 import { controllerApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
-import { useLatestRequest } from '../../hooks/useLatestRequest';
 
-function formatBytes(bytes: number | undefined): string {
-  if (bytes == null || isNaN(bytes)) return '—';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
+// Versioned files (models and the like) indexed in Iceberg; strategies reference them as artifact://type/name.
 function ArtifactList() {
-  const [artifacts, setArtifacts] = useState<ResearchArtifact[]>([]);
+  const navigate = useNavigate();
+  const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
   const [loading, setLoading] = useState(false);
-  const [typeFilter, setTypeFilter] = useState('');
-  const [nameFilter, setNameFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const beginRequest = useLatestRequest();
 
   const refresh = useCallback(async () => {
-    const isCurrent = beginRequest();
     setLoading(true);
     try {
-      const result = await controllerApi.listArtifacts({
-        type: typeFilter || undefined,
-        name: nameFilter || undefined,
-      });
-      if (!isCurrent()) return;
+      const result = await controllerApi.listArtifacts();
       setArtifacts(result.artifacts);
       setError(null);
     } catch (e) {
-      if (!isCurrent()) return;
       setError(errorMessage(e, 'Failed to load artifacts'));
     } finally {
-      if (isCurrent()) setLoading(false);
+      setLoading(false);
     }
-  }, [typeFilter, nameFilter, beginRequest]);
+  }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const columns = useMemo<MRT_ColumnDef<ResearchArtifact>[]>(() => [
+  const columns = useMemo<MRT_ColumnDef<ArtifactSummary>[]>(() => [
+    { accessorKey: 'artifactType', header: 'Type', size: 140 },
     {
-      accessorKey: 'artifactType',
-      header: 'Type',
-      size: 160,
-      Cell: ({ row }) => (
-        <Badge variant="light" color="green">{row.original.artifactType}</Badge>
-      ),
-    },
-    {
-      accessorKey: 'artifactName',
+      accessorKey: 'name',
       header: 'Name',
-      size: 180,
+      size: 240,
       Cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{row.original.artifactName}</span>
-      ),
-    },
-    {
-      accessorKey: 'version',
-      header: 'Ver',
-      size: 60,
-    },
-    {
-      accessorKey: 'fileFormat',
-      header: 'Format',
-      size: 80,
-      Cell: ({ row }) => (
-        <Badge variant="outline" color="gray" size="sm">{row.original.fileFormat}</Badge>
-      ),
-    },
-    {
-      accessorKey: 'sizeBytes',
-      header: 'Size',
-      size: 90,
-      Cell: ({ row }) => formatBytes(row.original.sizeBytes),
-    },
-    {
-      accessorKey: 'sessionName',
-      header: 'Session',
-      size: 160,
-      Cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--mantine-color-dimmed)' }}>
-          {row.original.sessionName === '__global__' ? '—' : row.original.sessionName}
+        <span
+          style={{ fontFamily: 'monospace', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--mantine-color-blue-4)' }}
+          onClick={() => navigate(`/research/artifacts/${row.original.artifactType}/${row.original.name}`)}
+        >
+          {row.original.name}
         </span>
       ),
     },
+    { accessorKey: 'versions', header: 'Versions', size: 90 },
     {
-      accessorKey: 'description',
-      header: 'Description',
-      size: 220,
-      Cell: ({ row }) => row.original.description || <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>,
+      accessorKey: 'latestVersion',
+      header: 'Latest',
+      size: 200,
+      Cell: ({ row }) => (
+        <Group gap={6}>
+          <Text size="xs" ff="monospace">{row.original.latestVersion}</Text>
+          <Text size="xs" c="dimmed"><ReactTimeAgo date={new Date(row.original.latestCreatedAt)} timeStyle="round" /></Text>
+        </Group>
+      ),
     },
     {
-      accessorKey: 'createdAt',
-      header: 'Created',
-      size: 120,
-      Cell: ({ row }) =>
-        row.original.createdAt
-          ? <ReactTimeAgo date={new Date(row.original.createdAt)} timeStyle="round" />
-          : '—',
+      id: 'aliases',
+      header: 'Aliases',
+      size: 160,
+      Cell: ({ row }) => (
+        <Group gap={4}>
+          {Object.keys(row.original.aliases).map(a => <Badge key={a} size="xs" variant="light">{a}</Badge>)}
+        </Group>
+      ),
     },
-  ], []);
+    { accessorKey: 'description', header: 'Description', size: 300 },
+  ], [navigate]);
 
   const table = useMantineReactTable({
     columns,
     data: artifacts,
     state: { isLoading: loading },
-    enableColumnFilters: true,
-    enableSorting: true,
-    enablePagination: true,
-    enableBottomToolbar: true,
-    enableTopToolbar: false,
+    enablePagination: false,
+    enableBottomToolbar: false,
+    initialState: { density: 'xs', showGlobalFilter: true },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    initialState: { sorting: [{ id: 'createdAt', desc: true }], density: 'xs' },
   });
 
   return (
     <Container size="xl" py="xl">
-      <Group justify="space-between" mb="md">
-        <Title order={2}>Artifacts</Title>
-        <Group>
-          <TextInput
-            size="sm"
-            placeholder="Type filter"
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.currentTarget.value)}
-            w={160}
-          />
-          <TextInput
-            size="sm"
-            placeholder="Name filter"
-            value={nameFilter}
-            onChange={(e) => setNameFilter(e.currentTarget.value)}
-            w={160}
-          />
-          <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
-              <IconRefresh size={20} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
+      <Group mb="md">
+        <Title order={2} style={{ flex: 1 }}>Artifacts</Title>
+        <Tooltip label="Refresh" withArrow openDelay={500}>
+          <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
+            <IconRefresh size={20} />
+          </ActionIcon>
+        </Tooltip>
       </Group>
-
-      {error && (
-        <Alert color="red" title="Error" mb="md">
-          {error}
-        </Alert>
-      )}
-
+      {error && <Alert color="red" mb="md">{error}</Alert>}
       <MantineReactTable table={table} />
     </Container>
   );

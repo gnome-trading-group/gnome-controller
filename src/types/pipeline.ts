@@ -1,35 +1,61 @@
-export interface PipelineDefinition {
-  pipelineName: string;
+import { JsonSchema } from './jsonSchema';
+
+// A pipeline, its parameters and its schedules are declared in gnome-pipelines' code; only runs and whether a
+// schedule is on change here.
+
+export interface PipelineSchedule {
+  name: string;
+  expression: string;
   description: string;
-  schedule: string | null;
-  scheduleEnabled: boolean;
-  parameters: Record<string, unknown>;
-  cpu: number;
-  memory: number;
-  createdAt: string;
-  updatedAt: string;
+  params: Record<string, unknown>;
+  enabled: boolean;
+  synced: boolean;
 }
+
+export type RunStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 
 export interface PipelineRun {
   pipelineName: string;
   runId: string;
-  status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+  status: RunStatus;
   trigger: 'scheduled' | 'manual';
+  schedule?: string;
   parameters: Record<string, unknown>;
   queuedAt: string;
   startedAt?: string;
   completedAt?: string;
+  codeVersion?: string;
   outputs?: Record<string, unknown>;
   errorMessage?: string;
   ecsTaskArn?: string;
 }
 
+export interface Pipeline {
+  name: string;
+  description: string;
+  paramsSchema: JsonSchema;
+  resources: { cpu: number; memory: number };
+  schedules: PipelineSchedule[];
+  codeVersion: string;
+  lastRun?: PipelineRun | null;
+}
+
 export interface PipelineListResponse {
-  pipelines: PipelineDefinition[];
+  pipelines: Pipeline[];
   count: number;
 }
 
 export interface PipelineDetailResponse {
-  pipeline: PipelineDefinition;
+  pipeline: Pipeline;
   runs: PipelineRun[];
+}
+
+export interface RunLogLine {
+  at: number;
+  message: string;
+}
+
+export interface RunLogsResponse {
+  lines: RunLogLine[];
+  before: string | null;
 }

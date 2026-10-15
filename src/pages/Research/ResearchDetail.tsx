@@ -31,7 +31,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ResearchArtifact, ResearchIteration, ResearchNote, ResearchSession, SessionStatus } from '../../types/research';
+import { ResearchIteration, ResearchNote, ResearchSession, SessionStatus } from '../../types/research';
 import { controllerApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 
@@ -60,19 +60,13 @@ function ResearchDetail() {
   const [newNote, setNewNote] = useState('');
   const [submittingNote, setSubmittingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
-  const [artifacts, setArtifacts] = useState<ResearchArtifact[]>([]);
 
   const refresh = useCallback(async () => {
     if (!sessionName) return;
     setLoading(true);
     setError(null);
     try {
-      const [sessionResult, artifactsResult] = await Promise.all([
-        controllerApi.getResearchSession(sessionName),
-        controllerApi.listArtifacts({ sessionName }),
-      ]);
-      setSession(sessionResult);
-      setArtifacts(artifactsResult.artifacts);
+      setSession(await controllerApi.getResearchSession(sessionName));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load session');
     } finally {
@@ -309,39 +303,6 @@ function ResearchDetail() {
       <Title order={4} mb="xs">Iterations</Title>
       <MantineReactTable table={table} />
 
-      {/* Artifacts section (only shown if session has artifacts) */}
-      {artifacts.length > 0 && (
-        <>
-          <Title order={4} mt="xl" mb="xs">Artifacts</Title>
-          <Card withBorder p={0} mb="md">
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--mantine-color-dark-4)' }}>
-                  {['Type', 'Name', 'Ver', 'Format', 'Size', 'Created'].map((h) => (
-                    <th key={h} style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--mantine-color-dimmed)', fontSize: '0.75rem', textTransform: 'uppercase' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {artifacts.map((a) => (
-                  <tr key={a.sk} style={{ borderBottom: '1px solid var(--mantine-color-dark-5)' }}>
-                    <td style={{ padding: '6px 12px' }}><Badge variant="light" color="green" size="sm">{a.artifactType}</Badge></td>
-                    <td style={{ padding: '6px 12px', fontFamily: 'monospace' }}>{a.artifactName}</td>
-                    <td style={{ padding: '6px 12px' }}>{a.version}</td>
-                    <td style={{ padding: '6px 12px' }}><Badge variant="outline" color="gray" size="xs">{a.fileFormat}</Badge></td>
-                    <td style={{ padding: '6px 12px', color: 'var(--mantine-color-dimmed)' }}>
-                      {a.sizeBytes == null ? '—' : a.sizeBytes < 1024 * 1024 ? `${(a.sizeBytes / 1024).toFixed(1)} KB` : `${(a.sizeBytes / (1024 * 1024)).toFixed(1)} MB`}
-                    </td>
-                    <td style={{ padding: '6px 12px', color: 'var(--mantine-color-dimmed)' }}>
-                      {a.createdAt ? <ReactTimeAgo date={new Date(a.createdAt)} timeStyle="round" /> : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        </>
-      )}
 
       {/* Notes section */}
       <Title order={4} mt="xl" mb="xs">Notes</Title>

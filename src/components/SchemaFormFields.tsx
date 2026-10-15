@@ -1,5 +1,19 @@
 import { Checkbox, NumberInput, Select, TagsInput, Textarea, TextInput } from '@mantine/core';
-import { JsonSchemaProperty } from '../types/launcher';
+import { DateInput } from '@mantine/dates';
+import dayjs from 'dayjs';
+import { JsonSchemaProperty } from '../types/jsonSchema';
+
+// An optional field (anyOf [field, null]) renders as the field itself, keeping the outer description and default.
+function resolve(prop: JsonSchemaProperty): JsonSchemaProperty {
+  const option = prop.anyOf?.find(o => o.type !== 'null');
+  return option ? { ...option, description: prop.description, default: prop.default } : prop;
+}
+
+function describe(prop: JsonSchemaProperty): string | undefined {
+  const hasDefault = prop.default !== undefined && prop.default !== null;
+  const fallback = hasDefault ? `default ${JSON.stringify(prop.default)}` : undefined;
+  return [prop.description, fallback].filter(Boolean).join(' · ') || undefined;
+}
 
 export function SchemaFormFields({
   properties,
@@ -14,21 +28,40 @@ export function SchemaFormFields({
 }) {
   return (
     <>
-      {Object.entries(properties).map(([key, prop]) => {
+      {Object.entries(properties).map(([key, declared]) => {
+        const prop = resolve(declared);
         const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         const isRequired = required.includes(key);
         const value = values[key];
+        const description = describe(prop);
 
-        if (prop.type === 'integer') {
+        if (prop.type === 'integer' || prop.type === 'number') {
           return (
             <NumberInput
               key={key}
               label={label}
-              description={prop.description}
+              description={description}
               required={isRequired}
               value={value !== undefined ? (value as number) : ''}
               onChange={v => onChange(key, v === '' ? undefined : Number(v))}
-              allowDecimal={false}
+              allowDecimal={prop.type === 'number'}
+              min={prop.minimum ?? prop.exclusiveMinimum}
+              max={prop.maximum ?? prop.exclusiveMaximum}
+            />
+          );
+        }
+
+        if (prop.type === 'string' && prop.format === 'date') {
+          return (
+            <DateInput
+              key={key}
+              label={label}
+              description={description}
+              required={isRequired}
+              clearable
+              valueFormat="YYYY-MM-DD"
+              value={value ? dayjs(value as string).toDate() : null}
+              onChange={d => onChange(key, d ? dayjs(d).format('YYYY-MM-DD') : undefined)}
             />
           );
         }
@@ -38,7 +71,7 @@ export function SchemaFormFields({
             <Select
               key={key}
               label={label}
-              description={prop.description}
+              description={description}
               required={isRequired}
               data={prop.enum}
               value={(value as string) ?? null}
@@ -52,7 +85,7 @@ export function SchemaFormFields({
             <TextInput
               key={key}
               label={label}
-              description={prop.description}
+              description={description}
               required={isRequired}
               value={(value as string) ?? ''}
               onChange={e => onChange(key, e.target.value || undefined)}
@@ -65,7 +98,7 @@ export function SchemaFormFields({
             <Checkbox
               key={key}
               label={label}
-              description={prop.description}
+              description={description}
               checked={(value as boolean) ?? false}
               onChange={e => onChange(key, e.currentTarget.checked)}
             />
@@ -77,7 +110,7 @@ export function SchemaFormFields({
             <TagsInput
               key={key}
               label={label}
-              description={prop.description}
+              description={description}
               required={isRequired}
               value={(value as string[]) ?? []}
               onChange={v => onChange(key, v.length ? v : undefined)}
@@ -90,7 +123,7 @@ export function SchemaFormFields({
             <TagsInput
               key={key}
               label={label}
-              description={prop.description}
+              description={description}
               required={isRequired}
               value={((value as number[]) ?? []).map(String)}
               onChange={v => {
@@ -107,7 +140,7 @@ export function SchemaFormFields({
             <Textarea
               key={key}
               label={label}
-              description={prop.description ?? 'JSON object'}
+              description={description ?? 'JSON object'}
               required={isRequired}
               value={jsonStr}
               minRows={3}

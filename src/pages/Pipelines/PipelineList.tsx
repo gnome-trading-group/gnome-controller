@@ -1,25 +1,31 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ActionIcon, Badge, Button, Container, Group, Title, Tooltip, Text } from '@mantine/core';
+import { ActionIcon, Alert, Badge, Button, Container, Group, Text, Title, Tooltip } from '@mantine/core';
 import { IconRefresh, IconPlayerPlay } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
-import { PipelineDefinition } from '../../types/pipeline';
+import { Pipeline } from '../../types/pipeline';
 import { controllerApi } from '../../utils/api';
-import PipelineFormModal from './PipelineFormModal';
+import { errorMessage } from '../../utils/kill-switch';
+import RunPipelineModal from './RunPipelineModal';
+import { RunStatusBadge } from './RunBits';
 
+// Pipelines are declared in gnome-pipelines' code and published with each image; this page only runs them.
 function PipelineList() {
   const navigate = useNavigate();
-  const [pipelines, setPipelines] = useState<PipelineDefinition[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(false);
-  const [triggering, setTriggering] = useState<string | null>(null);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [running, setRunning] = useState<Pipeline | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const result = await controllerApi.listPipelines();
       setPipelines(result.pipelines);
+      setError(null);
+    } catch (e) {
+      setError(errorMessage(e, 'Failed to load pipelines'));
     } finally {
       setLoading(false);
     }
@@ -27,144 +33,97 @@ function PipelineList() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const handleTrigger = async (pipelineName: string) => {
-    setTriggering(pipelineName);
-    try {
-      await controllerApi.triggerPipeline(pipelineName);
-      await refresh();
-    } catch (e) {
-      console.error('Failed to trigger pipeline:', e);
-    } finally {
-      setTriggering(null);
-    }
-  };
-
-  const columns = useMemo<MRT_ColumnDef<PipelineDefinition>[]>(() => [
+  const columns = useMemo<MRT_ColumnDef<Pipeline>[]>(() => [
     {
-      accessorKey: 'pipelineName',
+      accessorKey: 'name',
       header: 'Name',
       size: 200,
       Cell: ({ row }) => (
         <span
           style={{ fontFamily: 'monospace', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--mantine-color-blue-4)' }}
-          onClick={() => navigate(`/research/pipelines/${row.original.pipelineName}`)}
+          onClick={() => navigate(`/research/pipelines/${row.original.name}`)}
         >
-          {row.original.pipelineName}
+          {row.original.name}
         </span>
       ),
     },
+    { accessorKey: 'description', header: 'Description', size: 340 },
     {
-      accessorKey: 'description',
-      header: 'Description',
-      size: 280,
-      Cell: ({ row }) => row.original.description || <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>,
+      id: 'schedules',
+      header: 'Schedules',
+      size: 180,
+      Cell: ({ row }) => row.original.schedules.length === 0
+        ? <Text size="xs" c="dimmed">manual only</Text>
+        : (
+          <Group gap={4}>
+            {row.original.schedules.map(s => (
+              <Tooltip key={s.name} label={`${s.expression} (UTC)`} withArrow>
+                <Badge size="xs" variant="light" color={s.enabled ? 'green' : 'gray'}>{s.name} · {s.enabled ? 'on' : 'off'}</Badge>
+              </Tooltip>
+            ))}
+          </Group>
+        ),
     },
     {
-      accessorKey: 'schedule',
-      header: 'Schedule',
-      size: 160,
+      id: 'lastRun',
+      header: 'Last run',
+      size: 180,
       Cell: ({ row }) => {
-        if (!row.original.schedule) return <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>;
+        const run = row.original.lastRun;
+        if (!run) return <Text size="xs" c="dimmed">never</Text>;
         return (
           <Group gap={6}>
-            <Badge
-              size="xs"
-              variant="light"
-              color={row.original.scheduleEnabled ? 'green' : 'gray'}
-            >
-              {row.original.scheduleEnabled ? 'on' : 'off'}
-            </Badge>
-            <span style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{row.original.schedule}</span>
+            <RunStatusBadge status={run.status} />
+            <Text size="xs" c="dimmed"><ReactTimeAgo date={new Date(run.queuedAt)} timeStyle="round" /></Text>
           </Group>
         );
       },
-    },
-    {
-      accessorKey: 'cpu',
-      header: 'CPU / Mem',
-      size: 110,
-      Cell: ({ row }) => (
-        <span style={{ color: 'var(--mantine-color-dimmed)', fontSize: '0.8rem' }}>
-          {row.original.cpu / 1024} vCPU / {row.original.memory / 1024} GB
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'updatedAt',
-      header: 'Updated',
-      size: 120,
-      Cell: ({ row }) =>
-        row.original.updatedAt
-          ? <ReactTimeAgo date={new Date(row.original.updatedAt)} timeStyle="round" />
-          : '—',
     },
     {
       id: 'actions',
       header: '',
       size: 80,
       Cell: ({ row }) => (
-        <Tooltip label="Trigger now" withArrow openDelay={300}>
-          <ActionIcon
-            size="sm"
-            variant="subtle"
-            color="green"
-            loading={triggering === row.original.pipelineName}
-            onClick={(e) => { e.stopPropagation(); handleTrigger(row.original.pipelineName); }}
-          >
-            <IconPlayerPlay size={14} />
-          </ActionIcon>
-        </Tooltip>
+        <Button size="compact-xs" variant="light" color="green" leftSection={<IconPlayerPlay size={12} />}
+                onClick={() => setRunning(row.original)}>
+          Run
+        </Button>
       ),
     },
-  ], [navigate, triggering]);
+  ], [navigate]);
 
   const table = useMantineReactTable({
     columns,
     data: pipelines,
     state: { isLoading: loading },
     enableColumnFilters: false,
-    enableSorting: true,
     enablePagination: false,
     enableBottomToolbar: false,
     enableTopToolbar: false,
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     initialState: { density: 'xs' },
-    mantineTableBodyRowProps: ({ row }) => ({
-      onClick: () => navigate(`/research/pipelines/${row.original.pipelineName}`),
-      style: { cursor: 'pointer' },
-    }),
   });
 
   return (
     <Container size="xl" py="xl">
-      <Group justify="space-between" mb="md">
-        <Title order={2}>Pipelines</Title>
-        <Group>
-          <Button
-            size="sm"
-            variant="light"
-            onClick={() => setCreateModalOpen(true)}
-          >
-            New Pipeline
-          </Button>
-          <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
-              <IconRefresh size={20} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
+      <Group mb="md">
+        <Title order={2} style={{ flex: 1 }}>Pipelines</Title>
+        <Tooltip label="Refresh" withArrow openDelay={500}>
+          <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
+            <IconRefresh size={20} />
+          </ActionIcon>
+        </Tooltip>
       </Group>
-
-      {pipelines.length === 0 && !loading && (
-        <Text c="dimmed" size="sm">No pipelines defined yet.</Text>
-      )}
-
+      <Text size="sm" c="dimmed" mb="md">
+        Declared in gnome-pipelines' code; a pipeline or schedule is added there. Schedules start off and are switched on per pipeline.
+      </Text>
+      {error && <Alert color="red" mb="md">{error}</Alert>}
       <MantineReactTable table={table} />
-
-      <PipelineFormModal
-        opened={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-        onSaved={refresh}
+      <RunPipelineModal
+        pipeline={running}
+        opened={running !== null}
+        onClose={() => setRunning(null)}
+        onStarted={runId => navigate(`/research/pipelines/${running?.name}?run=${runId}`)}
       />
     </Container>
   );

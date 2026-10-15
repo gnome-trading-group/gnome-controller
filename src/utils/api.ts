@@ -1,8 +1,9 @@
 import { fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
 import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
-import { ResearchSession, ResearchSessionListResponse, ResearchArtifactListResponse, ResearchDatasetListResponse } from '../types/research';
-import { PipelineListResponse, PipelineDetailResponse } from '../types/pipeline';
+import { ResearchSession, ResearchSessionListResponse } from '../types/research';
+import { ArtifactDetail, ArtifactSummary, Dataset, DatasetDetail } from '../types/data';
+import { PipelineDetailResponse, PipelineListResponse, PipelineRun, RunLogsResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
@@ -97,6 +98,9 @@ function convertObjectToCamelCase(obj: any, preserveKeys?: Set<string>): any {
 
   return obj;
 }
+
+// Pipeline payloads whose keys are data (parameter names, output names), so they keep their snake_case.
+const PIPELINE_DATA_KEYS = new Set(['paramsSchema', 'parameters', 'params', 'outputs']);
 
 let signingOut = false;
 
@@ -1058,53 +1062,49 @@ export const controllerApi = {
         body: { content },
       }
     ),
-  listArtifacts: (params?: { type?: string; name?: string; sessionName?: string }) => {
-    const queryParams: Record<string, string> = {};
-    if (params?.type) queryParams.type = params.type;
-    if (params?.name) queryParams.name = params.name;
-    if (params?.sessionName) queryParams.session_name = params.sessionName;
-    return sendApiRequest<ResearchArtifactListResponse>('/research/artifacts', 'GET', {
-      apiUrl: CONTROLLER_API_URL,
-      convertToCamelCase: true,
-      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
-    });
-  },
-  listDatasets: (params?: { name?: string }) => {
-    const queryParams: Record<string, string> = {};
-    if (params?.name) queryParams.name = params.name;
-    return sendApiRequest<ResearchDatasetListResponse>('/research/datasets', 'GET', {
-      apiUrl: CONTROLLER_API_URL,
-      convertToCamelCase: true,
-      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
-    });
-  },
   listPipelines: () =>
     sendApiRequest<PipelineListResponse>('/research/pipelines', 'GET', {
-      apiUrl: CONTROLLER_API_URL,
-      convertToCamelCase: true,
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, preserveKeys: PIPELINE_DATA_KEYS,
     }),
   getPipeline: (pipelineName: string) =>
     sendApiRequest<PipelineDetailResponse>(`/research/pipelines/${pipelineName}`, 'GET', {
-      apiUrl: CONTROLLER_API_URL,
-      convertToCamelCase: true,
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, preserveKeys: PIPELINE_DATA_KEYS,
     }),
-  createPipeline: (body: Record<string, unknown>) =>
-    sendApiRequest<{ pipeline: unknown }>('/research/pipelines', 'POST', {
-      apiUrl: CONTROLLER_API_URL,
-      body,
-      convertToCamelCase: true,
+  runPipeline: (pipelineName: string, parameters: Record<string, unknown>) =>
+    sendApiRequest<{ runId: string; ecsTaskArn: string }>(`/research/pipelines/${pipelineName}/runs`, 'POST', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, body: { parameters },
     }),
-  updatePipeline: (pipelineName: string, body: Record<string, unknown>) =>
-    sendApiRequest<{ pipeline: unknown }>(`/research/pipelines/${pipelineName}`, 'PUT', {
-      apiUrl: CONTROLLER_API_URL,
-      body,
-      convertToCamelCase: true,
+  setPipelineSchedule: (pipelineName: string, schedule: string, enabled: boolean) =>
+    sendApiRequest<{ enabled: boolean }>(`/research/pipelines/${pipelineName}/schedules/${schedule}`, 'PUT', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, body: { enabled },
     }),
-  triggerPipeline: (pipelineName: string, params?: Record<string, unknown>) =>
-    sendApiRequest<{ runId: string; ecsTaskArn: string }>(`/research/pipelines/${pipelineName}/trigger`, 'POST', {
-      apiUrl: CONTROLLER_API_URL,
-      body: { parameters: params ?? {} },
-      convertToCamelCase: true,
+  getRunLogs: (pipelineName: string, runId: string, before?: string) =>
+    sendApiRequest<RunLogsResponse>(`/research/pipelines/${pipelineName}/runs/${runId}/logs`, 'GET', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, queryParams: before ? { before } : undefined,
+    }),
+  cancelRun: (pipelineName: string, runId: string) =>
+    sendApiRequest<{ run: PipelineRun }>(`/research/pipelines/${pipelineName}/runs/${runId}/cancel`, 'POST', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, preserveKeys: PIPELINE_DATA_KEYS,
+    }),
+  listDatasets: () =>
+    sendApiRequest<{ datasets: Dataset[]; count: number }>('/research/datasets', 'GET', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true,
+    }),
+  getDataset: (name: string) =>
+    sendApiRequest<DatasetDetail>(`/research/datasets/${name}`, 'GET', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, preserveKeys: new Set(['sample']),
+    }),
+  listArtifacts: () =>
+    sendApiRequest<{ artifacts: ArtifactSummary[]; count: number }>('/research/artifacts', 'GET', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, preserveKeys: new Set(['aliases']),
+    }),
+  getArtifact: (artifactType: string, name: string) =>
+    sendApiRequest<ArtifactDetail>(`/research/artifacts/${artifactType}/${name}`, 'GET', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, preserveKeys: new Set(['aliases', 'params', 'metrics']),
+    }),
+  getArtifactDownload: (artifactType: string, name: string, version: string) =>
+    sendApiRequest<{ url: string; expiresIn: number }>(`/research/artifacts/${artifactType}/${name}/${version}/download`, 'GET', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true,
     }),
   getServiceConfig: (service: string) =>
     sendApiRequest<ServiceConfigResponse>(`/cognito/config/${service}`, 'GET', {

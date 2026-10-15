@@ -1,247 +1,99 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActionIcon, Alert, Box, Container, Group, SimpleGrid, Text, TextInput, Title, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Code, Container, Group, Text, Title, Tooltip } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
-import { ResearchDataset } from '../../types/research';
+import { useNavigate } from 'react-router-dom';
+import { Dataset } from '../../types/data';
 import { controllerApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
-import { useLatestRequest } from '../../hooks/useLatestRequest';
+import { RunLink } from '../Pipelines/RunBits';
 
-function formatBytes(bytes: number | undefined): string {
-  if (bytes == null || isNaN(bytes)) return '—';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-interface GroupedDataset {
-  datasetName: string;
-  latest: ResearchDataset;
-  versions: ResearchDataset[];
-}
-
-function groupDatasets(datasets: ResearchDataset[]): GroupedDataset[] {
-  const map = new Map<string, ResearchDataset[]>();
-  for (const d of datasets) {
-    const list = map.get(d.datasetName) ?? [];
-    list.push(d);
-    map.set(d.datasetName, list);
-  }
-  return Array.from(map.entries()).map(([datasetName, versions]) => {
-    const sorted = [...versions].sort((a, b) => b.version - a.version);
-    return { datasetName, latest: sorted[0], versions: sorted };
-  });
-}
-
-const VERSION_COLUMNS: MRT_ColumnDef<ResearchDataset>[] = [
-  { accessorKey: 'version', header: 'Ver', size: 60 },
-  {
-    id: 'rowCount', header: 'Rows', size: 90,
-    Cell: ({ row }) => row.original.rowCount != null ? row.original.rowCount.toLocaleString() : '—',
-  },
-  {
-    id: 'sizeBytes', header: 'Size', size: 90,
-    Cell: ({ row }) => formatBytes(row.original.sizeBytes),
-  },
-  {
-    id: 'createdAt', header: 'Created', size: 120,
-    Cell: ({ row }) => row.original.createdAt
-      ? <ReactTimeAgo date={new Date(row.original.createdAt)} timeStyle="round" />
-      : '—',
-  },
-];
-
-function VersionsDetailPanel({ versions, columns, columnTypes }: {
-  versions: ResearchDataset[];
-  columns: string[];
-  columnTypes: Record<string, string>;
-}) {
-  const table = useMantineReactTable({
-    columns: VERSION_COLUMNS,
-    data: versions,
-    enableTopToolbar: false,
-    enableBottomToolbar: false,
-    enablePagination: false,
-    enableColumnFilters: false,
-    enableSorting: false,
-    mantineTableProps: { withColumnBorders: true, withTableBorder: true },
-    initialState: { density: 'xs' },
-  });
-
-  return (
-    <Box p="sm">
-      <Text size="xs" fw={600} c="dimmed" mb={6}>VERSIONS</Text>
-      <MantineReactTable table={table} />
-      {columns.length > 0 && (
-        <>
-          <Text size="xs" fw={600} c="dimmed" mt="md" mb={6}>
-            COLUMNS ({columns.length})
-          </Text>
-          <SimpleGrid cols={4} spacing={4}>
-            {columns.map((col) => (
-              <Text key={col} size="xs" style={{ fontFamily: 'monospace' }}>
-                {col}
-                {columnTypes[col] && (
-                  <Text span size="xs" c="dimmed"> : {columnTypes[col]}</Text>
-                )}
-              </Text>
-            ))}
-          </SimpleGrid>
-        </>
-      )}
-    </Box>
-  );
-}
-
+// Append-only Iceberg tables written by gnome-pipelines; research reads them through gnomepy.data.
 function DatasetList() {
-  const [datasets, setDatasets] = useState<ResearchDataset[]>([]);
+  const navigate = useNavigate();
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [loading, setLoading] = useState(false);
-  const [nameFilter, setNameFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const beginRequest = useLatestRequest();
 
   const refresh = useCallback(async () => {
-    const isCurrent = beginRequest();
     setLoading(true);
     try {
-      const result = await controllerApi.listDatasets({ name: nameFilter || undefined });
-      if (!isCurrent()) return;
+      const result = await controllerApi.listDatasets();
       setDatasets(result.datasets);
       setError(null);
     } catch (e) {
-      if (!isCurrent()) return;
       setError(errorMessage(e, 'Failed to load datasets'));
     } finally {
-      if (isCurrent()) setLoading(false);
+      setLoading(false);
     }
-  }, [nameFilter, beginRequest]);
+  }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const grouped = useMemo(() => groupDatasets(datasets), [datasets]);
-
-  const columns = useMemo<MRT_ColumnDef<GroupedDataset>[]>(() => [
+  const columns = useMemo<MRT_ColumnDef<Dataset>[]>(() => [
     {
-      accessorKey: 'datasetName',
-      header: 'Name',
-      size: 220,
+      accessorKey: 'name',
+      header: 'Dataset',
+      size: 240,
       Cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{row.original.datasetName}</span>
-      ),
-    },
-    {
-      id: 'rowCount',
-      header: 'Rows',
-      size: 90,
-      Cell: ({ row }) =>
-        row.original.latest.rowCount != null
-          ? row.original.latest.rowCount.toLocaleString()
-          : <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>,
-    },
-    {
-      id: 'sizeBytes',
-      header: 'Size',
-      size: 90,
-      Cell: ({ row }) => formatBytes(row.original.latest.sizeBytes),
-    },
-    {
-      id: 'versions',
-      header: 'Versions',
-      size: 80,
-      Cell: ({ row }) => row.original.versions.length,
-    },
-    {
-      id: 'columns',
-      header: 'Columns',
-      size: 200,
-      Cell: ({ row }) => {
-        const cols = row.original.latest.columns;
-        if (!cols?.length) return <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>;
-        const display = cols.slice(0, 4).join(', ');
-        const extra = cols.length > 4 ? ` +${cols.length - 4}` : '';
-        return (
-          <span style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
-            {display}{extra && <span style={{ color: 'var(--mantine-color-dimmed)' }}>{extra}</span>}
-          </span>
-        );
-      },
-    },
-    {
-      id: 'producingSession',
-      header: 'Session',
-      size: 160,
-      Cell: ({ row }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'var(--mantine-color-dimmed)' }}>
-          {row.original.latest.producingSession || '—'}
+        <span
+          style={{ fontFamily: 'monospace', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--mantine-color-blue-4)' }}
+          onClick={() => navigate(`/research/datasets/${row.original.name}`)}
+        >
+          {row.original.name}
         </span>
       ),
     },
+    { id: 'key', header: 'Key', size: 200, accessorFn: d => d.key.join(', '), Cell: ({ cell }) => <Code>{cell.getValue<string>()}</Code> },
     {
-      id: 'description',
-      header: 'Description',
-      size: 220,
-      Cell: ({ row }) => row.original.latest.description || <span style={{ color: 'var(--mantine-color-dimmed)' }}>—</span>,
+      accessorKey: 'storedRows',
+      header: 'Stored rows',
+      size: 110,
+      Cell: ({ row }) => row.original.storedRows.toLocaleString(),
     },
+    { accessorKey: 'publishes', header: 'Publishes', size: 90 },
     {
-      id: 'createdAt',
-      header: 'Latest',
+      id: 'lastPublish',
+      header: 'Last publish',
       size: 120,
-      Cell: ({ row }) =>
-        row.original.latest.createdAt
-          ? <ReactTimeAgo date={new Date(row.original.latest.createdAt)} timeStyle="round" />
-          : '—',
+      accessorFn: d => d.lastPublish?.at ?? '',
+      Cell: ({ row }) => row.original.lastPublish
+        ? <ReactTimeAgo date={new Date(row.original.lastPublish.at)} timeStyle="round" />
+        : '—',
     },
-  ], []);
+    {
+      id: 'lastRun',
+      header: 'Written by',
+      size: 260,
+      Cell: ({ row }) => <RunLink runId={row.original.lastPublish?.runId} />,
+    },
+  ], [navigate]);
 
   const table = useMantineReactTable({
     columns,
-    data: grouped,
-    getRowId: (row) => row.datasetName,
+    data: datasets,
     state: { isLoading: loading },
-    enableColumnFilters: false,
-    enableSorting: true,
-    enablePagination: true,
-    enableBottomToolbar: true,
-    enableTopToolbar: false,
-    enableExpanding: true,
+    enablePagination: false,
+    enableBottomToolbar: false,
+    initialState: { density: 'xs', showGlobalFilter: true, sorting: [{ id: 'name', desc: false }] },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    initialState: { density: 'xs', pagination: { pageSize: 20, pageIndex: 0 } },
-    renderDetailPanel: ({ row }) => (
-      <VersionsDetailPanel
-        versions={row.original.versions ?? []}
-        columns={row.original.latest?.columns ?? []}
-        columnTypes={row.original.latest?.columnTypes ?? {}}
-      />
-    ),
   });
 
   return (
     <Container size="xl" py="xl">
-      <Group justify="space-between" mb="md">
-        <Title order={2}>Datasets</Title>
-        <Group>
-          <TextInput
-            size="sm"
-            placeholder="Name filter"
-            value={nameFilter}
-            onChange={(e) => setNameFilter(e.currentTarget.value)}
-            w={200}
-          />
-          <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
-              <IconRefresh size={20} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
+      <Group mb="md">
+        <Title order={2} style={{ flex: 1 }}>Datasets</Title>
+        <Tooltip label="Refresh" withArrow openDelay={500}>
+          <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
+            <IconRefresh size={20} />
+          </ActionIcon>
+        </Tooltip>
       </Group>
-
-      {error && (
-        <Alert color="red" title="Error" mb="md">
-          {error}
-        </Alert>
-      )}
-
+      <Text size="sm" c="dimmed" mb="md">
+        Stored rows count every row ever appended, corrections included; a load returns the newest row per key.
+      </Text>
+      {error && <Alert color="red" mb="md">{error}</Alert>}
       <MantineReactTable table={table} />
     </Container>
   );
