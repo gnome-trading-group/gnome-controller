@@ -46,7 +46,6 @@ class AppStage extends cdk.Stage {
     });
 
     const pipelineStack = new PipelineStack(this, "ControllerPipelineStack", {
-      stage: config.account.stage,
       apiGateway: backendStack.apiGateway,
       cognitoAuthorizer: backendStack.cognitoAuthorizer,
     });
@@ -67,11 +66,13 @@ class AppStage extends cdk.Stage {
         : undefined,
     });
 
-    new MonitoringStack(this, "ControllerMonitoringStack", {
+    const monitoringStack = new MonitoringStack(this, "ControllerMonitoringStack", {
       apiGateway: backendStack.apiGateway,
-      pipelineTriggerLambda: pipelineStack.triggerLambda,
-      pipelineStatusLambda: pipelineStack.statusLambda,
     });
+    // This stack used to hold the pipeline Lambdas that the backend and monitoring stacks imported; it can only delete
+    // their exports once both have stopped importing them.
+    pipelineStack.addDependency(backendStack);
+    pipelineStack.addDependency(monitoringStack);
 
     for (const region of PROBE_REGIONS) {
       new LatencyProbeStack(this, `LatencyProbeStack-${region}`, {

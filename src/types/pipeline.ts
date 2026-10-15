@@ -1,6 +1,5 @@
 export interface PipelineDefinition {
   pipelineName: string;
-  sk: string;
   description: string;
   schedule: string | null;
   scheduleEnabled: boolean;
@@ -13,7 +12,6 @@ export interface PipelineDefinition {
 
 export interface PipelineRun {
   pipelineName: string;
-  sk: string;
   runId: string;
   status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
   trigger: 'scheduled' | 'manual';
