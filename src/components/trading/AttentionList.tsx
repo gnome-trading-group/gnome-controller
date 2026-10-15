@@ -46,6 +46,7 @@ export function AttentionList({ items, mode, loading }: { items: AttentionItem[]
                     ['By', item.actor && formatActor(item.actor)],
                     ['Since', item.since && new Date(item.since).toLocaleString()],
                     ['Acknowledged by', item.acknowledgedBy && formatActor(item.acknowledgedBy)],
+                    ['Because', item.acknowledgedReason],
                   ]}>
                   <ThemeIcon color={style.color} variant="light" size="md" radius="xl" style={{ cursor: 'help' }}>
                     {style.icon}

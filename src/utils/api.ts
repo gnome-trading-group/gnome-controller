@@ -669,10 +669,10 @@ export const registryApi = {
         sessionId: filters.sessionId, sinceId: filters.sinceId, limit: filters.limit, offset: filters.offset,
       }),
     }),
-  acknowledgeAlert: (alertId: number) =>
+  acknowledgeAlert: (alertId: number, reason?: string) =>
     sendApiRequest<{ alertId: number; outcome: 'ACKNOWLEDGED' | 'CLOSED' }>('/alerts', 'PATCH', {
       apiUrl: REGISTRY_API_URL,
-      body: { alertId },
+      body: { alertId, reason: reason?.trim() || undefined },
     }),
   getAttention: (mode: Mode) =>
     sendApiRequest<{ asOf: string; items: AttentionItem[] }>('/monitoring/attention', 'GET', {

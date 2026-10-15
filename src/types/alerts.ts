@@ -29,6 +29,7 @@ export interface Alert {
   resolvedAt: string | null;
   acknowledgedBy: string | null;
   acknowledgedAt: string | null;
+  acknowledgedReason: string | null;
 }
 
 // Open alerts nobody has taken first, newest first within each, so what still needs someone is on top.

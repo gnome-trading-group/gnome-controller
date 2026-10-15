@@ -203,6 +203,7 @@ export interface AttentionItem {
   since: string | null;
   // Someone has acknowledged its alert: still a problem, but someone has it.
   acknowledgedBy: string | null;
+  acknowledgedReason: string | null;
 }
 
 export type SeriesEventKind = 'SESSION_START' | 'SESSION_STOP' | 'RESET' | 'ADJUSTMENT' | 'MANUAL' | 'SETTLEMENT' | 'GAP'

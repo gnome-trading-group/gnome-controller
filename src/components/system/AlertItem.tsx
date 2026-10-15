@@ -1,5 +1,5 @@
 import { ReactNode, useState } from 'react';
-import { ActionIcon, Anchor, Card, Group, Stack, Text, ThemeIcon, Tooltip } from '@mantine/core';
+import { ActionIcon, Anchor, Card, Group, Popover, Stack, Text, TextInput, ThemeIcon, Tooltip } from '@mantine/core';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   IconAlertOctagon, IconAlertTriangle, IconBook, IconCheck, IconCircleCheck, IconInfoCircle, IconUserCheck, IconX,
@@ -22,52 +22,70 @@ const SEVERITY_LABEL: Record<AlertSeverity, string> = { CRITICAL: 'Critical', ER
 
 const CONTEXT_LABELS = ['strategy', 'symbol', 'exchange', 'account', 'subject', 'alarmName', 'rule', 'pipeline'];
 
-// Two clicks, so a stray tap can't stop a page: the icon turns into confirm and cancel.
+// Two steps, so a stray tap can't stop a page: the icon opens a confirm, with room to say why.
 function AcknowledgeAction({ alert }: { alert: Alert }) {
   const client = useQueryClient();
-  const [confirming, setConfirming] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // A reported event has nothing left to wait for, so taking it in hand closes it.
   const action = alert.source === 'ingest' ? 'Close' : 'Acknowledge';
 
+  const cancel = () => {
+    setOpened(false);
+    setReason('');
+  };
   const confirm = async () => {
     setSaving(true);
     setError(null);
     try {
-      await registryApi.acknowledgeAlert(alert.alertId);
+      await registryApi.acknowledgeAlert(alert.alertId, reason);
       await client.invalidateQueries({ queryKey: ['alerts'] });
+      await client.invalidateQueries({ queryKey: ['attention'] });
+      cancel();
     } catch (e) {
       setError(errorMessage(e, `${action} failed`));
-      setConfirming(false);
     } finally {
       setSaving(false);
     }
   };
 
-  if (confirming) {
-    return (
-      <Group gap={2} wrap="nowrap">
-        <Tooltip label={`Confirm ${action.toLowerCase()}`} withArrow>
-          <ActionIcon variant="light" color="green" size="xs" onClick={confirm} loading={saving} aria-label={`Confirm ${action}`}>
-            <IconCheck size={12} />
-          </ActionIcon>
-        </Tooltip>
-        <Tooltip label="Cancel" withArrow>
-          <ActionIcon variant="subtle" color="gray" size="xs" onClick={() => setConfirming(false)} disabled={saving} aria-label="Cancel">
-            <IconX size={12} />
-          </ActionIcon>
-        </Tooltip>
-      </Group>
-    );
-  }
   return (
-    <Tooltip label={error ?? action} withArrow color={error ? 'red' : undefined} opened={error ? true : undefined}>
-      <ActionIcon variant="subtle" color={error ? 'red' : 'gray'} size="xs" aria-label={action}
-        onClick={() => { setError(null); setConfirming(true); }}>
-        <IconUserCheck size={13} />
-      </ActionIcon>
-    </Tooltip>
+    <Popover opened={opened} onChange={setOpened} position="bottom-end" withArrow shadow="md" trapFocus>
+      <Popover.Target>
+        <Tooltip label={action} withArrow disabled={opened}>
+          <ActionIcon variant={opened ? 'light' : 'subtle'} color="gray" size="xs" aria-label={action}
+            onClick={() => { setError(null); setOpened(o => !o); }}>
+            <IconUserCheck size={13} />
+          </ActionIcon>
+        </Tooltip>
+      </Popover.Target>
+      <Popover.Dropdown p="xs" w={280}>
+        <Stack gap={6}>
+          <Text size="xs" fw={600}>{action} this alert?</Text>
+          <TextInput size="xs" placeholder="Reason (optional)" value={reason} maxLength={500} data-autofocus
+            onChange={e => setReason(e.currentTarget.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') void confirm();
+              if (e.key === 'Escape') cancel();
+            }} />
+          {error && <Text size="xs" c="red">{error}</Text>}
+          <Group gap={4} justify="flex-end">
+            <Tooltip label="Cancel" withArrow>
+              <ActionIcon variant="subtle" color="gray" size="sm" onClick={cancel} disabled={saving} aria-label="Cancel">
+                <IconX size={14} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label={`Confirm ${action.toLowerCase()}`} withArrow>
+              <ActionIcon variant="light" color="green" size="sm" onClick={confirm} loading={saving} aria-label={`Confirm ${action}`}>
+                <IconCheck size={14} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
   );
 }
 
@@ -85,6 +103,7 @@ export function AlertItem({ alert, acknowledgeable, fit }: { alert: Alert; ackno
     ['First seen', new Date(alert.firstSeen).toLocaleString()],
     ['Seen', alert.fireCount > 1 && `${alert.fireCount} times`],
     ['Acknowledged by', alert.acknowledgedBy && formatActor(alert.acknowledgedBy)],
+    ['Because', alert.acknowledgedReason],
     ['Resolved', alert.resolvedAt && new Date(alert.resolvedAt).toLocaleString()],
   ];
   const context = [
@@ -131,7 +150,9 @@ export function AlertItem({ alert, acknowledgeable, fit }: { alert: Alert; ackno
           {/* Who has it lives here and in the tooltip, not the context line, where a long name would widen the card. */}
           {!resolved && alert.acknowledgedBy && (
             <Tooltip label={<>Acknowledged by {formatActor(alert.acknowledgedBy)}
-              {alert.acknowledgedAt && <> · <ReactTimeAgo date={new Date(alert.acknowledgedAt)} timeStyle="round" /></>}</>}
+              {alert.acknowledgedAt && <> · <ReactTimeAgo date={new Date(alert.acknowledgedAt)} timeStyle="round" /></>}
+              {alert.acknowledgedReason && <>: {alert.acknowledgedReason}</>}</>}
+              multiline maw={300}
               withArrow>
               <ThemeIcon variant="transparent" color="green" size="xs" aria-label="Acknowledged">
                 <IconUserCheck size={13} />
