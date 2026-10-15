@@ -1,4 +1,5 @@
-import { Anchor, Badge, Card, Group, Stack, Table, Text } from '@mantine/core';
+import { Anchor, Badge, Card, Group, Skeleton, Stack, Table, Text } from '@mantine/core';
+import { SkeletonRows } from '../SkeletonRows';
 import { Link } from 'react-router-dom';
 import { EventPositions as Events, HeldPosition, Mode } from '../../types';
 import { formatQty } from '../../utils/format';
@@ -21,12 +22,26 @@ function HeldCells({ held }: { held: HeldPosition | null }) {
   );
 }
 
+function EventPositionsSkeleton() {
+  return (
+    <Card withBorder p="sm">
+      <Group justify="space-between" mb="xs" wrap="nowrap">
+        <Skeleton h={16} w="45%" />
+        <Skeleton h={12} w={110} />
+      </Group>
+      <Table withRowBorders={false} verticalSpacing={4} fz="sm">
+        <Table.Tbody><SkeletonRows cols={5} rows={2} /></Table.Tbody>
+      </Table>
+    </Card>
+  );
+}
+
 // Prediction-market positions grouped by event, with each market's outcome scenarios.
 // basis: the strategy's lifetime PnL, or one session's PnL (from $0 at its start).
 export function EventPositions({ data, strategyId, mode, loading, basis }: {
   data: Events | undefined; strategyId: number; mode: Mode; loading: boolean; basis: 'lifetime' | 'session';
 }) {
-  if (loading && !data) return <Text size="sm" c="dimmed">Loading…</Text>;
+  if (loading && !data) return <EventPositionsSkeleton />;
   if (!data || (data.events.length === 0 && data.other.length === 0)) {
     return <Text size="sm" c="dimmed">No positions in this mode.</Text>;
   }

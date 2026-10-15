@@ -1,4 +1,5 @@
-import { Anchor, Card, Group, Stack, Text, ThemeIcon } from '@mantine/core';
+import { useState } from 'react';
+import { Anchor, Badge, Card, Group, Pagination, Skeleton, Stack, Text, ThemeIcon } from '@mantine/core';
 import { IconAlertOctagon, IconAlertTriangle, IconCircleCheck, IconInfoCircle } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
@@ -9,6 +10,8 @@ import { DetailTooltip } from '../system/DetailTooltip';
 
 const LABEL = { critical: 'Critical', warning: 'Warning', info: 'Info' };
 
+const PAGE_SIZE = 6;
+
 const STYLE = {
   critical: { color: 'red', icon: <IconAlertOctagon size={16} /> },
   warning: { color: 'orange', icon: <IconAlertTriangle size={16} /> },
@@ -16,17 +19,40 @@ const STYLE = {
 };
 
 export function AttentionList({ items, mode, loading }: { items: AttentionItem[] | undefined; mode: Mode; loading: boolean }) {
+  const [page, setPage] = useState(1);
+  const pages = Math.max(1, Math.ceil((items?.length ?? 0) / PAGE_SIZE));
+  // A refresh can shrink the list out from under the page being read.
+  const current = Math.min(page, pages);
+  const counts = (['critical', 'warning', 'info'] as const)
+    .map(severity => [severity, items?.filter(i => i.severity === severity).length ?? 0] as const)
+    .filter(([, n]) => n > 0);
   return (
-    <Card withBorder p="md" h="100%">
-      <Text fw={600} mb="sm">Needs attention</Text>
-      {!items || items.length === 0 ? (
+    <Card withBorder p="md" h="100%" style={{ display: 'flex', flexDirection: 'column' }}>
+      <Group justify="space-between" mb="sm" wrap="nowrap">
+        <Text fw={600}>Needs attention</Text>
+        <Group gap={4}>
+          {counts.map(([severity, n]) => (
+            <Badge key={severity} size="sm" variant="light" color={STYLE[severity].color}>{n} {LABEL[severity].toLowerCase()}</Badge>
+          ))}
+        </Group>
+      </Group>
+      {loading && !items ? (
+        <Stack gap={8}>
+          {[0, 1, 2].map(i => (
+            <Group key={i} gap="sm" wrap="nowrap">
+              <Skeleton h={28} w={28} circle />
+              <Stack gap={4} style={{ flex: 1 }}><Skeleton h={12} w="55%" /><Skeleton h={10} w="80%" /></Stack>
+            </Group>
+          ))}
+        </Stack>
+      ) : !items || items.length === 0 ? (
         <Group gap="xs">
-          {!loading && <ThemeIcon color="teal" variant="light" size="sm" radius="xl"><IconCircleCheck size={14} /></ThemeIcon>}
-          <Text size="sm" c="dimmed">{loading ? 'Checking…' : `Nothing in ${mode} needs attention.`}</Text>
+          <ThemeIcon color="teal" variant="light" size="sm" radius="xl"><IconCircleCheck size={14} /></ThemeIcon>
+          <Text size="sm" c="dimmed">Nothing in {mode} needs attention.</Text>
         </Group>
       ) : (
-        <Stack gap={8}>
-          {items.map((item, i) => {
+        <Stack gap={8} style={{ flex: 1 }}>
+          {items.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE).map((item, i) => {
             const style = STYLE[item.severity];
             // Account items already name their account in the title.
             const account = item.accountLabel && !item.title.includes(item.accountLabel) ? item.accountLabel : null;
@@ -36,7 +62,7 @@ export function AttentionList({ items, mode, loading }: { items: AttentionItem[]
             const subject = [item.strategyName, item.symbol, account, item.sessionId?.slice(0, 8), actor, acknowledged]
               .filter(Boolean).join(' · ');
             return (
-              <Group key={`${item.kind}/${item.sessionId}/${item.strategyId}/${item.listingId}/${i}`} gap="sm" wrap="nowrap" align="flex-start"
+              <Group key={`${item.alertId}/${item.kind}/${item.sessionId}/${item.strategyId}/${item.listingId}/${i}`} gap="sm" wrap="nowrap" align="flex-start"
                 opacity={item.acknowledgedBy ? 0.55 : undefined}>
                 <DetailTooltip color={style.color} badge={LABEL[item.severity]} type={item.kind} title={item.title}
                   body={item.detail}
@@ -65,6 +91,11 @@ export function AttentionList({ items, mode, loading }: { items: AttentionItem[]
               </Group>
             );
           })}
+          {pages > 1 && (
+            <Group justify="center" mt="auto" pt="xs">
+              <Pagination size="sm" total={pages} value={current} onChange={setPage} />
+            </Group>
+          )}
         </Stack>
       )}
     </Card>

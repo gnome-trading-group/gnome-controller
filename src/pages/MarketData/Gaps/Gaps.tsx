@@ -323,7 +323,7 @@ function Gaps() {
     enableSelectAll: true,
     getRowId: (row) => row.id,
     onRowSelectionChange: setRowSelection,
-    state: { rowSelection },
+    state: { rowSelection, isLoading: loading && gaps.length === 0 },
     mantineTableContainerProps: { style: { maxHeight: '600px' } },
     enablePagination: false,
     enableBottomToolbar: false,
@@ -427,21 +427,13 @@ function Gaps() {
           </Tabs>
         )}
 
-        {loading && gaps.length === 0 ? (
-          <Center py="xl">
-            <Loader />
+        <MantineReactTable table={table} />
+        {hasMore && (
+          <Center>
+            <Button variant="light" onClick={handleLoadMore} loading={loading}>
+              Load More
+            </Button>
           </Center>
-        ) : (
-          <>
-            <MantineReactTable table={table} />
-            {hasMore && (
-              <Center>
-                <Button variant="light" onClick={handleLoadMore} loading={loading}>
-                  Load More
-                </Button>
-              </Center>
-            )}
-          </>
         )}
       </Stack>
 

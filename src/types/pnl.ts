@@ -184,6 +184,9 @@ export interface EventPositions {
 }
 
 export interface AttentionItem {
+  // A monitoring rule's finding, or an alert something reported (a failed pipeline or launch, a CloudWatch alarm).
+  source: 'finding' | 'alert';
+  alertId: number | null;
   severity: 'critical' | 'warning' | 'info';
   kind: string;
   title: string;

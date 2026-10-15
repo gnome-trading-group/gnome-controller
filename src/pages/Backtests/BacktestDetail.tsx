@@ -15,6 +15,7 @@ import {
   HoverCard,
   Modal,
   SimpleGrid,
+  Skeleton,
   Stack,
   Text,
   Title,
@@ -91,6 +92,25 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
       <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>{label}</Text>
       <Text size="sm">{children}</Text>
     </Group>
+  );
+}
+
+function RunInfoSkeleton() {
+  return (
+    <Card withBorder mb="md" p="md">
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
+        {[['Run ID', 'Status', 'Strategy', 'Commit'], ['Jobs', 'Submitted by', 'Submitted']].map((labels, i) => (
+          <Stack key={i} gap={4}>
+            {labels.map(label => (
+              <Group key={label} gap="xs" wrap="nowrap">
+                <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>{label}</Text>
+                <Skeleton h={14} w="45%" />
+              </Group>
+            ))}
+          </Stack>
+        ))}
+      </SimpleGrid>
+    </Card>
   );
 }
 
@@ -201,7 +221,7 @@ function BacktestDetail() {
       header: toCamelWords(key),
       size: 110,
       accessorFn: (row) => row.summary?.[key],
-      Cell: ({ cell }: { cell: any }) => {
+      Cell: ({ cell }) => {
         const v = cell.getValue() as number | string | undefined;
         if (v === undefined) return <Text c="dimmed" size="sm">—</Text>;
         return <Text size="sm">{typeof v === 'number' ? v : String(v)}</Text>;
@@ -336,10 +356,12 @@ function BacktestDetail() {
     }
   }, [summaryKeys, visibilityInitialized]);
 
+  const awaitingRun = !run && !loadError;
+
   const table = useMantineReactTable({
     columns,
     data: jobs,
-    state: { isLoading: loading, columnVisibility },
+    state: { isLoading: loading || awaitingRun, columnVisibility },
     onColumnVisibilityChange: setColumnVisibility,
     enableColumnFilters: false,
     enableSorting: true,
@@ -350,8 +372,6 @@ function BacktestDetail() {
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     initialState: { sorting: [{ id: 'summary_finalPnl', desc: true }], density: 'xs' },
   });
-
-  if (!run && !loading && !loadError) return null;
 
   return (
     <Container size="xl" py="xl">
@@ -390,6 +410,8 @@ function BacktestDetail() {
           {loadError}
         </Alert>
       )}
+
+      {awaitingRun && <RunInfoSkeleton />}
 
       {run && (
         <Card withBorder mb="md" p="md">

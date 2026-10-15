@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { Badge, Button, Group, Paper, Skeleton, Stack, Text } from '@mantine/core';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate } from 'react-router-dom';
 import { DenormalizedListing, Security } from '../../types';
@@ -86,7 +86,17 @@ function ActivityTab() {
 
   return (
     <Stack gap="xs" mt="md">
-      {loading && <Text c="dimmed" size="sm">Loading activity...</Text>}
+      {loading && Array.from({ length: 8 }, (_, i) => (
+        <Paper key={i} p="sm" withBorder>
+          <Group justify="space-between">
+            <Group gap="sm">
+              <Skeleton h={18} w={60} radius="xl" />
+              <Skeleton h={14} w={180} />
+            </Group>
+            <Skeleton h={12} w={70} />
+          </Group>
+        </Paper>
+      ))}
       {feed.map((entry, i) => (
         <Paper
           key={i}

@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Accordion, Anchor, Badge, Card, Code, Group, Table, Text } from '@mantine/core';
+import { Accordion, Anchor, Badge, Card, Code, Group, Skeleton, Stack, Table, Text } from '@mantine/core';
 import { Link } from 'react-router-dom';
 import { ConfigValue, StrategySession } from '../../types';
 import { configuredListings } from '../../utils/policy-target';
@@ -52,7 +52,7 @@ function BoundAccounts({ sessionId }: { sessionId: string }) {
   return (
     <CollapsibleSection title="Venue accounts" storageKey="session-accounts">
       <Card withBorder p="sm">
-        {accounts.isLoading ? <Text size="sm" c="dimmed">Loading…</Text>
+        {accounts.isLoading ? <Stack gap={8}>{[0, 1].map(i => <Skeleton key={i} h={14} />)}</Stack>
           : accounts.error ? <Text size="sm" c="red">{accounts.error.message}</Text>
           : (accounts.data ?? []).length === 0 ? <Text size="sm" c="dimmed">No account is bound to this session.</Text>
           : (

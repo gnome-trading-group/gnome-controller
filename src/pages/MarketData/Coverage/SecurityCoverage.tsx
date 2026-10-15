@@ -7,10 +7,8 @@ import {
   Card,
   Text,
   Group,
-  Stack,
   Notification,
-  Center,
-  Loader,
+  Skeleton,
   ActionIcon,
   Tooltip,
   Breadcrumbs,
@@ -34,6 +32,7 @@ import {
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { marketDataApi, registryApi } from '../../../utils/api';
 import { useGlobalState } from '../../../context/GlobalStateContext';
+import { StatValue } from '../../../components/StatValue';
 import { Security, DenormalizedListing } from '../../../types';
 import { SecurityCoverageResponse, ExchangeCoverage } from '../../../types/coverage';
 import { ListingStatisticsHistoryPoint } from '../../../types/quality-issues';
@@ -216,22 +215,6 @@ function SecurityCoverage() {
     return Array.from(seen).sort();
   }, [metricsHistory]);
 
-  if (loading && !data) {
-    return (
-      <Container size="xl" py="xl">
-        <Center style={{ minHeight: '60vh' }}>
-          <Stack align="center" gap="xl">
-            <Loader size="xl" color="green" />
-            <Stack align="center" gap="xs">
-              <Title order={3} c="dimmed">Loading Security Coverage</Title>
-              <Text size="sm" c="dimmed">Fetching coverage for {security?.symbol || securityId}...</Text>
-            </Stack>
-          </Stack>
-        </Center>
-      </Container>
-    );
-  }
-
   const breadcrumbItems = [
     { title: 'Coverage', href: '/market-data/coverage' },
     { title: security?.symbol || `Security ${securityId}`, href: '#' },
@@ -280,13 +263,13 @@ function SecurityCoverage() {
         </Notification>
       )}
 
-      {data?.summary && (
+      {(data?.summary || (loading && !data)) && (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="lg">
           <Paper withBorder p="md" radius="md">
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Exchanges</Text>
-                <Text size="xl" fw={700}>{data.summary.totalExchanges}</Text>
+                <StatValue value={data?.summary && data.summary.totalExchanges} />
               </div>
               <IconDatabase size={32} stroke={1.5} color="var(--mantine-color-blue-6)" />
             </Group>
@@ -295,7 +278,7 @@ function SecurityCoverage() {
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Days</Text>
-                <Text size="xl" fw={700}>{data.summary.totalDays.toLocaleString()}</Text>
+                <StatValue value={data?.summary && data.summary.totalDays.toLocaleString()} />
               </div>
               <IconCalendar size={32} stroke={1.5} color="var(--mantine-color-green-6)" />
             </Group>
@@ -304,7 +287,7 @@ function SecurityCoverage() {
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Coverage</Text>
-                <Text size="xl" fw={700}>{formatMinutes(data.summary.totalMinutes)}</Text>
+                <StatValue value={data?.summary && formatMinutes(data.summary.totalMinutes)} />
               </div>
               <IconClock size={32} stroke={1.5} color="var(--mantine-color-orange-6)" />
             </Group>
@@ -313,7 +296,7 @@ function SecurityCoverage() {
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Size</Text>
-                <Text size="xl" fw={700}>{formatBytes(data.summary.totalSizeBytes)}</Text>
+                <StatValue value={data?.summary && formatBytes(data.summary.totalSizeBytes)} />
               </div>
               <IconDatabase size={32} stroke={1.5} color="var(--mantine-color-violet-6)" />
             </Group>
@@ -342,9 +325,14 @@ function SecurityCoverage() {
         </Group>
 
         {metricsLoading && (
-          <Center py="xl">
-            <Loader size="sm" />
-          </Center>
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+            {[0, 1, 2, 3, 4, 5].map(i => (
+              <Paper key={i} withBorder p="sm" radius="md">
+                <Skeleton h={10} w="40%" mb="xs" />
+                <Skeleton h={140} />
+              </Paper>
+            ))}
+          </SimpleGrid>
         )}
 
         {metricsError && (

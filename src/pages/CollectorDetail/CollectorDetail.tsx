@@ -15,8 +15,7 @@ import {
   Tooltip,
   Grid,
   Notification,
-  Center,
-  Loader,
+  Skeleton,
   Modal,
   Button,
   Anchor,
@@ -66,6 +65,38 @@ interface LogEvent {
   timestamp: number;
   message: string;
   logStreamName: string;
+}
+
+function CollectorDetailSkeleton() {
+  return (
+    <>
+      <Grid>
+        {['Listings', 'Collector Status'].map(section => (
+          <Grid.Col key={section} span={6}>
+            <Card withBorder>
+              <Title order={4} mb="md">{section}</Title>
+              <Stack gap="xs">
+                {[0, 1, 2, 3].map(i => (
+                  <Group key={i} justify="space-between">
+                    <Skeleton h={14} w="35%" />
+                    <Skeleton h={14} w="25%" />
+                  </Group>
+                ))}
+              </Stack>
+            </Card>
+          </Grid.Col>
+        ))}
+      </Grid>
+      <Card withBorder mt="md">
+        <Title order={4} mb="md">Task Details</Title>
+        <Skeleton h={72} radius="sm" />
+      </Card>
+      <Card withBorder mt="md">
+        <Skeleton h={14} w={120} mb="md" />
+        <Skeleton h={240} radius="sm" />
+      </Card>
+    </>
+  );
 }
 
 function CollectorDetail() {
@@ -256,19 +287,12 @@ function CollectorDetail() {
   if (loading && initialLoad) {
     return (
       <Container size="xl" py="xl">
-        <Center style={{ minHeight: '60vh' }}>
-          <Stack align="center" gap="xl">
-            <Loader size="xl" color="green" />
-            <Stack align="center" gap="xs">
-              <Title order={3} c="dimmed">
-                Loading Collector Details
-              </Title>
-              <Text size="sm" c="dimmed">
-                Fetching data for collector {listingId}...
-              </Text>
-            </Stack>
-          </Stack>
-        </Center>
+        <Breadcrumbs mb="md">
+          <Anchor onClick={() => navigate('/market-data/collectors')} size="sm">Collectors</Anchor>
+          <Text size="sm">Collector {listingId}</Text>
+        </Breadcrumbs>
+        <Title order={2} mb="md">Collector {listingId}</Title>
+        <CollectorDetailSkeleton />
       </Container>
     );
   }

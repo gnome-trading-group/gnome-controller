@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Group, Loader, SegmentedControl, Text, useComputedColorScheme } from '@mantine/core';
+import { Box, Group, SegmentedControl, Skeleton, Text, useComputedColorScheme } from '@mantine/core';
 import {
   AreaSeries, ColorType, createChart, createSeriesMarkers, CrosshairMode, HistogramSeries, IChartApi, ISeriesApi,
   ISeriesMarkersPluginApi, LineSeries, SeriesMarker, SeriesType, Time, UTCTimestamp,
@@ -241,7 +241,7 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
         <div ref={container} style={{ position: 'absolute', inset: 0 }} />
         <ChartTooltip tooltip={tooltip} chartWidth={container.current?.clientWidth ?? 0} />
         {loading && !series && (
-          <Group pos="absolute" inset={0} justify="center"><Loader size="sm" /></Group>
+          <Skeleton pos="absolute" inset={0} />
         )}
         {series && series.t.length <= 1 && !loading && (
           <Group pos="absolute" inset={0} justify="center"><Text size="sm" c="dimmed">Nothing to chart yet</Text></Group>

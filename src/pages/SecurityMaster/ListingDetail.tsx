@@ -9,8 +9,8 @@ import {
   Container,
   Grid,
   Group,
-  Loader,
   Paper,
+  Skeleton,
   Stack,
   Table,
   Text,
@@ -44,6 +44,61 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
       <Text size="sm" c="dimmed">{label}</Text>
       <Text size="sm" component="div">{value}</Text>
     </Group>
+  );
+}
+
+function SkeletonInfoRows({ rows }: { rows: number }) {
+  return (
+    <Stack gap={0}>
+      {Array.from({ length: rows }, (_, i) => (
+        <Group key={i} justify="space-between" py={8} style={{ borderBottom: '1px solid var(--mantine-color-dark-5)' }}>
+          <Skeleton h={12} w={80} />
+          <Skeleton h={12} w={120} />
+        </Group>
+      ))}
+    </Stack>
+  );
+}
+
+function SkeletonLines({ rows = 4 }: { rows?: number }) {
+  return (
+    <Stack gap={6}>
+      {Array.from({ length: rows }, (_, i) => <Skeleton key={i} h={22} />)}
+    </Stack>
+  );
+}
+
+function ListingDetailSkeleton({ id, onBack }: { id: number; onBack: () => void }) {
+  return (
+    <Container size="xl" py="xl">
+      <Breadcrumbs mb="md">
+        <Anchor onClick={onBack} size="sm">Security Master</Anchor>
+        <Text size="sm">Listing {id}</Text>
+      </Breadcrumbs>
+      <Group mb="xl" justify="space-between">
+        <Stack gap={8}>
+          <Skeleton h={28} w={180} />
+          <Skeleton h={14} w={240} />
+        </Stack>
+        <Skeleton h={36} w={120} />
+      </Group>
+      <Grid gutter="md">
+        {([['Listing', 5], ['Security', 10], ['Exchange', 4]] as const).map(([title, rows]) => (
+          <Grid.Col key={title} span={{ base: 12, md: 4 }}>
+            <Paper p="md" withBorder h="100%">
+              <Title order={4} mb="md">{title}</Title>
+              <SkeletonInfoRows rows={rows} />
+            </Paper>
+          </Grid.Col>
+        ))}
+        <Grid.Col span={12}>
+          <Paper p="md" withBorder>
+            <Title order={4} mb="md">Spec History</Title>
+            <SkeletonLines />
+          </Paper>
+        </Grid.Col>
+      </Grid>
+    </Container>
   );
 }
 
@@ -155,7 +210,7 @@ function ListingDetail() {
   }, [id]);
 
   if (loading) {
-    return <Container size="xl" py="xl"><Loader /></Container>;
+    return <ListingDetailSkeleton id={id} onBack={() => navigate('/security-master')} />;
   }
 
   if (listingError) {
@@ -309,7 +364,7 @@ function ListingDetail() {
           <Paper p="md" withBorder>
             <Title order={4} mb="md">Spec History</Title>
             {loadingSpecs ? (
-              <Loader size="sm" />
+              <SkeletonLines />
             ) : specsError ? (
               <Alert color="red" title="Error">{specsError}</Alert>
             ) : specs.length === 0 ? (

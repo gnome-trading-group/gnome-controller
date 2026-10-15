@@ -7,10 +7,7 @@ import {
   Card,
   Text,
   Group,
-  Stack,
   Notification,
-  Center,
-  Loader,
   ActionIcon,
   Tooltip,
   Paper,
@@ -20,6 +17,7 @@ import { IconRefresh, IconDatabase, IconClock, IconFiles, IconServer } from '@ta
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { marketDataApi, registryApi } from '../../../utils/api';
 import { useGlobalState } from '../../../context/GlobalStateContext';
+import { StatValue } from '../../../components/StatValue';
 import { CoverageSummaryResponse, SecurityExchangeCoverageSummary } from '../../../types/coverage';
 
 // Helper function to format bytes to human-readable string
@@ -140,22 +138,6 @@ function CoverageSummary() {
     ),
   });
 
-  if (loading && !data) {
-    return (
-      <Container size="xl" py="xl">
-        <Center style={{ minHeight: '60vh' }}>
-          <Stack align="center" gap="xl">
-            <Loader size="xl" color="green" />
-            <Stack align="center" gap="xs">
-              <Title order={3} c="dimmed">Loading Coverage Data</Title>
-              <Text size="sm" c="dimmed">Fetching coverage statistics...</Text>
-            </Stack>
-          </Stack>
-        </Center>
-      </Container>
-    );
-  }
-
   return (
     <Container size="xl" py="xl">
       <Group justify="space-between" mb="md">
@@ -179,13 +161,13 @@ function CoverageSummary() {
         </Notification>
       )}
 
-      {data && (
+      {(data || loading) && (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="lg">
           <Paper withBorder p="md" radius="md">
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Files</Text>
-                <Text size="xl" fw={700}>{data.totalFiles.toLocaleString()}</Text>
+                <StatValue value={data && data.totalFiles.toLocaleString()} />
               </div>
               <IconFiles size={32} stroke={1.5} color="var(--mantine-color-blue-6)" />
             </Group>
@@ -194,7 +176,7 @@ function CoverageSummary() {
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Size</Text>
-                <Text size="xl" fw={700}>{formatBytes(data.totalSizeBytes)}</Text>
+                <StatValue value={data && formatBytes(data.totalSizeBytes)} />
               </div>
               <IconDatabase size={32} stroke={1.5} color="var(--mantine-color-green-6)" />
             </Group>
@@ -203,7 +185,7 @@ function CoverageSummary() {
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Minutes</Text>
-                <Text size="xl" fw={700}>{formatMinutes(data.totalMinutes)}</Text>
+                <StatValue value={data && formatMinutes(data.totalMinutes)} />
               </div>
               <IconClock size={32} stroke={1.5} color="var(--mantine-color-orange-6)" />
             </Group>
@@ -212,7 +194,7 @@ function CoverageSummary() {
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Security/Exchange Pairs</Text>
-                <Text size="xl" fw={700}>{data.securityExchangeCount}</Text>
+                <StatValue value={data && data.securityExchangeCount} />
               </div>
               <IconServer size={32} stroke={1.5} color="var(--mantine-color-violet-6)" />
             </Group>

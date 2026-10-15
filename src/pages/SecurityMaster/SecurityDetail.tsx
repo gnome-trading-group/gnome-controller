@@ -7,8 +7,8 @@ import {
   Container,
   Grid,
   Group,
-  Loader,
   Paper,
+  Skeleton,
   Stack,
   Table,
   Text,
@@ -32,6 +32,59 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
       <Text size="sm" c="dimmed">{label}</Text>
       <Text size="sm" component="div">{value}</Text>
     </Group>
+  );
+}
+
+function SkeletonInfoRows({ rows }: { rows: number }) {
+  return (
+    <Stack gap={0}>
+      {Array.from({ length: rows }, (_, i) => (
+        <Group key={i} justify="space-between" py={8} style={{ borderBottom: '1px solid var(--mantine-color-dark-5)' }}>
+          <Skeleton h={12} w={80} />
+          <Skeleton h={12} w={120} />
+        </Group>
+      ))}
+    </Stack>
+  );
+}
+
+function SkeletonLines({ rows = 4 }: { rows?: number }) {
+  return (
+    <Stack gap={6}>
+      {Array.from({ length: rows }, (_, i) => <Skeleton key={i} h={22} />)}
+    </Stack>
+  );
+}
+
+function SecurityDetailSkeleton({ onBack }: { onBack: () => void }) {
+  return (
+    <Container size="xl" py="xl">
+      <Breadcrumbs mb="md">
+        <Anchor onClick={onBack} size="sm">Security Master</Anchor>
+        <Skeleton h={12} w={100} />
+      </Breadcrumbs>
+      <Group mb="xl">
+        <Stack gap={8}>
+          <Skeleton h={28} w={180} />
+          <Skeleton h={14} w={220} />
+        </Stack>
+        <Skeleton h={20} w={60} radius="xl" />
+      </Group>
+      <Grid gutter="md">
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Paper p="md" withBorder>
+            <Title order={4} mb="md">Security</Title>
+            <SkeletonInfoRows rows={12} />
+          </Paper>
+        </Grid.Col>
+        <Grid.Col span={12}>
+          <Paper p="md" withBorder>
+            <Title order={4} mb="md">Listings</Title>
+            <SkeletonLines />
+          </Paper>
+        </Grid.Col>
+      </Grid>
+    </Container>
   );
 }
 
@@ -76,7 +129,7 @@ function SecurityDetail() {
   }, [id]);
 
   if (loading) {
-    return <Container size="xl" py="xl"><Loader /></Container>;
+    return <SecurityDetailSkeleton onBack={() => navigate('/security-master')} />;
   }
 
   if (!security) {

@@ -11,6 +11,7 @@ import {
   Paper,
   SegmentedControl,
   Select,
+  Skeleton,
   Stack,
   Switch,
   Text,
@@ -285,9 +286,7 @@ function ContractRelationships() {
       ) : (
         <Paper withBorder p="xs" style={{ height: 'calc(100vh - 200px)' }}>
           {isLoading ? (
-            <Stack align="center" justify="center" style={{ height: '100%' }}>
-              <ActionIcon loading size="xl" variant="transparent" />
-            </Stack>
+            <Skeleton h="100%" />
           ) : (
             <RelationshipGraph
               relationships={relationships}

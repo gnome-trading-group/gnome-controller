@@ -366,7 +366,7 @@ function QualityIssues() {
     enableSelectAll: true,
     getRowId: (row) => row.rowId,
     onRowSelectionChange: setRowSelection,
-    state: { rowSelection },
+    state: { rowSelection, isLoading: loading && issues.length === 0 },
     mantineTableContainerProps: { style: { maxHeight: '600px' } },
     enablePagination: false,
     enableBottomToolbar: false,
@@ -466,19 +466,13 @@ function QualityIssues() {
           </Tabs>
         )}
 
-        {loading && issues.length === 0 ? (
-          <Center py="xl"><Loader /></Center>
-        ) : (
-          <>
-            <MantineReactTable table={table} />
-            {hasMore && (
-              <Center>
-                <Button variant="light" onClick={() => fetchIssues(true)} loading={loading}>
-                  Load More
-                </Button>
-              </Center>
-            )}
-          </>
+        <MantineReactTable table={table} />
+        {hasMore && (
+          <Center>
+            <Button variant="light" onClick={() => fetchIssues(true)} loading={loading}>
+              Load More
+            </Button>
+          </Center>
         )}
       </Stack>
 

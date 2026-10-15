@@ -10,10 +10,11 @@ export function treasuryLink(accountId: number | null): string {
   return accountId === null ? '/treasury' : `/treasury?account=${accountId}`;
 }
 
-// Where an item is dealt with: its account on the treasury page, its session, its strategy's position on the
+// Where an item is dealt with: a reported alert at its session or on the alerts page; its account on the treasury page, its session, its strategy's position on the
 // listing, its strategy (on the tab it concerns), the treasury page for a venue-wide halt, or the risk page for a
 // halt that spans strategies.
 export function attentionLink(item: AttentionItem, mode: Mode): string {
+  if (item.source === 'alert') return item.sessionId ? `/sessions/${item.sessionId}` : '/system/alerts';
   if (ACCOUNT_KINDS.has(item.kind)) return treasuryLink(item.accountId);
   if (item.sessionId) return `/sessions/${item.sessionId}`;
   if (item.strategyId !== null && item.listingId !== null && !item.kind.endsWith('HALT')) {

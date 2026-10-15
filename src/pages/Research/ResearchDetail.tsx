@@ -11,6 +11,7 @@ import {
   Divider,
   Group,
   SimpleGrid,
+  Skeleton,
   Stack,
   Text,
   Textarea,
@@ -48,6 +49,28 @@ function StatCard({ label, value }: { label: string; value: React.ReactNode }) {
       <Text size="xs" c="dimmed" mb={4}>{label}</Text>
       <Text fw={600} size="lg">{value ?? '—'}</Text>
     </Card>
+  );
+}
+
+function SessionSummarySkeleton() {
+  return (
+    <>
+      <Card withBorder mb="md" p="md">
+        <Group justify="space-between" mb="xs">
+          <Skeleton h={26} w={90} radius="xl" />
+          <Skeleton h={14} w={140} />
+        </Group>
+        <Skeleton h={14} w="60%" />
+      </Card>
+      <SimpleGrid cols={{ base: 2, sm: 3 }} mb="md">
+        {['Best PnL', 'Best Sharpe', 'Iterations'].map(label => (
+          <Card key={label} withBorder p="sm" radius="md">
+            <Text size="xs" c="dimmed" mb={4}>{label}</Text>
+            <Skeleton h={22} w="50%" />
+          </Card>
+        ))}
+      </SimpleGrid>
+    </>
   );
 }
 
@@ -163,10 +186,12 @@ function ResearchDetail() {
     },
   ], [metricKeys]);
 
+  const awaitingSession = !session && !error;
+
   const table = useMantineReactTable({
     columns,
     data: iterations,
-    state: { isLoading: loading },
+    state: { isLoading: loading || awaitingSession },
     enableColumnFilters: false,
     enableSorting: true,
     enablePagination: false,
@@ -218,8 +243,6 @@ function ResearchDetail() {
     );
   }
 
-  if (!session && !loading) return null;
-
   return (
     <Container size="xl" py="xl">
       <Group mb="md">
@@ -233,6 +256,8 @@ function ResearchDetail() {
           </ActionIcon>
         </Tooltip>
       </Group>
+
+      {awaitingSession && <SessionSummarySkeleton />}
 
       {/* Header card */}
       {session && (
@@ -308,7 +333,10 @@ function ResearchDetail() {
       <Title order={4} mt="xl" mb="xs">Notes</Title>
       <Card withBorder p="md">
         <Stack gap="md">
-          {(session?.notes ?? []).length === 0 && (
+          {awaitingSession && [0, 1].map(i => (
+            <Stack key={i} gap={6}><Skeleton h={10} w={100} /><Skeleton h={14} w="80%" /></Stack>
+          ))}
+          {session && (session.notes ?? []).length === 0 && (
             <Text size="sm" c="dimmed">No notes yet.</Text>
           )}
           {(session?.notes ?? []).map((note: ResearchNote) => (

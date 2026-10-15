@@ -3,7 +3,7 @@ import { attentionLink } from './attention';
 import { AttentionItem } from '../types';
 
 const item = (fields: Partial<AttentionItem>): AttentionItem => ({
-  severity: 'warning', kind: 'NEEDS_REVIEW', title: '', detail: null, strategyId: null, strategyName: null,
+  source: 'finding', alertId: null, severity: 'warning', kind: 'NEEDS_REVIEW', title: '', detail: null, strategyId: null, strategyName: null,
   sessionId: null, listingId: null, symbol: null, exchangeId: null, exchangeName: null, accountId: null,
   accountLabel: null, actor: null, subject: null, since: null, acknowledgedBy: null, acknowledgedReason: null, ...fields,
 });
@@ -34,5 +34,11 @@ describe('where an attention item is dealt with', () => {
     expect(attentionLink(item({ kind: 'DRAINING_EXPOSURE', strategyId: 4, listingId: 9, accountId: 7 }), 'live'))
       .toBe('/strategies/4/listings/9?mode=live');
     expect(attentionLink(item({ strategyId: 4, listingId: 9, accountId: 7 }), 'live')).toBe('/strategies/4/listings/9?mode=live');
+  });
+
+  it('sends a reported alert to its session, else the alerts page', () => {
+    expect(attentionLink(item({ source: 'alert', kind: 'FATAL_ERROR', sessionId: 's1', strategyId: 4 }), 'live')).toBe('/sessions/s1');
+    expect(attentionLink(item({ source: 'alert', kind: 'PIPELINE_FAILED' }), 'live')).toBe('/system/alerts');
+    expect(attentionLink(item({ source: 'alert', kind: 'CUSTOM', strategyId: 4, listingId: 9 }), 'live')).toBe('/system/alerts');
   });
 });

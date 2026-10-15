@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, Group, Loader, Text, useComputedColorScheme } from '@mantine/core';
+import { Box, Group, Skeleton, Text, useComputedColorScheme } from '@mantine/core';
 import { ColorType, createChart, HistogramSeries, IChartApi, ISeriesApi, Time } from 'lightweight-charts';
 import { DailyPnl } from '../../types';
 import { formatMoney, moneyToNumber } from '../../utils/format';
@@ -71,7 +71,7 @@ export function DailyBars({ daily, loading, height = 220 }: { daily: DailyPnl | 
     <Box pos="relative" h={height}>
       <div ref={container} style={{ position: 'absolute', inset: 0 }} />
       <ChartTooltip tooltip={tooltip} chartWidth={container.current?.clientWidth ?? 0} />
-      {loading && !daily && <Group pos="absolute" inset={0} justify="center"><Loader size="sm" /></Group>}
+      {loading && !daily && <Skeleton pos="absolute" inset={0} />}
       {daily && daily.days.every(d => d.pnl === '0') && (
         <Group pos="absolute" inset={0} justify="center"><Text size="sm" c="dimmed">No PnL in this window</Text></Group>
       )}

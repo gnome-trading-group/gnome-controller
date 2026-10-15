@@ -12,11 +12,11 @@ import {
   CopyButton,
   Grid,
   Group,
-  Loader,
   Modal,
   Notification,
   Paper,
   SimpleGrid,
+  Skeleton,
   Stack,
   Table,
   Text,
@@ -94,6 +94,54 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 type EnrichedContract = EventContract;
+
+function SkeletonInfoPaper({ title, rows }: { title: string; rows: number }) {
+  return (
+    <Paper withBorder p="md" h="100%">
+      <Title order={5} mb="sm">{title}</Title>
+      {Array.from({ length: rows }, (_, i) => (
+        <Group key={i} justify="space-between" py={8} style={{ borderBottom: '1px solid var(--mantine-color-dark-5)' }}>
+          <Skeleton h={12} w={80} />
+          <Skeleton h={12} w={140} />
+        </Group>
+      ))}
+    </Paper>
+  );
+}
+
+function EventDetailSkeleton() {
+  return (
+    <Container size="xl" py="xl">
+      <Breadcrumbs mb="md">
+        <Anchor component={Link} to="/predictions/events" size="sm">Events</Anchor>
+        <Skeleton h={12} w={200} />
+      </Breadcrumbs>
+      <Group mb="xl" align="flex-start">
+        <Stack gap={8} style={{ flex: 1 }}>
+          <Skeleton h={28} w="50%" />
+          <Skeleton h={14} w={120} />
+        </Stack>
+        <Skeleton h={26} w={80} radius="xl" />
+      </Group>
+      <Grid gutter="md" mb="md">
+        <Grid.Col span={{ base: 12, md: 6 }}><SkeletonInfoPaper title="Event Info" rows={8} /></Grid.Col>
+        <Grid.Col span={{ base: 12, md: 6 }}><SkeletonInfoPaper title="Exchange" rows={3} /></Grid.Col>
+      </Grid>
+      {['Contracts', 'Relationships'].map(section => (
+        <Paper key={section} withBorder p="md" mb="md">
+          <Title order={5} mb="sm">{section}</Title>
+          <Stack gap={6}>
+            {[0, 1, 2, 3].map(i => <Skeleton key={i} h={22} />)}
+          </Stack>
+        </Paper>
+      ))}
+      <Paper withBorder p="md" mb="md">
+        <Title order={5} mb="sm">Price Timeline</Title>
+        <Skeleton h={300} />
+      </Paper>
+    </Container>
+  );
+}
 
 function EventDetail() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -340,7 +388,7 @@ function EventDetail() {
     return sorted;
   }, [timelineData]);
 
-  const handleChartClick = useCallback((chartData: any) => {
+  const handleChartClick = useCallback((chartData: { activeLabel?: string | number } | null) => {
     if (!chartData || chartData.activeLabel === undefined) return;
     const ts = Number(chartData.activeLabel);
     if (activeBound === 'start') {
@@ -500,7 +548,7 @@ function EventDetail() {
   }, [contracts, relationships]);
 
   if (loading) {
-    return <Container size="xl" py="xl"><Loader /></Container>;
+    return <EventDetailSkeleton />;
   }
 
   if (eventError) {
@@ -776,11 +824,14 @@ function EventDetail() {
                     return (
                       <div style={{ background: '#1a1a1a', border: '1px solid #444', borderRadius: 4, padding: '6px 10px', fontSize: 12 }}>
                         <div style={{ color: '#aaa', marginBottom: 4 }}>{formatUtcFull(Number(label))}</div>
-                        {payload.map((entry: any) => (
-                          <div key={entry.dataKey} style={{ color: entry.color }}>
-                            {timelineLabels[entry.dataKey] ?? entry.dataKey}: {Number(entry.value).toFixed(4)}
-                          </div>
-                        ))}
+                        {payload.map((entry) => {
+                          const key = String(entry.dataKey);
+                          return (
+                            <div key={key} style={{ color: entry.color }}>
+                              {timelineLabels[Number(key)] ?? key}: {Number(entry.value).toFixed(4)}
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   }}

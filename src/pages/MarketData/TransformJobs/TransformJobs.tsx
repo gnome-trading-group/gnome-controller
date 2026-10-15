@@ -4,9 +4,7 @@ import {
   Container,
   Title,
   Group,
-  Stack,
   Notification,
-  Center,
   Loader,
   ActionIcon,
   Tooltip,
@@ -257,22 +255,6 @@ function TransformJobs() {
     }
     return null;
   }, [jobs, selectedListingId]);
-
-  if (loading && jobs.length === 0) {
-    return (
-      <Container size="xl" py="xl">
-        <Center style={{ minHeight: '60vh' }}>
-          <Stack align="center" gap="xl">
-            <Loader size="xl" color="green" />
-            <Stack align="center" gap="xs">
-              <Title order={3} c="dimmed">Loading Transform Jobs</Title>
-              <Text size="sm" c="dimmed">Fetching jobs...</Text>
-            </Stack>
-          </Stack>
-        </Center>
-      </Container>
-    );
-  }
 
   return (
     <Container size="xl" py="xl">

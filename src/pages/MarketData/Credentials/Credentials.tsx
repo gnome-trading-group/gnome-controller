@@ -7,6 +7,7 @@ import { keys, useMarketDataKeys } from '../../../query/hooks';
 import { MarketDataKey } from '../../../types/credentials';
 import { KEY_SYNC_LABELS, keySync } from '../../../utils/credentials';
 import { SetMarketDataKeyModal } from './SetMarketDataKeyModal';
+import { SkeletonRows } from '../../../components/SkeletonRows';
 
 function Regions({ marketDataKey }: { marketDataKey: MarketDataKey }) {
   const sync = KEY_SYNC_LABELS[keySync(marketDataKey)];
@@ -79,9 +80,7 @@ function Credentials() {
               </Table.Td>
             </Table.Tr>
           ))}
-          {marketDataKeys.isLoading && (
-            <Table.Tr><Table.Td colSpan={6}><Text size="sm" c="dimmed">Loading…</Text></Table.Td></Table.Tr>
-          )}
+          {marketDataKeys.isLoading && <SkeletonRows cols={6} />}
         </Table.Tbody>
       </Table>
       <SetMarketDataKeyModal target={target} exchangeName={target ? nameOf(target.exchangeCode) : ''}

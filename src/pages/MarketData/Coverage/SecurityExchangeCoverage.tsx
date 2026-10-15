@@ -8,8 +8,6 @@ import {
   Group,
   Stack,
   Notification,
-  Center,
-  Loader,
   ActionIcon,
   Tooltip,
   Breadcrumbs,
@@ -27,6 +25,7 @@ import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Resp
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { marketDataApi, registryApi } from '../../../utils/api';
 import { useGlobalState } from '../../../context/GlobalStateContext';
+import { StatValue } from '../../../components/StatValue';
 import { Security, DenormalizedListing } from '../../../types';
 import { SecurityExchangeCoverageResponse, DayCoverage } from '../../../types/coverage';
 import { ListingStatisticsHistoryPoint, QualityIssue, formatRuleType, getRuleTypeColor, QualityRuleType } from '../../../types/quality-issues';
@@ -268,7 +267,7 @@ function SecurityExchangeCoverage() {
   });
 
   // Render calendar heatmap for a month
-  const renderMonthCalendar = (monthKey: string, _dates: string[]) => {
+  const renderMonthCalendar = (monthKey: string) => {
     const [year, month] = monthKey.split('-').map(Number);
     const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long', year: 'numeric' });
     const firstDay = new Date(year, month - 1, 1).getDay();
@@ -318,24 +317,6 @@ function SecurityExchangeCoverage() {
       </Paper>
     );
   };
-
-  if (loading && !data) {
-    return (
-      <Container size="xl" py="xl">
-        <Center style={{ minHeight: '60vh' }}>
-          <Stack align="center" gap="xl">
-            <Loader size="xl" color="green" />
-            <Stack align="center" gap="xs">
-              <Title order={3} c="dimmed">Loading Coverage Details</Title>
-              <Text size="sm" c="dimmed">
-                Fetching coverage for {security?.symbol || securityId} on {exchange?.exchangeName || exchangeId}...
-              </Text>
-            </Stack>
-          </Stack>
-        </Center>
-      </Container>
-    );
-  }
 
   const breadcrumbItems = [
     { title: 'Coverage', href: '/market-data/coverage' },
@@ -388,13 +369,13 @@ function SecurityExchangeCoverage() {
         </Notification>
       )}
 
-      {data?.summary && (
+      {(data?.summary || (loading && !data)) && (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mb="lg">
           <Paper withBorder p="md" radius="md">
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Days with Data</Text>
-                <Text size="xl" fw={700}>{data.summary.totalDays}</Text>
+                <StatValue value={data?.summary && data.summary.totalDays} />
               </div>
               <IconCalendar size={32} stroke={1.5} color="var(--mantine-color-blue-6)" />
             </Group>
@@ -403,7 +384,7 @@ function SecurityExchangeCoverage() {
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Coverage</Text>
-                <Text size="xl" fw={700}>{formatMinutes(data.summary.totalMinutes)}</Text>
+                <StatValue value={data?.summary && formatMinutes(data.summary.totalMinutes)} />
               </div>
               <IconClock size={32} stroke={1.5} color="var(--mantine-color-green-6)" />
             </Group>
@@ -412,7 +393,7 @@ function SecurityExchangeCoverage() {
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Total Size</Text>
-                <Text size="xl" fw={700}>{formatBytes(data.summary.totalSizeBytes)}</Text>
+                <StatValue value={data?.summary && formatBytes(data.summary.totalSizeBytes)} />
               </div>
               <IconDatabase size={32} stroke={1.5} color="var(--mantine-color-orange-6)" />
             </Group>
@@ -421,8 +402,17 @@ function SecurityExchangeCoverage() {
             <Group justify="space-between">
               <div>
                 <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Date Range</Text>
-                <Text size="sm" fw={700}>{data.summary.earliestDate}</Text>
-                <Text size="xs" c="dimmed">to {data.summary.latestDate}</Text>
+                {data?.summary ? (
+                  <>
+                    <Text size="sm" fw={700}>{data.summary.earliestDate}</Text>
+                    <Text size="xs" c="dimmed">to {data.summary.latestDate}</Text>
+                  </>
+                ) : (
+                  <>
+                    <Skeleton h={14} w={90} mt={6} />
+                    <Skeleton h={10} w={70} mt={6} />
+                  </>
+                )}
               </div>
               <IconCalendar size={32} stroke={1.5} color="var(--mantine-color-violet-6)" />
             </Group>
@@ -469,9 +459,16 @@ function SecurityExchangeCoverage() {
             </Box>
             <ScrollArea>
               <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
-                {Array.from(calendarData.months.entries())
-                  .sort(([a], [b]) => b.localeCompare(a))
-                  .map(([monthKey, dates]) => renderMonthCalendar(monthKey, dates))}
+                {loading && !data
+                  ? [0, 1, 2, 3].map(i => (
+                    <Paper key={i} withBorder p="sm" radius="md">
+                      <Skeleton h={14} w="50%" mb="xs" />
+                      <Skeleton h={150} w={7 * 26} />
+                    </Paper>
+                  ))
+                  : Array.from(calendarData.months.entries())
+                    .sort(([a], [b]) => b.localeCompare(a))
+                    .map(([monthKey]) => renderMonthCalendar(monthKey))}
               </SimpleGrid>
             </ScrollArea>
           </Tabs.Panel>

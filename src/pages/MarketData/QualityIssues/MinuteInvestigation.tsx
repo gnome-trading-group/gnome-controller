@@ -9,7 +9,7 @@ import {
   Stack,
   Notification,
   Center,
-  Loader,
+  Skeleton,
   Badge,
   Anchor,
   Breadcrumbs,
@@ -191,6 +191,33 @@ function IssueCard({ issue }: { issue: MinuteInvestigationIssue }) {
   );
 }
 
+function MinuteInvestigationSkeleton() {
+  return (
+    <>
+      <Paper withBorder p="md">
+        <Skeleton h={12} w="35%" mb="sm" />
+        <Group gap="xl">
+          {[0, 1, 2, 3].map(i => (
+            <Stack key={i} gap={4}>
+              <Skeleton h={10} w={60} />
+              <Skeleton h={14} w={110} />
+              <Skeleton h={10} w={70} />
+            </Stack>
+          ))}
+        </Group>
+      </Paper>
+      <SimpleGrid cols={{ base: 1, md: 2 }}>
+        {[0, 1, 2, 3].map(i => (
+          <Paper key={i} p="md" withBorder>
+            <Skeleton h={12} w="30%" mb="xs" />
+            <Skeleton h={160} />
+          </Paper>
+        ))}
+      </SimpleGrid>
+    </>
+  );
+}
+
 function MinuteInvestigation() {
   const { listingId, timestamp } = useParams<{ listingId: string; timestamp: string }>();
   const navigate = useNavigate();
@@ -259,7 +286,7 @@ function MinuteInvestigation() {
         )}
 
         {loading ? (
-          <Center py="xl"><Loader /></Center>
+          <MinuteInvestigationSkeleton />
         ) : data ? (
           <>
             {data.issues.length > 0 && (
