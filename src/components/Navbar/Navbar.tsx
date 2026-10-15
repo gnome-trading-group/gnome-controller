@@ -84,7 +84,9 @@ function Navbar({ onToggle }: NavbarProps) {
   const alarms = useSystemHealth<AlarmsSection>('alarms');
   const firing = alarms.data?.services.reduce((sum, s) => sum + s.firing, 0) ?? 0;
   const openAlerts = useOpenAlerts();
-  const serious = openAlerts.data?.filter(a => a.severity === 'CRITICAL' || a.severity === 'ERROR').length ?? 0;
+  // Acknowledged ones have someone on them; the dot is for what still needs someone.
+  const serious = openAlerts.data?.filter(a =>
+    (a.severity === 'CRITICAL' || a.severity === 'ERROR') && !a.acknowledgedBy).length ?? 0;
   const reasons = [
     firing > 0 && `${firing} alarm${firing > 1 ? 's' : ''} firing`,
     serious > 0 && `${serious} open alert${serious > 1 ? 's' : ''}`,

@@ -1,24 +1,20 @@
 import { useState } from 'react';
 import { Button, Container, Group, MultiSelect, SegmentedControl, Stack, Text, TextInput, Title } from '@mantine/core';
-import { useQueryClient } from '@tanstack/react-query';
-import { AlertSeverity, AlertStatus } from '../../types';
+import { AlertSeverity, AlertStatus, unacknowledgedFirst } from '../../types';
 import { useAlerts } from '../../query/hooks';
-import { registryApi } from '../../utils/api';
 import { SectionCard } from '../../components/system/SectionCard';
 import { AlertItem } from '../../components/system/AlertItem';
 
 const PAGE = 100;
 const SEVERITIES: AlertSeverity[] = ['CRITICAL', 'ERROR', 'WARNING', 'INFO'];
 
-// Every alert, newest first. Closing one only ends its row here; a page is acknowledged and resolved in incident.io,
-// and an alert whose problem is still there opens again on the next tick.
+// Every alert, newest first. Acknowledging stops its page and marks it taken in Slack; an ongoing problem stays open
+// until it clears, so it can't page again in the meantime.
 function Alerts() {
-  const client = useQueryClient();
   const [status, setStatus] = useState<'open' | 'all'>('open');
   const [severity, setSeverity] = useState<string[]>([]);
   const [type, setType] = useState('');
   const [limit, setLimit] = useState(PAGE);
-  const [closing, setClosing] = useState<number | null>(null);
   const filters = {
     status: status === 'open' ? ['PENDING', 'FIRING'] as AlertStatus[] : undefined,
     severity: severity.length > 0 ? severity as AlertSeverity[] : undefined,
@@ -26,17 +22,8 @@ function Alerts() {
     limit,
   };
   const alerts = useAlerts(filters);
-  const rows = alerts.data ?? [];
+  const rows = status === 'open' ? unacknowledgedFirst(alerts.data ?? []) : alerts.data ?? [];
 
-  const close = async (alertId: number) => {
-    setClosing(alertId);
-    try {
-      await registryApi.closeAlert(alertId);
-      await client.invalidateQueries({ queryKey: ['alerts'] });
-    } finally {
-      setClosing(null);
-    }
-  };
 
   return (
     <Container size="xl" py="xl">
@@ -49,9 +36,9 @@ function Alerts() {
       </Group>
       <SectionCard title={status === 'open' ? 'Open' : 'All'} loading={alerts.isLoading} error={alerts.error}>
         {rows.length === 0 ? <Text size="sm" c="dimmed">No alerts.</Text> : (
-          <Stack gap={10}>
+          <Stack gap="sm">
             {rows.map(alert => (
-              <AlertItem key={alert.alertId} alert={alert} onClose={() => close(alert.alertId)} closing={closing === alert.alertId} />
+              <AlertItem key={alert.alertId} alert={alert} acknowledgeable />
             ))}
           </Stack>
         )}

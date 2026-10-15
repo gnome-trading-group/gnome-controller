@@ -669,8 +669,8 @@ export const registryApi = {
         sessionId: filters.sessionId, sinceId: filters.sinceId, limit: filters.limit, offset: filters.offset,
       }),
     }),
-  closeAlert: (alertId: number) =>
-    sendApiRequest<{ alertId: number; status: string }>('/alerts', 'PATCH', {
+  acknowledgeAlert: (alertId: number) =>
+    sendApiRequest<{ alertId: number; outcome: 'ACKNOWLEDGED' | 'CLOSED' }>('/alerts', 'PATCH', {
       apiUrl: REGISTRY_API_URL,
       body: { alertId },
     }),

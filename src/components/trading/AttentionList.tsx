@@ -5,6 +5,9 @@ import ReactTimeAgo from 'react-time-ago';
 import { AttentionItem, Mode } from '../../types';
 import { attentionLink } from '../../utils/attention';
 import { formatActor } from '../../utils/kill-switch';
+import { DetailTooltip } from '../system/DetailTooltip';
+
+const LABEL = { critical: 'Critical', warning: 'Warning', info: 'Info' };
 
 const STYLE = {
   critical: { color: 'red', icon: <IconAlertOctagon size={16} /> },
@@ -29,10 +32,25 @@ export function AttentionList({ items, mode, loading }: { items: AttentionItem[]
             const account = item.accountLabel && !item.title.includes(item.accountLabel) ? item.accountLabel : null;
             // A halt says who turned it on: the OMS on its own, or a person.
             const actor = item.kind.endsWith('HALT') && item.actor ? `by ${formatActor(item.actor)}` : null;
-            const subject = [item.strategyName, item.symbol, account, item.sessionId?.slice(0, 8), actor].filter(Boolean).join(' · ');
+            const acknowledged = item.acknowledgedBy ? `acknowledged by ${formatActor(item.acknowledgedBy)}` : null;
+            const subject = [item.strategyName, item.symbol, account, item.sessionId?.slice(0, 8), actor, acknowledged]
+              .filter(Boolean).join(' · ');
             return (
-              <Group key={`${item.kind}/${item.sessionId}/${item.strategyId}/${item.listingId}/${i}`} gap="sm" wrap="nowrap" align="flex-start">
-                <ThemeIcon color={style.color} variant="light" size="md" radius="xl">{style.icon}</ThemeIcon>
+              <Group key={`${item.kind}/${item.sessionId}/${item.strategyId}/${item.listingId}/${i}`} gap="sm" wrap="nowrap" align="flex-start"
+                opacity={item.acknowledgedBy ? 0.55 : undefined}>
+                <DetailTooltip color={style.color} badge={LABEL[item.severity]} type={item.kind} title={item.title}
+                  body={item.detail}
+                  fields={[
+                    ['Strategy', item.strategyName], ['Listing', item.symbol], ['Exchange', item.exchangeName],
+                    ['Account', item.accountLabel], ['Part', item.subject], ['Session', item.sessionId],
+                    ['By', item.actor && formatActor(item.actor)],
+                    ['Since', item.since && new Date(item.since).toLocaleString()],
+                    ['Acknowledged by', item.acknowledgedBy && formatActor(item.acknowledgedBy)],
+                  ]}>
+                  <ThemeIcon color={style.color} variant="light" size="md" radius="xl" style={{ cursor: 'help' }}>
+                    {style.icon}
+                  </ThemeIcon>
+                </DetailTooltip>
                 <Stack gap={0} style={{ minWidth: 0 }}>
                   <Anchor component={Link} to={attentionLink(item, mode)} size="sm" fw={600} c={style.color}>
                     {item.title}

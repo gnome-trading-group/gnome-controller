@@ -1,6 +1,6 @@
 // An alert as the registry records it (see the registry's alerting): one row per occurrence of a problem, from the
-// monitoring rules, a reported event, or a CloudWatch alarm. Pages are acknowledged and resolved in incident.io;
-// closing one here only ends its row.
+// monitoring rules, a reported event, or a CloudWatch alarm. Acknowledging one here tells Slack and incident.io it's
+// in hand: an ongoing problem stays open, quietly, until it clears; a reported event resolves.
 export type AlertSeverity = 'CRITICAL' | 'ERROR' | 'WARNING' | 'INFO';
 export type AlertStatus = 'PENDING' | 'FIRING' | 'RESOLVED';
 
@@ -27,6 +27,13 @@ export interface Alert {
   firstSeen: string;
   lastSeen: string;
   resolvedAt: string | null;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+}
+
+// Open alerts nobody has taken first, newest first within each, so what still needs someone is on top.
+export function unacknowledgedFirst(alerts: Alert[]): Alert[] {
+  return [...alerts].sort((a, b) => Number(!!a.acknowledgedBy) - Number(!!b.acknowledgedBy) || b.alertId - a.alertId);
 }
 
 export interface AlertFilters {
