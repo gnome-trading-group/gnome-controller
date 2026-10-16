@@ -27,6 +27,7 @@ import SecuritiesTab from './SecuritiesTab';
 import ExchangesTab from './ExchangesTab';
 import ActivityTab from './ActivityTab';
 import CurrenciesTab from './CurrenciesTab';
+import FeesTab from './FeesTab';
 
 type DeleteType = 'exchange' | 'security' | 'listing';
 
@@ -284,6 +285,7 @@ function SecurityMaster() {
           <Tabs.Tab value="securities">Securities</Tabs.Tab>
           <Tabs.Tab value="exchanges">Exchanges</Tabs.Tab>
           <Tabs.Tab value="currencies">Currencies</Tabs.Tab>
+          <Tabs.Tab value="fees">Fees</Tabs.Tab>
           <Tabs.Tab value="activity">Activity</Tabs.Tab>
         </Tabs.List>
 
@@ -305,6 +307,11 @@ function SecurityMaster() {
         <Tabs.Panel value="currencies">
           <Space h="md" />
           <CurrenciesTab />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="fees">
+          <Space h="md" />
+          <FeesTab />
         </Tabs.Panel>
 
         <Tabs.Panel value="activity">

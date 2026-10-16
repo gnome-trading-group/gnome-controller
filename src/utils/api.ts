@@ -1,6 +1,6 @@
 import { fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
-import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
+import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ArtifactDetail, ArtifactSummary, Dataset, DatasetDetail } from '../types/data';
 import { PipelineDetailResponse, PipelineListResponse, PipelineRun, RunLogsResponse } from '../types/pipeline';
@@ -631,6 +631,27 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
       body: { listingId },
+    }),
+  // Every stored fee schedule matching the filters, newest effective first; corrections included.
+  listFeeSchedules: (filters: { exchangeId?: number; feeGroup?: string; feeEvent?: string; scopeListingId?: number } = {}) =>
+    sendApiRequest<FeeScheduleRow[]>('/fees', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: Object.fromEntries(Object.entries({ ...filters, limit: 5000 }).filter(([, v]) => v !== undefined && v !== '')),
+    }),
+  // A listing's fees over time as the registry resolves them from its listing, fee event, fee group and exchange.
+  getFeeTimeline: async (listingId: number) => {
+    const [result] = await sendApiRequest<{ listingId: number; timeline: FeeTimelineEntry[] }[]>('/fees', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: { listingIds: listingId },
+    });
+    return result?.timeline ?? [];
+  },
+  createFeeSchedule: (schedule: CreateFeeSchedule) =>
+    sendApiRequest<FeeScheduleRow>('/fees', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      body: schedule,
     }),
   // PnL is derived by the registry from the ledger's fills and marks; see types/pnl for the shapes.
   getSessionSummary: (sessionId: string) =>

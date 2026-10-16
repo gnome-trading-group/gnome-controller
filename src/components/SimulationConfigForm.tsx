@@ -6,7 +6,7 @@ import { IconPlus, IconTrash } from '@tabler/icons-react';
 const LOGNORMAL_DEFAULTS = { floor: 5_000_000, median: 12_000_000, p99: 200_000_000 };
 
 export interface SimulationState {
-  feeModel: 'static' | 'parametric';
+  feeModel: 'registry' | 'static' | 'parametric';
   feeTaker: number | string;
   feeMaker: number | string;
   feeTakerRate: number | string;
@@ -36,7 +36,7 @@ export interface SimulationState {
 }
 
 export const defaultSimulationState = (): SimulationState => ({
-  feeModel: 'static',
+  feeModel: 'registry',
   feeTaker: 0,
   feeMaker: 0,
   feeTakerRate: 0.07,
@@ -86,7 +86,7 @@ export function simulationStateToConfig(sim: SimulationState): Record<string, Co
   if (sim.feeModel === 'parametric') {
     cfg['fee.taker.rate'] = requireNumber('fee.taker.rate', sim.feeTakerRate);
     cfg['fee.maker.rate'] = requireNumber('fee.maker.rate', sim.feeMakerRate);
-  } else {
+  } else if (sim.feeModel === 'static') {
     cfg['fee.taker'] = requireNumber('fee.taker', sim.feeTaker);
     cfg['fee.maker'] = requireNumber('fee.maker', sim.feeMaker);
   }
@@ -128,8 +128,10 @@ export function simulationStateToConfig(sim: SimulationState): Record<string, Co
 
 export function simulationStateFromConfig(sim: Record<string, ConfigValue>): SimulationState {
   const s = defaultSimulationState();
-  const feeModel = sim['fee.model'];
-  if (feeModel === 'parametric') {
+  const feeModel = sim['fee.model'] ?? 'registry';
+  if (feeModel === 'registry') {
+    s.feeModel = 'registry';
+  } else if (feeModel === 'parametric') {
     s.feeModel = 'parametric';
     s.feeTakerRate = Number(sim['fee.taker.rate'] ?? 0.07);
     s.feeMakerRate = Number(sim['fee.maker.rate'] ?? 0);
@@ -255,9 +257,10 @@ export interface ProfilesEditorProps {
   onSeedChange: (seed: number | string) => void;
 }
 
-// Profile names become part of property keys (simulation.profiles.<name>.…) that travel as environment variables,
-// where '.' and '_' both turn into separators, so a name using them can't be found again by the orchestrator.
-const PROFILE_NAME = /^[A-Za-z0-9-]+$/;
+// Profile names become part of property keys (simulation.profiles.<name>.…) that travel as environment variables:
+// bash refuses a variable name with '-', and gnome-core lowercases the name and reads '.' and '_' as separators, so
+// only lowercase letters and digits reach the orchestrator intact.
+const PROFILE_NAME = /^[a-z0-9]+$/;
 
 export function ProfilesEditor({ profiles, listings, seed, onProfilesChange, onListingsChange, onSeedChange }: ProfilesEditorProps) {
   const profileNames = Object.keys(profiles);
@@ -383,6 +386,7 @@ export function ProfilesEditor({ profiles, listings, seed, onProfilesChange, onL
 }
 
 const FEE_MODEL_OPTIONS = [
+  { value: 'registry', label: "Venue's fees (registry)" },
   { value: 'static', label: 'Static' },
   { value: 'parametric', label: 'Parametric' },
 ];
@@ -485,7 +489,7 @@ function SimulationConfigForm({ sim, onChange }: SimulationConfigFormProps) {
       <Divider />
       <Title order={6} c="dimmed">Simulation Config</Title>
 
-      <Select label="Fee Model" data={FEE_MODEL_OPTIONS} value={sim.feeModel} onChange={v => set('feeModel', (v ?? 'static') as SimulationState['feeModel'])} />
+      <Select label="Fee Model" data={FEE_MODEL_OPTIONS} value={sim.feeModel} onChange={v => set('feeModel', (v ?? 'registry') as SimulationState['feeModel'])} />
       {sim.feeModel === 'static' && (
         <Group grow>
           <NumberInput label="Taker Fee" value={sim.feeTaker} onChange={v => set('feeTaker', v)} step={0.0001} decimalScale={6} />

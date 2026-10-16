@@ -19,7 +19,7 @@ import {
 import ReactTimeAgo from 'react-time-ago';
 import { IconAlertTriangle, IconHistory, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react';
 import { useGlobalState } from '../../context/GlobalStateContext';
-import { DenormalizedListing, Event, EventContract, Listing, ListingSpec, RiskPolicy, Security, SecurityType } from '../../types';
+import { DenormalizedListing, Event, EventContract, FeeTimelineEntry, Listing, ListingSpec, RiskPolicy, Security, SecurityType } from '../../types';
 import { registryApi } from '../../utils/api';
 import {
   formatAssetClass,
@@ -37,6 +37,7 @@ import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal'
 import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
 import { SettlementBadge } from '../../components/trading/SettlementBadge';
 import { Time } from '../../components/trading/values';
+import { describeFeeDefinition, FEE_SCOPE_LABELS } from '../../utils/fees';
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -57,6 +58,48 @@ function SkeletonInfoRows({ rows }: { rows: number }) {
         </Group>
       ))}
     </Stack>
+  );
+}
+
+function feeTime(iso: string): string {
+  return Date.parse(iso) === 0 ? 'Always' : new Date(iso).toISOString().replace('.000Z', 'Z');
+}
+
+// What the registry says the listing paid over time and which scope it came from; a stretch no schedule covers has no
+// known fees, and backtests over it stop rather than guess.
+function FeeTimelineTable({ timeline }: { timeline: FeeTimelineEntry[] }) {
+  if (timeline.length === 0) {
+    return <Text c="dimmed" size="sm">No fees known for this listing. Record its venue's schedule under Security Master → Fees.</Text>;
+  }
+  const stretches: { from: string; to: string | null; entry: FeeTimelineEntry | null }[] = [];
+  timeline.forEach((entry, i) => {
+    const previous = timeline[i - 1];
+    if (previous && previous.effectiveTo !== null && previous.effectiveTo !== entry.effectiveFrom) {
+      stretches.push({ from: previous.effectiveTo, to: entry.effectiveFrom, entry: null });
+    }
+    stretches.push({ from: entry.effectiveFrom, to: entry.effectiveTo, entry });
+  });
+  return (
+    <Table striped withColumnBorders>
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th>From</Table.Th>
+          <Table.Th>Until</Table.Th>
+          <Table.Th>Applies through</Table.Th>
+          <Table.Th>Fees</Table.Th>
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
+        {stretches.map((s, i) => (
+          <Table.Tr key={i}>
+            <Table.Td>{feeTime(s.from)}</Table.Td>
+            <Table.Td>{s.to === null ? 'Now' : feeTime(s.to)}</Table.Td>
+            <Table.Td>{s.entry ? <Badge size="sm" variant="light">{FEE_SCOPE_LABELS[s.entry.scope]}</Badge> : '—'}</Table.Td>
+            <Table.Td>{s.entry ? describeFeeDefinition(s.entry.definition) : <Text size="sm" c="orange">Fees unknown</Text>}</Table.Td>
+          </Table.Tr>
+        ))}
+      </Table.Tbody>
+    </Table>
   );
 }
 
@@ -117,6 +160,8 @@ function ListingDetail() {
   const [listingError, setListingError] = useState<string | null>(null);
   const [loadingSpecs, setLoadingSpecs] = useState(true);
   const [specsError, setSpecsError] = useState<string | null>(null);
+  const [fees, setFees] = useState<FeeTimelineEntry[] | null>(null);
+  const [feesError, setFeesError] = useState<string | null>(null);
   const [eventContract, setEventContract] = useState<EventContract | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
   const [eventError, setEventError] = useState<string | null>(null);
@@ -209,6 +254,17 @@ function ListingDetail() {
     return () => { cancelled = true; };
   }, [id]);
 
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setFees(null);
+    setFeesError(null);
+    registryApi.getFeeTimeline(id)
+      .then(timeline => { if (!cancelled) setFees(timeline); })
+      .catch(e => { if (!cancelled) setFeesError(errorMessage(e, 'Failed to load fees')); });
+    return () => { cancelled = true; };
+  }, [id]);
+
   if (loading) {
     return <ListingDetailSkeleton id={id} onBack={() => navigate('/security-master')} />;
   }
@@ -289,6 +345,8 @@ function ListingDetail() {
               <InfoRow label="Listing ID" value={listing.listingId} />
               <InfoRow label="Exchange Security ID" value={listing.exchangeSecurityId} />
               <InfoRow label="Exchange Symbol" value={listing.exchangeSecuritySymbol} />
+              <InfoRow label="Fee Group" value={listing.feeGroup ?? '—'} />
+              <InfoRow label="Fee Event" value={listing.feeEvent ?? '—'} />
               <InfoRow label="Created" value={<ReactTimeAgo date={new Date(listing.dateCreated)} timeStyle="round" />} />
               <InfoRow label="Modified" value={<ReactTimeAgo date={new Date(listing.dateModified)} timeStyle="round" />} />
             </Stack>
@@ -378,6 +436,7 @@ function ListingDetail() {
                     <Table.Th>Min Size</Table.Th>
                     <Table.Th>Min Notional</Table.Th>
                     <Table.Th>Contract Multiplier</Table.Th>
+                    <Table.Th>Effective From</Table.Th>
                     <Table.Th>Recorded At</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
@@ -389,11 +448,25 @@ function ListingDetail() {
                       <Table.Td>{formatUnscaled(unscaleSize(spec.minSize))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscalePrice(spec.minNotional))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscaleContractMultiplier(spec.contractMultiplier))}</Table.Td>
+                      <Table.Td>{Date.parse(spec.effectiveFrom) === 0 ? 'Always' : new Date(spec.effectiveFrom).toISOString()}</Table.Td>
                       <Table.Td><ReactTimeAgo date={new Date(spec.recordedAt)} timeStyle="round" /></Table.Td>
                     </Table.Tr>
                   ))}
                 </Table.Tbody>
               </Table>
+            )}
+          </Paper>
+        </Grid.Col>
+
+        <Grid.Col span={12}>
+          <Paper p="md" withBorder>
+            <Title order={4} mb="md">Fees</Title>
+            {feesError ? (
+              <Alert color="red" title="Error">{feesError}</Alert>
+            ) : fees === null ? (
+              <SkeletonLines />
+            ) : (
+              <FeeTimelineTable timeline={fees} />
             )}
           </Paper>
         </Grid.Col>

@@ -71,6 +71,9 @@ export interface Listing {
   exchangeSecuritySymbol: string;
   dateCreated: string;
   dateModified: string;
+  // The venue's keys fee schedules target: a coarse group (a Kalshi series) and the venue's own event id.
+  feeGroup?: string | null;
+  feeEvent?: string | null;
 }
 
 export interface DenormalizedListing extends Listing {
@@ -96,7 +99,69 @@ export interface ListingSpec {
   minNotional: number;
   contractMultiplier: number;
   minSize: number;
+  // When the spec held at the venue; recordedAt is when it was written.
+  effectiveFrom: string;
   recordedAt: string;
+}
+
+// A fill's fee is the sum of its components, each charged at the taker or maker rate by the fill's liquidity
+// (negative is a rebate), then rounded: see gnome-registry's sm.fee_schedule.
+export type FeeKind = 'PRICE_CURVE' | 'NOTIONAL' | 'PER_UNIT';
+export type FeeRoundingMode = 'NONE' | 'CEIL' | 'HALF_UP' | 'HALF_EVEN';
+export type FeeRoundingScope = 'FILL' | 'ORDER_ACCUMULATOR';
+
+export interface FeeComponent {
+  kind: FeeKind;
+  taker: number;
+  maker: number;
+  exponent?: number;
+  side?: 'BUY' | 'SELL';
+}
+
+export interface FeeDefinition {
+  currency: string;
+  components: FeeComponent[];
+  rounding: { mode: FeeRoundingMode; increment?: number; scope?: FeeRoundingScope };
+}
+
+export type FeeSource = 'VENUE_API' | 'MANUAL' | 'BACKFILL';
+
+/** One stored schedule: it targets the exchange, one of its fee groups or fee events, or a listing. */
+export interface FeeScheduleRow {
+  feeScheduleId: string;
+  exchangeId: number;
+  feeGroup: string | null;
+  feeEvent: string | null;
+  listingId: number | null;
+  effectiveFrom: string;
+  recordedAt: string;
+  // Null lifts the scope from then on, so its listings fall back to the next scope out.
+  definition: FeeDefinition | null;
+  source: FeeSource;
+  sourceRef: string | null;
+  actor: string | null;
+}
+
+export type FeeScope = 'LISTING' | 'FEE_EVENT' | 'FEE_GROUP' | 'EXCHANGE';
+
+/** One stretch of a listing's resolved fees: effectiveTo is exclusive, null while it holds. */
+export interface FeeTimelineEntry {
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  scope: FeeScope;
+  feeScheduleId: string;
+  definition: FeeDefinition;
+}
+
+export interface CreateFeeSchedule {
+  exchangeId?: number;
+  feeGroup?: string;
+  feeEvent?: string;
+  listingId?: number;
+  effectiveFrom: string;
+  definition: FeeDefinition | null;
+  source: FeeSource;
+  sourceRef?: string;
 }
 
 export interface Currency {
