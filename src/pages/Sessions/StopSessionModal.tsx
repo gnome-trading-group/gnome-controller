@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Group, List, Modal, Stack, Text } from '@mantine/core';
+import { Alert, Button, Group, List, Modal, Stack, Text, Textarea } from '@mantine/core';
 import { StrategySession } from '../../types';
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
@@ -13,9 +13,13 @@ interface StopSessionModalProps {
 export function StopSessionModal({ session, onClose, onStopped }: StopSessionModalProps) {
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
 
   useEffect(() => {
-    if (session) setError(null);
+    if (session) {
+      setError(null);
+      setReason('');
+    }
   }, [session]);
 
   const handleStop = async () => {
@@ -23,7 +27,7 @@ export function StopSessionModal({ session, onClose, onStopped }: StopSessionMod
     setStopping(true);
     setError(null);
     try {
-      await registryApi.stopSession(session.sessionId);
+      await registryApi.stopSession(session.sessionId, { reason: reason.trim() || undefined });
       onClose();
       onStopped();
     } catch (e) {
@@ -45,6 +49,17 @@ export function StopSessionModal({ session, onClose, onStopped }: StopSessionMod
           <List.Item>Wait a few seconds for the cancels to go out.</List.Item>
           <List.Item>Shut this session down.</List.Item>
         </List>
+        <Textarea
+          label="Reason"
+          description="Optional. Shown on the session and recorded with its kill switch."
+          placeholder="e.g. match started, rolling to a new config"
+          value={reason}
+          onChange={e => setReason(e.currentTarget.value)}
+          disabled={stopping}
+          autosize
+          minRows={2}
+          maxLength={500}
+        />
         {stopping && <Text size="sm" c="dimmed">Cancelling orders and stopping the session — this takes about 5 seconds…</Text>}
         {error && <Alert color="red" title="Error">{error}</Alert>}
         <Group justify="flex-end">

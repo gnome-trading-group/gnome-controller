@@ -110,6 +110,8 @@ export interface LaunchRequest {
   session_started_at?: string | null;
   session_stopped_at?: string | null;
   session_failure_reason?: string | null;
+  session_stop_reason?: string | null;
+  session_stopped_by?: string | null;
   date_created: string;
   date_modified: string;
 }

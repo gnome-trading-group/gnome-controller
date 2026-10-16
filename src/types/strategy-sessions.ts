@@ -25,6 +25,9 @@ export interface StrategySession {
   orchestratorVersion: string | null;
   gnomepyVersion: string | null;
   failureReason: string | null;
+  // Who asked for the stop (an email, a launcher rule, "strategy" for a strategy ending itself) and why.
+  stopReason: string | null;
+  stoppedBy: string | null;
   // The session's latest heartbeat and the health it reported; null until its process first reports.
   lastHeartbeatAt: string | null;
   health: SessionHealth | null;

@@ -11,7 +11,7 @@ import { LaunchRequestDetail, RequestAction, ResolvedStrategyConfig } from '../.
 import { launcherApi, registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { actorLabel, canCancel, canRetry, isPending, REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS } from '../../utils/launch-status';
-import { SESSION_STATUS_COLORS } from '../../utils/session-status';
+import { SESSION_STATUS_COLORS, stopSummary } from '../../utils/session-status';
 import { launcherKeys, LAUNCHER_POLL, useRequest } from '../../query/launcher';
 import { isLive, POLL, useSession, useSessionSummary } from '../../query/hooks';
 import { PageHeader } from '../../components/PageHeader';
@@ -64,7 +64,9 @@ function steps(request: LaunchRequestDetail, session: ReturnType<typeof useSessi
   if (stopped) {
     out.push({
       at: stopped, color: status === 'FAILED' ? 'red' : 'gray', title: `Session ${String(status ?? 'ended').toLowerCase()}`,
-      body: session?.failureReason ?? request.session_failure_reason ?? undefined,
+      body: session?.failureReason ?? request.session_failure_reason
+        ?? stopSummary(session ?? { stopReason: request.session_stop_reason ?? null, stoppedBy: request.session_stopped_by ?? null })
+        ?? undefined,
     });
   }
   return out.sort((a, b) => a.at.localeCompare(b.at));

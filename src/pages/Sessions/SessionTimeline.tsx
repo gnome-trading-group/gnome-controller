@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { StrategySession, StrategySessionStatus } from '../../types';
 import { formatDuration, formatTime } from '../../utils/format';
 import { timelineLanes } from '../../utils/timeline';
+import { stopSummary } from '../../utils/session-status';
 import { usePreferences } from '../../context/PreferencesContext';
 
 const DAY_MS = 86_400_000;
@@ -68,6 +69,7 @@ export function SessionTimeline({ sessions, days, strategyName, failedReason }: 
                         <Text size="xs">{formatTime(bar.startedAt, timeZone, 'minute')} → {bar.stoppedAt ? formatTime(bar.stoppedAt, timeZone, 'minute') : 'now'}</Text>
                         <Text size="xs">ran {formatDuration(ended - Date.parse(bar.startedAt))}</Text>
                         {reason && <Text size="xs" c="red.3">{reason}</Text>}
+                        {!reason && stopSummary(session) && <Text size="xs">{stopSummary(session)}</Text>}
                       </Stack>
                     }
                   >

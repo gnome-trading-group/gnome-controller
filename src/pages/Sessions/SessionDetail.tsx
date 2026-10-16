@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isActiveSession, Mode, StrategySession, StrategySessionStatus } from '../../types';
 import { errorMessage, findKillSwitch, isKilled, setKillSwitch } from '../../utils/kill-switch';
 import { registryApi } from '../../utils/api';
-import { SESSION_STATUS_COLORS } from '../../utils/session-status';
+import { SESSION_STATUS_COLORS, stopSummary } from '../../utils/session-status';
 import {
   isLive, keys, POLL, useEventPositions, useFills, useOrders, usePnlSeries, useRiskPolicies, useSession, useSessionSummary,
   useStrategyName,
@@ -185,6 +185,11 @@ function SessionDetail() {
           {sessionKilled
             ? 'This session cannot send orders and its open orders have been cancelled. Other sessions of the strategy are unaffected.'
             : 'The strategy is killed, so every session of it, including this one, is blocked from sending orders.'}
+        </Alert>
+      )}
+      {session && stopSummary(session) && (
+        <Alert color="gray" title="Stop" mb="md">
+          <Text size="sm">{stopSummary(session)}</Text>
         </Alert>
       )}
       {session?.failureReason && (

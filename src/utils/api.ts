@@ -471,12 +471,12 @@ export const registryApi = {
       preserveKeys: new Set(['args', 'config']),
       body: request,
     }),
-  stopSession: (sessionId: string, stopGraceMs?: number) =>
+  stopSession: (sessionId: string, options: { reason?: string; stopGraceMs?: number } = {}) =>
     sendApiRequest<StrategySession>('/strategy-sessions/stop', 'POST', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
       preserveKeys: new Set(['args', 'config']),
-      body: { sessionId, stopGraceMs },
+      body: { sessionId, ...options },
     }),
   getSessionLogs: (sessionId: string) =>
     sendApiRequest<{ logs: Array<{ instanceId: string; logs: Array<{ timestamp: number; message: string }>; consoleUrl: string }> }>(

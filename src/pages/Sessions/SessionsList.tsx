@@ -22,7 +22,7 @@ import { navigateRowProps, handleNavigateClick } from '../../utils/navigation';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import DeploySessionModal from './DeploySessionModal';
-import { SESSION_STATUS_COLORS } from '../../utils/session-status';
+import { SESSION_STATUS_COLORS, stopSummary } from '../../utils/session-status';
 import { LastUpdated } from '../../components/LastUpdated';
 import { ModeBand, ModeSwitch } from '../../components/trading/layout';
 import { Money } from '../../components/trading/values';
@@ -135,7 +135,7 @@ function SessionsList() {
       header: 'Status',
       size: 110,
       Cell: ({ row }: { row: MRT_Row<StrategySession> }) => {
-        const reason = failedReason(row.original);
+        const reason = failedReason(row.original) ?? stopSummary(row.original);
         return (
           <Tooltip label={reason} disabled={!reason} multiline w={320} withArrow>
             <Badge color={SESSION_STATUS_COLORS[row.original.status] ?? 'gray'} variant="light" size="sm">
