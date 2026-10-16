@@ -3,11 +3,11 @@ import {
   Alert, Anchor, Button, Card, Code, Container, Grid, Group, JsonInput, Stack, Table, Tabs, Text, Timeline,
 } from '@mantine/core';
 import {
-  IconBolt, IconCalendarX, IconCheck, IconExternalLink, IconRefresh, IconRocket, IconRotateClockwise, IconX,
+  IconBolt, IconCalendarX, IconCheck, IconExternalLink, IconRefresh, IconRocket, IconRotateClockwise, IconSend, IconX,
 } from '@tabler/icons-react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { LaunchRequestDetail, RequestAction, ResolvedStrategyConfig } from '../../types/launcher';
+import { LaunchRequestDetail, RequestAction, RequestLink, RequestLinks, ResolvedStrategyConfig } from '../../types/launcher';
 import { launcherApi, registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { actorLabel, canCancel, canRetry, isPending, REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS } from '../../utils/launch-status';
@@ -94,6 +94,7 @@ function LaunchDetail() {
   });
   const [busy, setBusy] = useState<RequestAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const timeline = useMemo(() => (request ? steps(request, session) : []), [request, session]);
   const config = request?.resolved_config && 'strategy_id' in request.resolved_config
@@ -104,11 +105,12 @@ function LaunchDetail() {
     if (sessionId) queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
   };
   const act = async (action: RequestAction) => {
-    setBusy(action); setActionError(null);
+    setBusy(action); setActionError(null); setActionNotice(null);
     try {
       const result = await launcherApi.actOnRequest(requestId, action);
       await queryClient.invalidateQueries({ queryKey: launcherKeys.all });
       if (action === 'retry') navigate(`/launcher/requests/${result.request_id}`);
+      if (action === 'resend') setActionNotice('Approval message resent to Slack; the old one no longer has buttons.');
     } catch (e) {
       setActionError(errorMessage(e, `Could not ${action} the request`));
     } finally {
@@ -163,6 +165,7 @@ function LaunchDetail() {
         menu={[
           { label: 'Refresh', icon: <IconRefresh size={16} />, onClick: refresh },
           ...(request ? [{ label: 'Open rule', icon: <IconRocket size={16} />, onClick: () => navigate(`/launcher/rules/${request.matched_rule_id}`) }] : []),
+          ...(request && isPending(request) ? [{ label: 'Resend to Slack', icon: <IconSend size={16} />, onClick: () => act('resend') }] : []),
         ]}
         meta={request ? [
           <ShortId key="id" id={request.request_id} />,
@@ -176,6 +179,7 @@ function LaunchDetail() {
 
       {requestQuery.error && <Alert color="red" title="Error" mb="md">{errorMessage(requestQuery.error, 'Failed to load the request')}</Alert>}
       {actionError && <Alert color="red" mb="md" withCloseButton onClose={() => setActionError(null)}>{actionError}</Alert>}
+      {actionNotice && <Alert color="green" mb="md" withCloseButton onClose={() => setActionNotice(null)}>{actionNotice}</Alert>}
       {request?.launch_error && <Alert color="red" mb="md" title="Error"><Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{request.launch_error}</Text></Alert>}
       {session?.failureReason && <Alert color="red" mb="md" title="The session failed">{session.failureReason}</Alert>}
 
@@ -205,6 +209,7 @@ function LaunchDetail() {
                 <Kpi label="Open orders" value={counts?.openOrders ?? '—'} />
               </KpiStrip>
             )}
+            {request.links && <LinksCard links={request.links} />}
             {request.action === 'shutdown' && (
               <Card withBorder mb="md">
                 <Text fw={600} mb="xs">Sessions to stop</Text>
@@ -255,7 +260,7 @@ function LaunchDetail() {
                 </Stack>
               </Tabs.Panel>
               <Tabs.Panel value="config">
-                {config && <LaunchConfig config={config} />}
+                {config && <LaunchConfig config={config} links={request.links ?? null} />}
               </Tabs.Panel>
             </Tabs>
           </Grid.Col>
@@ -265,11 +270,53 @@ function LaunchDetail() {
   );
 }
 
-function LaunchConfig({ config }: { config: ResolvedStrategyConfig }) {
+// The launcher writes absolute controller URLs; this stage's own pages open in place, everything else in a new tab.
+function LinkAnchor({ link }: { link: RequestLink }) {
+  const origin = window.location.origin;
+  if (link.url.startsWith(origin + '/')) {
+    return <Anchor component={Link} to={link.url.slice(origin.length)} size="sm">{link.label}</Anchor>;
+  }
+  return (
+    <Anchor href={link.url} target="_blank" rel="noopener noreferrer" size="sm">
+      <Group gap={4} wrap="nowrap" component="span">{link.label}<IconExternalLink size={12} /></Group>
+    </Anchor>
+  );
+}
+
+function LinksCard({ links }: { links: RequestLinks }) {
+  const rows: [string, RequestLink[]][] = [
+    ['Strategy', links.strategy ? [links.strategy] : []],
+    ['Listings', links.listings],
+    ['Pages', links.pages],
+  ];
+  return (
+    <Card withBorder mb="md">
+      <Text fw={600} mb={links.title ? 0 : 'xs'}>Links</Text>
+      {links.title && <Text size="sm" c="dimmed" mb="xs">{links.title}</Text>}
+      <Table withRowBorders={false} fz="sm" verticalSpacing={4}>
+        <Table.Tbody>
+          {rows.filter(([, items]) => items.length > 0).map(([name, items]) => (
+            <Table.Tr key={name}>
+              <Table.Td c="dimmed" w={120} style={{ verticalAlign: 'top' }}>{name}</Table.Td>
+              <Table.Td>
+                <Stack gap={2}>{items.map(item => <LinkAnchor key={item.url} link={item} />)}</Stack>
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Card>
+  );
+}
+
+function LaunchConfig({ config, links }: { config: ResolvedStrategyConfig; links: RequestLinks | null }) {
+  const listingLinks = links?.listings.length ? links.listings
+    : config.listings.map(id => ({ label: String(id), url: `${window.location.origin}/security-master/listings/${id}` }));
   const rows: [string, ReactNode][] = [
-    ['Strategy', <Anchor key="s" component={Link} to={`/strategies/${config.strategy_id}`} size="sm">#{config.strategy_id}</Anchor>],
+    ['Strategy', links?.strategy ? <LinkAnchor key="s" link={links.strategy} />
+      : <Anchor key="s" component={Link} to={`/strategies/${config.strategy_id}`} size="sm">#{config.strategy_id}</Anchor>],
     ['Class', <Code key="c">{config.strategy_class}</Code>],
-    ['Listings', config.listings.join(', ')],
+    ['Listings', <Group key="l" gap="sm">{listingLinks.map(l => <LinkAnchor key={l.url} link={l} />)}</Group>],
     ['Research commit', config.research_commit ? <Code key="r">{config.research_commit.slice(0, 10)}</Code> : 'main'],
     ['Instance type', config.instance_type ?? 'default'],
     ['Latency profile', config.latency_profile ?? 'default'],

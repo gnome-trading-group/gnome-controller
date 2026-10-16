@@ -84,6 +84,20 @@ export interface RequestEvent {
   note: string | null;
 }
 
+export interface RequestLink {
+  label: string;
+  url: string;
+}
+
+// Worked out by the launcher when the request was made; absent on older requests.
+export interface RequestLinks {
+  // The listings' event title, when the launcher could find it.
+  title?: string | null;
+  strategy: RequestLink | null;
+  listings: RequestLink[];
+  pages: RequestLink[];
+}
+
 export interface LaunchRequest {
   request_id: string;
   trigger_id: string | null;
@@ -105,6 +119,7 @@ export interface LaunchRequest {
   target_session_ids: string[] | null;
   scheduled_time: string | null;
   launch_error: string | null;
+  links?: RequestLinks | null;
   events: RequestEvent[];
   session_status?: string | null;
   session_started_at?: string | null;
@@ -154,4 +169,4 @@ export interface DryRunResult {
   target_session_ids?: string[];
 }
 
-export type RequestAction = 'approve' | 'reject' | 'cancel' | 'retry';
+export type RequestAction = 'approve' | 'reject' | 'cancel' | 'retry' | 'resend';
