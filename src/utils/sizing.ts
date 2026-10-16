@@ -34,6 +34,8 @@ interface InstanceType {
 // Measured 2026-10 on c7i.large (standard, paper): 2 and 5 listings both ran at ~2-7% CPU and ~370 MB, starting
 // in under 30s. The old 4 vCPU floor came from JIT warmup crashing on Fargate while every agent busy-spun.
 export const INSTANCE_TYPES: InstanceType[] = [
+  // Burstable, for standard-profile sessions that mostly wait (paper): about a quarter of c7i.large's price.
+  { value: 't3.small', vcpus: 2, memoryGb: 2, isolatedCpus: 0 },
   { value: 'c7i.large', vcpus: 2, memoryGb: 4, isolatedCpus: 0 },
   { value: 'c7i.xlarge', vcpus: 4, memoryGb: 8, isolatedCpus: 0 },
   { value: 'c7i.4xlarge', vcpus: 16, memoryGb: 32, isolatedCpus: 12 },
@@ -57,8 +59,9 @@ export function expectedHotThreads(mode: string, listingCount: number): number {
   return perListing * listingCount + 2 + (listingCount > 1 ? 2 : 0);
 }
 
-// The most listings c7i.large has been measured with; above it, the next size up until someone measures more.
-const LARGE_MEASURED_LISTINGS = 5;
+// c7i.large was measured with five listings (~2-7% CPU, ~370 MB) and t3.small with one (~9% CPU, ~630 MB of 1.9 GB);
+// t3.small has the same two vCPUs, so it takes up to five. Above that, the next size up until someone measures more.
+const STANDARD_MEASURED_LISTINGS = 5;
 
 // Paper fills come from a simulated exchange that models its own latency, so isolated cores buy it nothing.
 export function defaultLatencyProfile(mode: string): LatencyProfile {
@@ -66,7 +69,7 @@ export function defaultLatencyProfile(mode: string): LatencyProfile {
 }
 
 export function suggestInstanceType(profile: LatencyProfile, mode: string, listingCount: number): string {
-  if (profile === 'standard') return listingCount <= LARGE_MEASURED_LISTINGS ? 'c7i.large' : 'c7i.xlarge';
+  if (profile === 'standard') return listingCount <= STANDARD_MEASURED_LISTINGS ? 't3.small' : 'c7i.xlarge';
   const hot = expectedHotThreads(mode, Math.max(listingCount, 1));
   const fits = INSTANCE_TYPES.find(t => t.isolatedCpus >= hot);
   return (fits ?? INSTANCE_TYPES[INSTANCE_TYPES.length - 1]).value;
