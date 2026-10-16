@@ -47,15 +47,7 @@ const routes = [
       { label: 'Treasury & Accounts', link: '/treasury' },
     ],
   },
-  {
-    label: 'Launcher',
-    icon: IconRocket,
-    links: [
-      { label: 'Launch Rules', link: '/launcher/launch-rules' },
-      { label: 'Launch History', link: '/launcher/launch-history' },
-      { label: 'Manual Trigger', link: '/launcher/manual-trigger' },
-    ],
-  },
+  { icon: IconRocket, label: 'Launcher', link: '/launcher' },
   { icon: IconTestPipe, label: 'Backtests', link: '/backtests' },
   {
     label: 'Research',

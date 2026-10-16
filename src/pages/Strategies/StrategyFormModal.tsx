@@ -1,69 +1,40 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
-  ActionIcon,
   Button,
   Divider,
   Group,
   JsonInput,
   Modal,
   MultiSelect,
-  NumberInput,
-  Select,
   Stack,
   Switch,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconPlus, IconTrash } from '@tabler/icons-react';
-import { Strategy, ConfigValue } from '../../types';
+import { Strategy } from '../../types';
 import { registryApi } from '../../utils/api';
-import { strategyClassHint } from '../../utils/strategy-class';
 import { OrchestratorOverridesEditor } from '../../components/OrchestratorOverrides';
-import { Overrides, toOverrides } from '../../utils/orchestrator-overrides';
+import { Overrides } from '../../utils/orchestrator-overrides';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
+import { useJsonFallback } from '../../hooks/useJsonFallback';
+import { ArgRow, LaunchSettings } from '../../utils/launch-settings';
 import {
-  LATENCY_PROFILE_OPTIONS,
-  LatencyProfile,
-  instanceTypeOptions,
-  isInstanceTypeValidFor,
-  suggestInstanceType,
-  defaultLatencyProfile,
-} from '../../utils/sizing';
-import {
-  defaultSimulationState,
-  ListingProfileRow,
-  ProfilesEditor,
-  ProfilesState,
-  simulationProfilesFromConfig,
-  simulationProfilesToConfig,
-} from '../../components/SimulationConfigForm';
+  defaultTemplateLaunch, TemplateForm, templateFormFrom, templateLostFields, templateParamsFrom,
+} from '../../utils/strategy-template';
+import { StaleConfigAlert } from '../../components/StaleConfigAlert';
+import { LaunchSettingsFields } from '../../components/launch/LaunchSettingsFields';
+import { StrategyArgsEditor } from '../../components/launch/StrategyArgsEditor';
+import { SimulationSettingsEditor } from '../../components/simulation/SimulationSettingsEditor';
+import { SessionSimulation, simulationProblem } from '../../utils/simulation';
 
 function defaultForm() {
-  return {
-    name: '',
-    description: '',
-    archived: false,
-    mode: 'paper',
-    strategyType: 'java',
-    strategyClass: '',
-    region: '',
-    researchCommit: '',
-    latencyProfile: defaultLatencyProfile('paper'),
-    instanceType: suggestInstanceType(defaultLatencyProfile('paper'), 'paper', 1),
-    availabilityZone: '',
-    orchestratorVersion: '',
-    gnomepyVersion: '',
-    args: [] as { key: string; value: string | number | boolean; type: 'string' | 'number' | 'boolean' | 'json' }[],
-  };
+  return { name: '', description: '', archived: false };
 }
 
-function defaultProfiles(): ProfilesState {
-  return { default: defaultSimulationState() };
-}
-
-function defaultListings(): ListingProfileRow[] {
-  return [{ listingId: '', profile: 'default' }];
+// The registry returns a template's top-level keys camelCased; it stores, and the form saves, them in snake_case.
+function snakeKeys(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`), v]));
 }
 
 interface StrategyFormModalProps {
@@ -75,156 +46,86 @@ interface StrategyFormModalProps {
 
 function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormModalProps) {
   const [form, setForm] = useState(defaultForm());
-  const [profiles, setProfiles] = useState<ProfilesState>(defaultProfiles());
-  const [simSeed, setSimSeed] = useState<number | string>('');
+  const [launch, setLaunch] = useState<LaunchSettings>(defaultTemplateLaunch());
+  const [args, setArgs] = useState<ArgRow[]>([]);
+  const [simulation, setSimulation] = useState<SessionSimulation>({});
   const [overrides, setOverrides] = useState<Overrides>({});
-  const [listings, setListings] = useState<ListingProfileRow[]>(defaultListings());
-  const [liveListingIds, setLiveListingIds] = useState<string[]>([]);
-  const [liveListingItems, setLiveListingItems] = useState<Record<string, string>>({});
-  const [liveListingSearchValue, setLiveListingSearchValue] = useState('');
-  const { options: liveListingSearchOptions, isLoading: liveListingSearchLoading } = useListingSearch(liveListingSearchValue);
-  const [sizingUserOverridden, setSizingUserOverridden] = useState(false);
-  // Until someone picks a profile it follows the mode, and isn't saved: launches then default it by mode too.
-  const [profileUserChosen, setProfileUserChosen] = useState(false);
+  const [listingIds, setListingIds] = useState<string[]>([]);
+  const [listingLabels, setListingLabels] = useState<Record<string, string>>({});
+  const [listingSearchValue, setListingSearchValue] = useState('');
+  const { options: listingSearchOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearchValue);
   const [formError, setFormError] = useState<string | null>(null);
+  // A template saved in a format the form can't fully hold opens as JSON instead (see utils/round-trip).
+  const stored = useMemo(() => (opened && strategy ? snakeKeys((strategy.parameters ?? {}) as Record<string, unknown>) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [opened, strategy?.strategyId]);
+  const fallback = useJsonFallback(stored, templateLostFields);
 
-  const liveListingMergedData = useMemo(() => [
-    ...Object.entries(liveListingItems)
-      .filter(([id]) => !liveListingSearchOptions.some(o => o.value === id))
+  const applyTemplate = (t: TemplateForm) => {
+    setLaunch(t.launch);
+    setArgs(t.args);
+    setOverrides(t.overrides);
+    setSimulation(t.simulation);
+    setListingIds(t.listingIds);
+  };
+  const backToForm = (drop: boolean) => {
+    const value = fallback.backToForm(drop);
+    if (value) applyTemplate(templateFormFrom(value));
+  };
+
+  const listingMergedData = useMemo(() => [
+    ...Object.entries(listingLabels)
+      .filter(([id]) => !listingSearchOptions.some(o => o.value === id))
       .map(([id, label]) => ({ value: id, label })),
-    ...liveListingSearchOptions,
-  ], [liveListingItems, liveListingSearchOptions]);
+    ...listingSearchOptions,
+  ], [listingLabels, listingSearchOptions]);
 
-  const handleLiveListingChange = useCallback((values: string[]) => {
-    setLiveListingIds(values);
-    const updated = { ...liveListingItems };
+  const handleListingChange = useCallback((values: string[]) => {
+    setListingIds(values);
+    const updated = { ...listingLabels };
     for (const v of values) {
       if (!updated[v]) {
-        const opt = liveListingSearchOptions.find(o => o.value === v);
+        const opt = listingSearchOptions.find(o => o.value === v);
         if (opt) updated[v] = opt.label;
       }
     }
     for (const key of Object.keys(updated)) {
       if (!values.includes(key)) delete updated[key];
     }
-    setLiveListingItems(updated);
-  }, [liveListingItems, liveListingSearchOptions]);
-
-  useEffect(() => {
-    if (profileUserChosen) return;
-    const profile = defaultLatencyProfile(form.mode);
-    setForm(f => (f.latencyProfile === profile ? f : { ...f, latencyProfile: profile }));
-  }, [form.mode, profileUserChosen]);
-
-  useEffect(() => {
-    const count = form.mode === 'paper'
-      ? listings.filter(l => l.listingId.trim()).length
-      : liveListingIds.length;
-    if (!sizingUserOverridden || !isInstanceTypeValidFor(form.latencyProfile, form.instanceType)) {
-      const suggested = suggestInstanceType(form.latencyProfile, form.mode, count);
-      setForm(f => (f.instanceType === suggested ? f : { ...f, instanceType: suggested }));
-    }
-  }, [listings, liveListingIds, form.mode, form.latencyProfile, form.instanceType, sizingUserOverridden]);
+    setListingLabels(updated);
+  }, [listingLabels, listingSearchOptions]);
 
   useEffect(() => {
     if (!opened) return;
 
     if (!strategy) {
       setForm(defaultForm());
-      setProfileUserChosen(false);
-      setProfiles(defaultProfiles());
-      setListings(defaultListings());
-      setSimSeed('');
-      setOverrides({});
-      setLiveListingIds([]);
-      setLiveListingItems({});
-      setLiveListingSearchValue('');
-      setSizingUserOverridden(false);
+      applyTemplate(templateFormFrom({}));
+      setListingLabels({});
+      setListingSearchValue('');
       setFormError(null);
       return;
     }
 
-    const p = strategy.parameters as Record<string, unknown> | undefined ?? {};
-    const args = p.args && typeof p.args === 'object'
-      ? Object.entries(p.args as Record<string, unknown>).map(([key, value]) => {
-          if (typeof value === 'number') return { key, value, type: 'number' as const };
-          if (typeof value === 'boolean') return { key, value, type: 'boolean' as const };
-          if (typeof value === 'object' && value !== null) return { key, value: JSON.stringify(value, null, 2), type: 'json' as const };
-          return { key, value: String(value), type: 'string' as const };
-        })
-      : [];
-
-    setSizingUserOverridden(!!p.instanceType);
-    setProfileUserChosen(!!p.latencyProfile);
-    const mode = p.mode ? String(p.mode) : 'paper';
-    setForm({
-      name: strategy.name ?? '',
-      description: strategy.description ?? '',
-      archived: strategy.archived,
-      mode,
-      strategyType: p.strategyType ? String(p.strategyType) : 'java',
-      strategyClass: p.strategyClass ? String(p.strategyClass) : '',
-      region: p.region ? String(p.region) : '',
-      researchCommit: p.researchCommit ? String(p.researchCommit) : '',
-      latencyProfile: p.latencyProfile
-        ? (p.latencyProfile === 'standard' ? 'standard' : 'low_latency')
-        : defaultLatencyProfile(mode),
-      instanceType: p.instanceType ? String(p.instanceType) : 'c7i.4xlarge',
-      availabilityZone: p.availabilityZone ? String(p.availabilityZone) : '',
-      orchestratorVersion: p.orchestratorVersion ? String(p.orchestratorVersion) : '',
-      gnomepyVersion: p.gnomepyVersion ? String(p.gnomepyVersion) : '',
-      args,
-    });
-    setOverrides(toOverrides(p.overrides));
-    if (Array.isArray(p.listings)) {
-      setLiveListingIds((p.listings as number[]).map(String));
-    } else {
-      setLiveListingIds([]);
-    }
-    setLiveListingItems({});
-    setLiveListingSearchValue('');
-
-    if (p.simulation && typeof p.simulation === 'object') {
-      const { profiles: loadedProfiles, listings: loadedListings, seed } = simulationProfilesFromConfig(
-        p.simulation as Record<string, string>
-      );
-      setProfiles(Object.keys(loadedProfiles).length > 0 ? loadedProfiles : defaultProfiles());
-      setListings(loadedListings.length > 0 ? loadedListings : defaultListings());
-      setSimSeed(seed);
-    } else {
-      setProfiles(defaultProfiles());
-      setListings(defaultListings());
-      setSimSeed('');
-    }
+    setForm({ name: strategy.name ?? '', description: strategy.description ?? '', archived: strategy.archived });
+    applyTemplate(templateFormFrom((strategy.parameters ?? {}) as Record<string, unknown>));
+    setListingLabels({});
+    setListingSearchValue('');
     setFormError(null);
   }, [opened, strategy?.strategyId]);
 
   const handleSubmit = async () => {
     setFormError(null);
     try {
-      const args: Record<string, ConfigValue> = {};
-      for (const { key, value, type } of form.args) {
-        if (key.trim()) {
-          args[key.trim()] = type === 'json' ? JSON.parse(value as string) : value;
-        }
-      }
-      const parameters: Record<string, unknown> = {
-        mode: form.mode,
-        strategy_type: form.strategyType,
-        strategy_class: form.strategyClass,
-      };
-      if (form.mode === 'live') parameters.listings = liveListingIds.map(Number);
-      if (form.region.trim()) parameters.region = form.region.trim();
-      if (Object.keys(args).length > 0) parameters.args = args;
-      if (Object.keys(overrides).length > 0) parameters.overrides = overrides;
-      if (form.mode === 'paper') parameters.simulation = simulationProfilesToConfig(profiles, listings, simSeed);
-      if (profileUserChosen) parameters.latency_profile = form.latencyProfile;
-      parameters.instance_type = form.instanceType;
-      if (form.availabilityZone.trim()) parameters.availability_zone = form.availabilityZone.trim();
-      if (form.orchestratorVersion.trim()) parameters.orchestrator_version = form.orchestratorVersion.trim();
-      if (form.strategyType === 'python') {
-        if (form.researchCommit.trim()) parameters.research_commit = form.researchCommit.trim();
-        if (form.gnomepyVersion.trim()) parameters.gnomepy_version = form.gnomepyVersion.trim();
+      let parameters: Record<string, unknown>;
+      if (fallback.asJson) {
+        const value = fallback.parse();
+        if (value === null) return;
+        parameters = value;
+      } else {
+        const problem = launch.mode === 'paper' ? simulationProblem(simulation) : null;
+        if (problem) { setFormError(problem); return; }
+        parameters = templateParamsFrom({ launch, args, overrides, simulation, listingIds });
       }
 
       if (strategy) {
@@ -265,113 +166,45 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
 
         <Divider />
         <Title order={6} c="dimmed">Default Config</Title>
-        <Group grow>
-          <Select label="Mode" value={form.mode} data={[{ value: 'paper', label: 'Paper' }, { value: 'live', label: 'Live' }]} onChange={(v) => setForm((f) => ({ ...f, mode: v ?? 'paper' }))} />
-          <Select label="Strategy Type" value={form.strategyType} data={[{ value: 'java', label: 'Java' }, { value: 'python', label: 'Python' }]} onChange={(v) => setForm((f) => ({ ...f, strategyType: v ?? 'java' }))} />
-        </Group>
-        <TextInput
-          label="Strategy Class"
-          placeholder={strategyClassHint(form.strategyType).placeholder}
-          description={strategyClassHint(form.strategyType).description}
-          value={form.strategyClass}
-          onChange={(e) => setForm((f) => ({ ...f, strategyClass: e.target.value }))}
-        />
-        {form.mode === 'live' && (
-          <MultiSelect
-            label="Listings"
-            placeholder="Search listings..."
-            data={liveListingMergedData}
-            value={liveListingIds}
-            onChange={handleLiveListingChange}
-            searchable
-            searchValue={liveListingSearchValue}
-            onSearchChange={setLiveListingSearchValue}
-            nothingFoundMessage={liveListingSearchLoading ? 'Loading...' : 'No listings found'}
-          />
-        )}
-        <Group grow>
-          <TextInput label="Region (optional)" placeholder="us-east-1" value={form.region} onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))} />
-          <TextInput label="Availability Zone (optional)" placeholder="Auto" value={form.availabilityZone} onChange={(e) => setForm((f) => ({ ...f, availabilityZone: e.target.value }))} />
-        </Group>
-        <Group grow>
-          <Select
-            label="Latency Profile"
-            data={LATENCY_PROFILE_OPTIONS}
-            value={form.latencyProfile}
-            onChange={(v) => {
-              if (!v) return;
-              setForm((f) => ({ ...f, latencyProfile: v as LatencyProfile }));
-              setProfileUserChosen(true);
-            }}
-          />
-          <Select
-            label="Instance Type"
-            data={instanceTypeOptions(form.latencyProfile)}
-            value={form.instanceType}
-            onChange={(v) => {
-              if (!v) return;
-              setForm((f) => ({ ...f, instanceType: v }));
-              setSizingUserOverridden(true);
-            }}
-          />
-        </Group>
-        {/* Python strategies run inside the orchestrator JVM too, so they take its version as well. */}
-        <Group grow>
-          <TextInput label="Orchestrator Version (optional)" placeholder="Latest" value={form.orchestratorVersion} onChange={(e) => setForm((f) => ({ ...f, orchestratorVersion: e.target.value }))} />
-          {form.strategyType === 'python' && (
-            <>
-              <TextInput label="Gnomepy Version (optional)" placeholder="Latest" value={form.gnomepyVersion} onChange={(e) => setForm((f) => ({ ...f, gnomepyVersion: e.target.value }))} />
-              <TextInput label="Research Commit (optional)" placeholder="main" value={form.researchCommit} onChange={(e) => setForm((f) => ({ ...f, researchCommit: e.target.value }))} />
-            </>
-          )}
-        </Group>
-
-        <Divider />
-        <Group justify="space-between">
-          <Title order={6} c="dimmed">Strategy Args</Title>
-          <ActionIcon size="sm" variant="subtle" color="blue" onClick={() => setForm((f) => ({ ...f, args: [...f.args, { key: '', value: '', type: 'string' as const }] }))}>
-            <IconPlus size={14} />
-          </ActionIcon>
-        </Group>
-        {form.args.map((row, i) => (
-          <Group key={i} gap="xs" align="flex-start">
-            <TextInput placeholder="key" value={row.key} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, key: v } : r) })); }} style={{ flex: 1 }} />
-            <Select
-              data={[{ value: 'string', label: 'String' }, { value: 'number', label: 'Number' }, { value: 'boolean', label: 'Boolean' }, { value: 'json', label: 'JSON' }]}
-              value={row.type}
-              onChange={(v) => setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, type: (v ?? 'string') as typeof row.type, value: v === 'boolean' ? false : v === 'number' ? 0 : '' } : r) }))}
-              w={100}
+        {fallback.asJson ? (
+          <>
+            <StaleConfigAlert what="This strategy's default config" lost={fallback.remaining}
+              onBackToForm={() => backToForm(false)} onDropAndUseForm={() => backToForm(true)} />
+            <JsonInput label="Parameters" value={fallback.json} onChange={fallback.setJson} autosize minRows={10}
+              formatOnBlur validationError="Invalid JSON" error={fallback.error} />
+          </>
+        ) : (
+          <>
+            <LaunchSettingsFields
+              value={launch}
+              onChange={patch => setLaunch(l => ({ ...l, ...patch }))}
+              listingCount={listingIds.length}
             />
-            {row.type === 'number' && (
-              <NumberInput value={row.value as number} onChange={(v) => setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: v === '' ? 0 : Number(v) } : r) }))} style={{ flex: 1 }} />
-            )}
-            {row.type === 'boolean' && (
-              <Switch checked={row.value as boolean} onChange={(e) => { const checked = e.currentTarget.checked; setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: checked } : r) })); }} mt={6} />
-            )}
-            {row.type === 'json' && (
-              <JsonInput value={row.value as string} onChange={(v) => setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: v } : r) }))} validationError="Invalid JSON" formatOnBlur autosize minRows={1} style={{ flex: 1 }} />
-            )}
-            {row.type === 'string' && (
-              <TextInput placeholder="value" value={row.value as string} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, args: f.args.map((r, j) => j === i ? { ...r, value: v } : r) })); }} style={{ flex: 1 }} />
-            )}
-            <ActionIcon variant="subtle" color="red" mt={6} onClick={() => setForm((f) => ({ ...f, args: f.args.filter((_, j) => j !== i) }))}>
-              <IconTrash size={14} />
-            </ActionIcon>
-          </Group>
-        ))}
+            <MultiSelect
+              label="Listings"
+              placeholder="Search listings..."
+              data={listingMergedData}
+              value={listingIds}
+              onChange={handleListingChange}
+              searchable
+              searchValue={listingSearchValue}
+              onSearchChange={setListingSearchValue}
+              nothingFoundMessage={listingSearchLoading ? 'Loading...' : 'No listings found'}
+            />
 
-        {form.mode === 'paper' && (
-          <ProfilesEditor
-            profiles={profiles}
-            listings={listings}
-            seed={simSeed}
-            onProfilesChange={setProfiles}
-            onListingsChange={setListings}
-            onSeedChange={setSimSeed}
-          />
+            <Divider />
+            <StrategyArgsEditor rows={args} onChange={setArgs} />
+
+            {launch.mode === 'paper' && (
+              <>
+                <Divider />
+                <SimulationSettingsEditor value={simulation} onChange={setSimulation} listingIds={listingIds.map(Number)} />
+              </>
+            )}
+
+            <OrchestratorOverridesEditor value={overrides} onChange={setOverrides} version={launch.orchestratorVersion} />
+          </>
         )}
-
-        <OrchestratorOverridesEditor value={overrides} onChange={setOverrides} version={form.orchestratorVersion} />
 
         {formError && <Text c="red" size="sm">{formError}</Text>}
         <Group justify="flex-end">

@@ -6,7 +6,7 @@ export interface JsonSchemaProperty {
   enum?: string[];
   // Pydantic writes an optional field as anyOf [the field, {type: null}].
   anyOf?: JsonSchemaProperty[];
-  items?: { type: string };
+  items?: { type: string; enum?: string[] };
   additionalProperties?: { type: string } | boolean;
   default?: unknown;
   description?: string;

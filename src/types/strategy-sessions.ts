@@ -42,7 +42,8 @@ export interface CreateStrategySessionRequest {
   researchCommit?: string;
   region?: string;
   availabilityZone?: string;
-  instanceType: string;
+  // Left out, the registry picks the instance type for the session's latency profile.
+  instanceType?: string;
   // Blank means the latest release; the launcher records the exact version it resolved.
   orchestratorVersion?: string;
   gnomepyVersion?: string;

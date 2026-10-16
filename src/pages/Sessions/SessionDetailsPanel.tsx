@@ -5,7 +5,9 @@ import { ConfigValue, StrategySession } from '../../types';
 import { configuredListings } from '../../utils/policy-target';
 import { useListingDetails } from '../../hooks/useAsyncSearch';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
-import { useSessionAccounts } from '../../query/hooks';
+import { useSessionAccounts, useSimulationParameters } from '../../query/hooks';
+import { useGlobalState } from '../../context/GlobalStateContext';
+import { BLOCK_LABELS, describeBlock, SimulationBlocks, toSessionSimulation } from '../../utils/simulation';
 import { useExchangeName } from '../../hooks/useExchangeName';
 import { ACCOUNT_STATUS_COLORS } from '../../utils/treasury';
 import { treasuryLink } from '../../utils/attention';
@@ -13,7 +15,7 @@ import { treasuryLink } from '../../utils/attention';
 function groupConfig(config: Record<string, ConfigValue>) {
   const params = Object.entries(config).filter(([k]) => k.startsWith('strategy.args.'));
   const strategy = Object.entries(config).filter(([k]) => k.startsWith('strategy.') && !k.startsWith('strategy.args.'));
-  const simulation = Object.entries(config).filter(([k]) => k.startsWith('simulation.'));
+  const simulation = Object.entries(config).filter(([k]) => k === 'simulation');
   const overrides = Object.entries(config).filter(([k]) => k.startsWith('overrides.'));
   const paramKeys = new Set([...params, ...strategy, ...simulation, ...overrides].map(([k]) => k));
   const core = Object.entries(config).filter(([k]) => !paramKeys.has(k));
@@ -84,6 +86,61 @@ function BoundAccounts({ sessionId }: { sessionId: string }) {
   );
 }
 
+const RESOLVED_BLOCKS: (keyof SimulationBlocks)[] = [
+  'network_latency', 'order_processing_latency', 'queue_model', 'self_trade_prevention', 'fee_model',
+];
+
+// What each listing of a paper session simulated with: its exchange's parameters as recorded by the session's pinned
+// time, under the session's overrides for the exchange and then for the listing.
+function ResolvedSimulation({ session, listingIds, exchangeOf }: {
+  session: StrategySession;
+  listingIds: number[];
+  exchangeOf: (listingId: number) => number | undefined;
+}) {
+  const simulation = toSessionSimulation(session.config['simulation']);
+  const recorded = useSimulationParameters(simulation.as_of);
+  const { exchanges } = useGlobalState();
+  if (!simulation.as_of) {
+    return <Text size="sm" c="dimmed">This session's config has no simulation: it predates simulation parameters.</Text>;
+  }
+  return (
+    <Stack gap="xs">
+      <Text size="sm">
+        As recorded in the <Anchor component={Link} to="/security-master?tab=simulation" size="sm">Security Master</Anchor> by{' '}
+        <b>{new Date(simulation.as_of).toLocaleString()}</b>{simulation.seed !== undefined ? `, latency seed ${simulation.seed}` : ''}.
+        {' '}Underlined: set by this session.
+      </Text>
+      <Table striped fz="xs">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Listing</Table.Th>
+            {RESOLVED_BLOCKS.map(k => <Table.Th key={k}>{BLOCK_LABELS[k]}</Table.Th>)}
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {listingIds.map(id => {
+            const exchangeId = exchangeOf(id);
+            const code = exchanges.find(e => e.exchangeId === exchangeId)?.exchangeCode;
+            const base: SimulationBlocks = (exchangeId !== undefined && recorded.data?.get(exchangeId)?.definition) || {};
+            const set: SimulationBlocks = { ...(code ? simulation.exchanges?.[code] : {}), ...simulation.listings?.[String(id)] };
+            const resolved = { ...base, ...set };
+            return (
+              <Table.Tr key={id}>
+                <Table.Td>{id}{code ? ` (${code})` : ''}</Table.Td>
+                {RESOLVED_BLOCKS.map(k => (
+                  <Table.Td key={k} td={k in set ? 'underline' : undefined}>
+                    {recorded.isLoading ? <Skeleton h={12} /> : k === 'fee_model' || resolved[k] !== undefined ? describeBlock(k, resolved) : 'none recorded'}
+                  </Table.Td>
+                ))}
+              </Table.Tr>
+            );
+          })}
+        </Table.Tbody>
+      </Table>
+    </Stack>
+  );
+}
+
 // What the session was launched with: its listings, its venue accounts, its config, and the machine it runs on.
 export function SessionDetailsPanel({ session }: { session: StrategySession }) {
   const sessionListingIds = [...configuredListings([session])];
@@ -104,7 +161,6 @@ export function SessionDetailsPanel({ session }: { session: StrategySession }) {
                 <Table.Th>Exchange</Table.Th>
                 <Table.Th>Security</Table.Th>
                 <Table.Th>Exchange symbol</Table.Th>
-                {session.mode === 'paper' && <Table.Th>Sim profile</Table.Th>}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -118,9 +174,6 @@ export function SessionDetailsPanel({ session }: { session: StrategySession }) {
                     <Table.Td>{listing?.exchangeName ?? '—'}</Table.Td>
                     <Table.Td>{listing?.securitySymbol ?? '—'}</Table.Td>
                     <Table.Td><Code style={{ fontSize: '0.72rem' }}>{listing?.exchangeSecuritySymbol ?? '—'}</Code></Table.Td>
-                    {session.mode === 'paper' && (
-                      <Table.Td>{String(session.config[`simulation.listing.${id}.profile`] ?? '—')}</Table.Td>
-                    )}
                   </Table.Tr>
                 );
               })}
@@ -129,6 +182,15 @@ export function SessionDetailsPanel({ session }: { session: StrategySession }) {
         )}
       </Card>
     </CollapsibleSection>
+
+    {session.mode === 'paper' && (
+      <CollapsibleSection title="Simulation" storageKey="session-simulation" defaultOpened={false}>
+        <Card withBorder p="sm">
+          <ResolvedSimulation session={session} listingIds={sessionListingIds}
+            exchangeOf={id => listingDetails[id]?.exchangeId} />
+        </Card>
+      </CollapsibleSection>
+    )}
 
     <CollapsibleSection title="Session Config" storageKey="session-config-section" defaultOpened={false}>
       <Accordion variant="contained">

@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  ActionIcon,
   Alert,
+  Anchor,
   Button,
   Checkbox,
+  Code,
   Divider,
   Group,
   JsonInput,
   Modal,
   MultiSelect,
-  NumberInput,
   Select,
   Stack,
   Switch,
@@ -17,41 +17,30 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconAlertTriangle, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconAlertTriangle } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { keys } from '../../query/hooks';
 import { Strategy, ConfigValue, RiskPolicy, StrategySession, StrategySessionStatus } from '../../types';
 import { registryApi } from '../../utils/api';
-import { strategyClassError, strategyClassHint } from '../../utils/strategy-class';
+import { strategyClassError } from '../../utils/strategy-class';
 import { OrchestratorOverridesEditor } from '../../components/OrchestratorOverrides';
-import { Overrides, toOverrides } from '../../utils/orchestrator-overrides';
+import { Overrides } from '../../utils/orchestrator-overrides';
+import { relaunchLostFields, SessionForm, sessionConfigFrom, sessionFormFrom } from '../../utils/session-config';
+import { fillFromTemplate, templateFormFrom, templateLostFields } from '../../utils/strategy-template';
+import { LostField } from '../../utils/round-trip';
+import { useJsonFallback } from '../../hooks/useJsonFallback';
+import { StaleConfigAlert } from '../../components/StaleConfigAlert';
 import { useListingSearch } from '../../hooks/useAsyncSearch';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { findKillSwitch, formatActor } from '../../utils/kill-switch';
-import {
-  LATENCY_PROFILE_OPTIONS,
-  LatencyProfile,
-  instanceTypeOptions,
-  isInstanceTypeValidFor,
-  suggestInstanceType,
-  defaultLatencyProfile,
-} from '../../utils/sizing';
-import {
-  defaultSimulationState,
-  ListingProfileRow,
-  ProfilesEditor,
-  ProfilesState,
-  simulationProfilesFromConfig,
-  simulationProfilesToConfig,
-} from '../../components/SimulationConfigForm';
-
-interface ParamRow {
-  key: string;
-  value: string | number | boolean;
-  type: 'string' | 'number' | 'boolean' | 'json';
-}
+import { ArgRow, defaultLaunchSettings, LaunchSettings, launchSettingsFrom } from '../../utils/launch-settings';
+import { LaunchSettingsFields } from '../../components/launch/LaunchSettingsFields';
+import { StrategyArgsEditor } from '../../components/launch/StrategyArgsEditor';
+import { SimulationSettingsEditor } from '../../components/simulation/SimulationSettingsEditor';
+import { SessionSimulation, simulationProblem } from '../../utils/simulation';
 
 interface DeploySessionModalProps {
   opened: boolean;
@@ -61,113 +50,25 @@ interface DeploySessionModalProps {
   initialSession?: StrategySession | null;
 }
 
-const MODE_OPTIONS = [
-  { value: 'paper', label: 'Paper' },
-  { value: 'live', label: 'Live' },
-];
-
-
-const STRATEGY_TYPE_OPTIONS = [
-  { value: 'java', label: 'Java' },
-  { value: 'python', label: 'Python' },
-];
-
-function flattenToSessionConfig(
-  strategyId: string,
-  mode: string,
-  strategyType: string | null,
-  strategyClass: string,
-  listings: ListingProfileRow[],
-  selectedLiveListingIds: string[],
-  researchCommit: string,
-  region: string,
-  latencyProfile: LatencyProfile,
-  params: ParamRow[],
-  profiles: ProfilesState,
-  simSeed: number | string,
-  overrides: Overrides,
-  inherit: boolean,
-  accountPins: Record<string, string>,
-): Record<string, ConfigValue> {
-  const listingsArr: number[] = mode === 'paper'
-    ? listings.map(l => parseInt(l.listingId.trim(), 10)).filter(n => !isNaN(n))
-    : selectedLiveListingIds.map(Number);
-
-  const config: Record<string, ConfigValue> = {
-    'strategy.id': strategyId,
-    mode,
-    listings: listingsArr,
-    'recovery.inherit': inherit,
-  };
-  if (strategyType) {
-    config['strategy.type'] = strategyType;
-    if (strategyClass.trim()) config['strategy.class'] = strategyClass.trim();
-  }
-  if (researchCommit.trim()) config['research_commit'] = researchCommit.trim();
-  if (region.trim()) config['region'] = region.trim();
-  config['latency.profile'] = latencyProfile;
-  if (mode === 'live' && Object.keys(accountPins).length > 0) config.accounts = accountPins;
-  for (const [property, value] of Object.entries(overrides)) {
-    config[`overrides.${property}`] = value;
-  }
-  for (const { key, value, type } of params) {
-    if (key.trim()) {
-      let parsed: ConfigValue = value;
-      if (type === 'json') {
-        try {
-          parsed = JSON.parse(value as string);
-        } catch {
-          throw new Error(`Parameter "${key.trim()}" is not valid JSON`);
-        }
-      }
-      config[`strategy.args.${key.trim()}`] = parsed;
-    }
-  }
-  if (mode === 'paper') {
-    const simCfg = simulationProfilesToConfig(profiles, listings, simSeed);
-    for (const [k, v] of Object.entries(simCfg)) {
-      config[k] = v;
-    }
-  }
-  return config;
-}
-
-function defaultProfiles(): ProfilesState {
-  return { default: defaultSimulationState() };
-}
-
-function defaultListings(): ListingProfileRow[] {
-  return [{ listingId: '', profile: 'default' }];
-}
-
 function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId, initialSession }: DeploySessionModalProps) {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [strategyId, setStrategyId] = useState<string | null>(
     preselectedStrategyId !== undefined ? String(preselectedStrategyId) : null
   );
-  const [mode, setMode] = useState<string>('paper');
+  const [launch, setLaunch] = useState<LaunchSettings>(defaultLaunchSettings());
+  const patchLaunch = useCallback((patch: Partial<LaunchSettings>) => setLaunch(l => ({ ...l, ...patch })), []);
+  const { mode } = launch;
   const [inherit, setInherit] = useState(true);
-  const [profiles, setProfiles] = useState<ProfilesState>(defaultProfiles());
-  const [simSeed, setSimSeed] = useState<number | string>('');
-  const [listings, setListings] = useState<ListingProfileRow[]>(defaultListings());
-  const [selectedLiveListingIds, setSelectedLiveListingIds] = useState<string[]>([]);
-  const [selectedLiveListingItems, setSelectedLiveListingItems] = useState<Record<string, string>>({});
-  const [liveListingSearchValue, setLiveListingSearchValue] = useState('');
-  const { options: liveListingSearchOptions, isLoading: liveListingSearchLoading } = useListingSearch(liveListingSearchValue);
-  const [researchCommit, setResearchCommit] = useState('');
-  const [region, setRegion] = useState('');
-  const [strategyType, setStrategyType] = useState<string | null>(null);
-  const [strategyClass, setStrategyClass] = useState('');
-  const [params, setParams] = useState<ParamRow[]>([]);
+  const [simulation, setSimulation] = useState<SessionSimulation>({});
+  // A relaunch may reuse the parameters the original session read, so it simulates exactly as that one did.
+  const [originalAsOf, setOriginalAsOf] = useState<string | null>(null);
+  const [reuseAsOf, setReuseAsOf] = useState(false);
+  const [listingIds, setListingIds] = useState<string[]>([]);
+  const [listingLabels, setListingLabels] = useState<Record<string, string>>({});
+  const [listingSearchValue, setListingSearchValue] = useState('');
+  const { options: listingSearchOptions, isLoading: listingSearchLoading } = useListingSearch(listingSearchValue);
+  const [args, setArgs] = useState<ArgRow[]>([]);
   const [overrides, setOverrides] = useState<Overrides>({});
-  const [latencyProfile, setLatencyProfile] = useState<LatencyProfile>(defaultLatencyProfile('paper'));
-  // Until someone picks a profile, it follows the mode, the way the instance type follows the listing count.
-  const [profileUserChosen, setProfileUserChosen] = useState(false);
-  const [instanceType, setInstanceType] = useState(suggestInstanceType(defaultLatencyProfile('paper'), 'paper', 1));
-  const [availabilityZone, setAvailabilityZone] = useState('');
-  const [orchestratorVersion, setOrchestratorVersion] = useState('');
-  const [gnomepyVersion, setGnomepyVersion] = useState('');
-  const [sizingUserOverridden, setSizingUserOverridden] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [liveConfirmText, setLiveConfirmText] = useState('');
@@ -180,6 +81,13 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   // Exchange code -> account label, for exchanges where the operator chose the account rather than the registry.
   const [accountPins, setAccountPins] = useState<Record<string, string>>({});
   const { exchanges } = useGlobalState();
+  // What the chosen strategy's saved defaults hold that the form can't (see utils/round-trip).
+  const [templateLost, setTemplateLost] = useState<LostField[]>([]);
+  // A session saved in a format the form can't fully hold relaunches from its config as JSON instead.
+  const relaunch = useJsonFallback<Record<string, ConfigValue>>(
+    opened && initialSession ? initialSession.config : null,
+    config => relaunchLostFields({ ...initialSession!, config }),
+  );
 
   const strategyKilled = strategyKillSwitch?.enabled ?? false;
   const latestKillSwitchEntry = useLatestPolicyHistory(strategyKilled ? strategyKillSwitch : undefined);
@@ -199,27 +107,27 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     return () => { cancelled = true; };
   }, [opened, strategyId]);
 
-  const liveListingMergedData = useMemo(() => [
-    ...Object.entries(selectedLiveListingItems)
-      .filter(([id]) => !liveListingSearchOptions.some(o => o.value === id))
+  const listingMergedData = useMemo(() => [
+    ...Object.entries(listingLabels)
+      .filter(([id]) => !listingSearchOptions.some(o => o.value === id))
       .map(([id, label]) => ({ value: id, label })),
-    ...liveListingSearchOptions,
-  ], [selectedLiveListingItems, liveListingSearchOptions]);
+    ...listingSearchOptions,
+  ], [listingLabels, listingSearchOptions]);
 
-  const handleLiveListingChange = useCallback((values: string[]) => {
-    setSelectedLiveListingIds(values);
-    const updated = { ...selectedLiveListingItems };
+  const handleListingChange = useCallback((values: string[]) => {
+    setListingIds(values);
+    const updated = { ...listingLabels };
     for (const v of values) {
       if (!updated[v]) {
-        const opt = liveListingSearchOptions.find(o => o.value === v);
+        const opt = listingSearchOptions.find(o => o.value === v);
         if (opt) updated[v] = opt.label;
       }
     }
     for (const key of Object.keys(updated)) {
       if (!values.includes(key)) delete updated[key];
     }
-    setSelectedLiveListingItems(updated);
-  }, [selectedLiveListingItems, liveListingSearchOptions]);
+    setListingLabels(updated);
+  }, [listingLabels, listingSearchOptions]);
 
   useEffect(() => {
     registryApi.listStrategies().then(setStrategies).catch(() => {});
@@ -233,117 +141,48 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
 
   const loadStrategyDefaults = useCallback((strategy: Strategy) => {
     const p = strategy.parameters as Record<string, unknown> | undefined;
+    setTemplateLost(p ? templateLostFields(p) : []);
     if (!p) return;
-    if (p.mode) setMode(String(p.mode));
-    if (p.strategyType) setStrategyType(String(p.strategyType));
-    if (p.strategyClass) setStrategyClass(String(p.strategyClass));
-    if (p.region) setRegion(String(p.region));
-    if (p.researchCommit) setResearchCommit(String(p.researchCommit));
-    if (p.args && typeof p.args === 'object') {
-      const entries = Object.entries(p.args as Record<string, unknown>);
-      setParams(entries.map(([k, v]) => {
-        if (typeof v === 'number') return { key: k, value: v, type: 'number' as const };
-        if (typeof v === 'boolean') return { key: k, value: v, type: 'boolean' as const };
-        if (typeof v === 'object' && v !== null) return { key: k, value: JSON.stringify(v, null, 2), type: 'json' as const };
-        return { key: k, value: String(v), type: 'string' as const };
-      }));
-    }
-    if (p.simulation && typeof p.simulation === 'object') {
-      const { profiles: loadedProfiles, listings: loadedListings, seed } = simulationProfilesFromConfig(
-        p.simulation as Record<string, string>
-      );
-      if (Object.keys(loadedProfiles).length > 0) {
-        setProfiles(loadedProfiles);
-        setListings(loadedListings.length > 0 ? loadedListings : defaultListings());
-      }
-      setSimSeed(seed);
-    }
-    if (p.listings && Array.isArray(p.listings) && String(p.mode) === 'live') {
-      setSelectedLiveListingIds((p.listings as number[]).map(String));
-    }
-    if (p.latencyProfile) {
-      setLatencyProfile(String(p.latencyProfile) as LatencyProfile);
-      setProfileUserChosen(true);
-    }
-    if (p.instanceType) { setInstanceType(String(p.instanceType)); setSizingUserOverridden(true); }
-    if (p.availabilityZone) setAvailabilityZone(String(p.availabilityZone));
-    if (p.orchestratorVersion) setOrchestratorVersion(String(p.orchestratorVersion));
-    if (p.gnomepyVersion) setGnomepyVersion(String(p.gnomepyVersion));
-    setOverrides(toOverrides(p.overrides));
-  }, []);
-
-  const loadFromSession = useCallback((session: StrategySession) => {
-    const config = session.config;
-    setStrategyId(String(session.strategyId));
-    setMode(session.mode);
-    setInherit(config['recovery.inherit'] !== false && config['recovery.inherit'] !== 'false');
-    if (config['strategy.type']) setStrategyType(String(config['strategy.type']));
-    else setStrategyType(null);
-    if (config['strategy.class']) setStrategyClass(String(config['strategy.class']));
-    else setStrategyClass('');
-    setResearchCommit(config['research_commit'] ? String(config['research_commit']) : '');
-    setRegion(config['region'] ? String(config['region']) : '');
-    if (config['latency.profile']) {
-      setLatencyProfile(config['latency.profile'] === 'standard' ? 'standard' : 'low_latency');
-      setProfileUserChosen(true);
-    }
-    if (session.instanceType) {
-      setInstanceType(session.instanceType);
-      setSizingUserOverridden(true);
-    }
-    // Relaunching reruns the exact versions the previous session ran; clear a field to take the latest.
-    setOrchestratorVersion(session.orchestratorVersion ?? '');
-    setGnomepyVersion(session.gnomepyVersion ?? '');
-
-    const parsedParams: ParamRow[] = [];
-    for (const [key, value] of Object.entries(config)) {
-      if (!key.startsWith('strategy.args.')) continue;
-      const argKey = key.substring('strategy.args.'.length);
-      if (typeof value === 'number') parsedParams.push({ key: argKey, value, type: 'number' });
-      else if (typeof value === 'boolean') parsedParams.push({ key: argKey, value, type: 'boolean' });
-      else if (typeof value === 'object' && value !== null) parsedParams.push({ key: argKey, value: JSON.stringify(value, null, 2), type: 'json' });
-      else parsedParams.push({ key: argKey, value: String(value), type: 'string' });
-    }
-    setParams(parsedParams);
-    setOverrides(Object.fromEntries(
-      Object.entries(config)
-        .filter(([k]) => k.startsWith('overrides.'))
-        .map(([k, v]) => [k.slice('overrides.'.length), String(v)]),
-    ));
-
-    const pinned = config['accounts'];
-    setAccountPins(pinned && typeof pinned === 'object' && !Array.isArray(pinned)
-      ? Object.fromEntries(Object.entries(pinned).map(([code, label]) => [code, String(label)])) : {});
-    if (session.mode === 'live') {
-      const rawListings = config['listings'];
-      if (Array.isArray(rawListings)) {
-        setSelectedLiveListingIds((rawListings as number[]).map(String));
-      }
-      setProfiles(defaultProfiles());
-      setListings(defaultListings());
-      setSimSeed('');
-    } else {
-      const simConfig: Record<string, ConfigValue> = {};
-      for (const [k, v] of Object.entries(config)) {
-        if (k.startsWith('simulation.')) simConfig[k] = v;
-      }
-      const { profiles: loadedProfiles, listings: loadedListings, seed } = simulationProfilesFromConfig(simConfig);
-      setSimSeed(seed);
-      setProfiles(Object.keys(loadedProfiles).length > 0 ? loadedProfiles : defaultProfiles());
-      setListings(loadedListings.length > 0 ? loadedListings : defaultListings());
-      setSelectedLiveListingIds([]);
+    setLaunch(l => ({ ...l, ...launchSettingsFrom(p) }));
+    // The strategy's args, overrides and simulation go underneath what was already entered (see fillFromTemplate).
+    const template = templateFormFrom(p);
+    const none = { args: [], overrides: {}, simulation: {} };
+    setArgs(a => fillFromTemplate({ ...none, args: a }, template).args);
+    setOverrides(o => fillFromTemplate({ ...none, overrides: o }, template).overrides);
+    setSimulation(sim => fillFromTemplate({ ...none, simulation: sim }, template).simulation);
+    if (p.listings && Array.isArray(p.listings)) {
+      setListingIds((p.listings as number[]).map(String));
     }
   }, []);
+
+  const applySessionForm = useCallback((form: SessionForm) => {
+    setStrategyId(form.strategyId);
+    setInherit(form.inherit);
+    setLaunch(form.launch);
+    setArgs(form.args);
+    setOverrides(form.overrides);
+    setAccountPins(form.accountPins);
+    setListingIds(form.listingIds);
+    setSimulation(form.simulation);
+    setOriginalAsOf(form.originalAsOf);
+    setReuseAsOf(false);
+  }, []);
+  const loadFromSession = useCallback((session: StrategySession) => applySessionForm(sessionFormFrom(session)),
+    [applySessionForm]);
+  const relaunchBackToForm = (drop: boolean) => {
+    const config = relaunch.backToForm(drop);
+    if (config && initialSession) applySessionForm(sessionFormFrom({ ...initialSession, config }));
+  };
 
   const handleStrategyChange = useCallback((value: string | null) => {
     setStrategyId(value);
     if (!value) {
-      setParams([]);
+      setArgs([]);
       return;
     }
     const strategy = strategies.find(s => String(s.strategyId) === value);
     if (strategy) loadStrategyDefaults(strategy);
-    else setParams([]);
+    else setArgs([]);
   }, [strategies, loadStrategyDefaults]);
 
   useEffect(() => {
@@ -359,47 +198,24 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
     loadFromSession(initialSession);
   }, [opened, initialSession]);
 
-  useEffect(() => {
-    if (!profileUserChosen) setLatencyProfile(defaultLatencyProfile(mode));
-  }, [mode, profileUserChosen]);
-
-  useEffect(() => {
-    const count = mode === 'paper'
-      ? listings.filter(l => l.listingId.trim()).length
-      : selectedLiveListingIds.length;
-    if (!sizingUserOverridden || !isInstanceTypeValidFor(latencyProfile, instanceType)) {
-      setInstanceType(suggestInstanceType(latencyProfile, mode, count));
-    }
-  }, [listings, selectedLiveListingIds, mode, latencyProfile, instanceType, sizingUserOverridden]);
-
   const resetForm = () => {
     sessionIdRef.current = null;
     setLiveConfirmText('');
     setStrategyId(preselectedStrategyId !== undefined ? String(preselectedStrategyId) : null);
-    setMode('paper');
+    setLaunch(defaultLaunchSettings());
     setInherit(true);
-    setProfiles(defaultProfiles());
-    setSimSeed('');
-    setListings(defaultListings());
-    setSelectedLiveListingIds([]);
-    setSelectedLiveListingItems({});
-    setLiveListingSearchValue('');
-    setResearchCommit('');
-    setRegion('');
-    setStrategyType(null);
-    setStrategyClass('');
-    setParams([]);
+    setSimulation({});
+    setOriginalAsOf(null);
+    setReuseAsOf(false);
+    setListingIds([]);
+    setListingLabels({});
+    setListingSearchValue('');
+    setArgs([]);
     setOverrides({});
-    setLatencyProfile(defaultLatencyProfile('paper'));
-    setProfileUserChosen(false);
-    setInstanceType(suggestInstanceType(defaultLatencyProfile('paper'), 'paper', 1));
-    setAvailabilityZone('');
-    setOrchestratorVersion('');
-    setGnomepyVersion('');
-    setSizingUserOverridden(false);
     setError(null);
     setResumeOnLaunch(false);
     setAccountPins({});
+    setTemplateLost([]);
   };
 
   const handleClose = () => { resetForm(); onClose(); };
@@ -409,9 +225,9 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
 
   // The exchanges the chosen live listings trade on, each of which may have its account pinned.
   const liveListings = useQuery({
-    queryKey: ['listingsByIds', selectedLiveListingIds],
-    queryFn: () => registryApi.listListingsByIds(selectedLiveListingIds.map(Number)),
-    enabled: opened && isLive && selectedLiveListingIds.length > 0,
+    queryKey: ['listingsByIds', listingIds],
+    queryFn: () => registryApi.listListingsByIds(listingIds.map(Number)),
+    enabled: opened && isLive && listingIds.length > 0,
     staleTime: 300_000,
   });
   const venueAccounts = useQuery({
@@ -429,18 +245,31 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
   const handleSubmit = async () => {
     setError(null);
     if (!strategyId) { setError('Strategy is required'); return; }
+    if (relaunch.asJson) {
+      const config = relaunch.parse();
+      if (config === null) return;
+      if (config.mode === 'live' && liveConfirmText.trim() !== selectedStrategyName) {
+        setError(`Type the strategy name "${selectedStrategyName}" to confirm a live deploy`);
+        return;
+      }
+      // An older orchestrator or gnomepy may not read today's config, so a JSON relaunch takes the latest of each and
+      // the instance type the registry picks for the latency profile.
+      await launchSession(String(config.mode), config, {
+        researchCommit: config.research_commit ? String(config.research_commit) : undefined,
+        region: config.region ? String(config.region) : undefined,
+      });
+      return;
+    }
+    const { strategyType, strategyClass, researchCommit, region, availabilityZone, instanceType, orchestratorVersion, gnomepyVersion } = launch;
     if (!strategyType) { setError('Strategy type is required'); return; }
     if (!strategyClass.trim()) { setError('Strategy class is required'); return; }
     const classError = strategyClassError(strategyType, strategyClass.trim());
     if (classError) { setError(classError); return; }
 
+    if (listingIds.length === 0) { setError('Listings are required'); return; }
     if (mode === 'paper') {
-      if (listings.length === 0) { setError('At least one listing is required'); return; }
-      if (listings.some(l => !l.listingId.trim())) { setError('All listing IDs must be filled in'); return; }
-      if (listings.some(l => !l.profile)) { setError('All listings must have a profile assigned'); return; }
-      if (Object.keys(profiles).length === 0) { setError('At least one profile must be defined'); return; }
-    } else {
-      if (selectedLiveListingIds.length === 0) { setError('Listings are required'); return; }
+      const problem = simulationProblem(simulation);
+      if (problem) { setError(problem); return; }
     }
 
     if (mode === 'live' && liveConfirmText.trim() !== selectedStrategyName) {
@@ -450,17 +279,29 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
 
     let config: Record<string, ConfigValue>;
     try {
-      config = flattenToSessionConfig(
-        strategyId, mode, strategyType, strategyClass,
-        listings, selectedLiveListingIds, researchCommit, region, latencyProfile, params, profiles, simSeed, overrides,
-        inherit, pinsInPlay,
+      config = sessionConfigFrom(
+        { strategyId, inherit, launch, args, overrides, accountPins: pinsInPlay, listingIds, simulation, originalAsOf },
+        reuseAsOf ? originalAsOf : null,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invalid session config');
       return;
     }
     const isPython = strategyType === 'python';
+    await launchSession(mode, config, {
+      researchCommit: isPython ? researchCommit.trim() || undefined : undefined,
+      region: region.trim() || undefined,
+      availabilityZone: availabilityZone.trim() || undefined,
+      instanceType,
+      orchestratorVersion: orchestratorVersion.trim() || undefined,
+      gnomepyVersion: isPython ? gnomepyVersion.trim() || undefined : undefined,
+    });
+  };
 
+  const launchSession = async (launchMode: string, config: Record<string, ConfigValue>, fields: {
+    researchCommit?: string; region?: string; availabilityZone?: string; instanceType?: string;
+    orchestratorVersion?: string; gnomepyVersion?: string;
+  }) => {
     setSubmitting(true);
     const newSessionId = sessionIdRef.current ?? crypto.randomUUID();
     sessionIdRef.current = newSessionId;
@@ -468,15 +309,10 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
       try {
         await registryApi.createSession({
           sessionId: newSessionId,
-          strategyId: parseInt(strategyId),
-          mode,
+          strategyId: parseInt(strategyId!),
+          mode: launchMode,
           config,
-          researchCommit: isPython ? researchCommit.trim() || undefined : undefined,
-          region: region.trim() || undefined,
-          availabilityZone: availabilityZone.trim() || undefined,
-          instanceType,
-          orchestratorVersion: orchestratorVersion.trim() || undefined,
-          gnomepyVersion: isPython ? gnomepyVersion.trim() || undefined : undefined,
+          ...fields,
         });
       } catch (launchError) {
         // The request can fail after the registry recorded the session (e.g. a gateway timeout), so check before
@@ -522,158 +358,111 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
           disabled={preselectedStrategyId !== undefined || !!initialSession}
           searchable
         />
-        <Select label="Mode" data={MODE_OPTIONS} value={mode} onChange={v => { setMode(v ?? 'paper'); setLiveConfirmText(''); }} required />
-        <Switch
-          label="Inherit the position earlier sessions left"
-          checked={inherit}
-          onChange={e => setInherit(e.currentTarget.checked)}
-          description={inherit
-            ? 'Starts holding what earlier sessions of this strategy left on these listings, at their cost.'
-            : mode === 'live'
-              ? 'Starts flat. Refused while the strategy still holds anything on these listings: flatten it, or adjust it to 0, first.'
-              : 'Starts flat; the discarded position is recorded as a reset, so it is never silently forgotten.'}
-        />
-        <Group grow>
-          <TextInput label="Region Override" placeholder="e.g. us-east-1 (optional)" value={region} onChange={e => setRegion(e.currentTarget.value)} />
-          <TextInput label="Availability Zone" placeholder="Auto, or e.g. us-east-1a" value={availabilityZone} onChange={e => setAvailabilityZone(e.currentTarget.value)} />
-        </Group>
-        <Group grow>
-          <Select
-            label="Latency Profile"
-            data={LATENCY_PROFILE_OPTIONS}
-            value={latencyProfile}
-            onChange={(v) => {
-              if (!v) return;
-              setLatencyProfile(v as LatencyProfile);
-              setProfileUserChosen(true);
-            }}
-          />
-          <Select
-            label="Instance Type"
-            data={instanceTypeOptions(latencyProfile)}
-            value={instanceType}
-            onChange={(v) => {
-              if (!v) return;
-              setInstanceType(v);
-              setSizingUserOverridden(true);
-            }}
-          />
-        </Group>
-
-        <Divider />
-        <Title order={6} c="dimmed">Strategy Class</Title>
-        <Select label="Strategy Type" data={STRATEGY_TYPE_OPTIONS} value={strategyType} onChange={setStrategyType} placeholder="Select a type" required />
-        <TextInput
-          label="Strategy Class"
-          placeholder={strategyClassHint(strategyType).placeholder}
-          description={strategyClassHint(strategyType).description}
-          value={strategyClass}
-          onChange={e => setStrategyClass(e.currentTarget.value)}
-          required
-        />
-        {/* Python strategies run inside the orchestrator JVM too, so they take its version as well. */}
-        <Group grow>
-          <TextInput label="Orchestrator Version" placeholder="Latest" value={orchestratorVersion} onChange={e => setOrchestratorVersion(e.currentTarget.value)} />
-          {strategyType === 'python' && (
-            <>
-              <TextInput label="Gnomepy Version" placeholder="Latest" value={gnomepyVersion} onChange={e => setGnomepyVersion(e.currentTarget.value)} />
-              <TextInput label="Research Commit" placeholder="git SHA or branch (default main)" value={researchCommit} onChange={e => setResearchCommit(e.currentTarget.value)} />
-            </>
-          )}
-        </Group>
-
-        <Divider />
-        <Group justify="space-between">
-          <Title order={6} c="dimmed">Strategy Parameters</Title>
-          <ActionIcon size="sm" variant="subtle" color="blue" onClick={() => setParams(p => [...p, { key: '', value: '', type: 'string' as const }])}>
-            <IconPlus size={14} />
-          </ActionIcon>
-        </Group>
-        {params.map((row, i) => (
-          <Group key={i} gap="xs" align="flex-start">
-            <TextInput placeholder="key" value={row.key} onChange={e => setParams(p => p.map((r, j) => j === i ? { ...r, key: e.currentTarget.value } : r))} style={{ flex: 1 }} />
-            <Select
-              data={[{ value: 'string', label: 'String' }, { value: 'number', label: 'Number' }, { value: 'boolean', label: 'Boolean' }, { value: 'json', label: 'JSON' }]}
-              value={row.type}
-              onChange={(v) => setParams(p => p.map((r, j) => j === i ? { ...r, type: (v ?? 'string') as ParamRow['type'], value: v === 'boolean' ? false : v === 'number' ? 0 : '' } : r))}
-              w={100}
-            />
-            {row.type === 'number' && (
-              <NumberInput value={row.value as number} onChange={(v) => setParams(p => p.map((r, j) => j === i ? { ...r, value: v === '' ? 0 : Number(v) } : r))} style={{ flex: 1 }} />
-            )}
-            {row.type === 'boolean' && (
-              <Switch checked={row.value as boolean} onChange={(e) => { const checked = e.currentTarget.checked; setParams(p => p.map((r, j) => j === i ? { ...r, value: checked } : r)); }} mt={6} />
-            )}
-            {row.type === 'json' && (
-              <JsonInput value={row.value as string} onChange={(v) => setParams(p => p.map((r, j) => j === i ? { ...r, value: v } : r))} validationError="Invalid JSON" formatOnBlur autosize minRows={1} style={{ flex: 1 }} />
-            )}
-            {row.type === 'string' && (
-              <TextInput placeholder="value" value={row.value as string} onChange={e => setParams(p => p.map((r, j) => j === i ? { ...r, value: e.currentTarget.value } : r))} style={{ flex: 1 }} />
-            )}
-            <ActionIcon variant="subtle" color="red" mt={6} onClick={() => setParams(p => p.filter((_, j) => j !== i))}>
-              <IconTrash size={14} />
-            </ActionIcon>
-          </Group>
-        ))}
-
-        {mode === 'live' && (
+        {!initialSession && (
+          <StaleConfigAlert what="This strategy's default config" lost={templateLost}>
+            <Text size="sm" mt="xs">
+              Those fields weren't filled in here. Fix the defaults on the{' '}
+              <Anchor component={Link} to={`/strategies/${strategyId}`} size="sm">strategy</Anchor>, or set them below.
+            </Text>
+          </StaleConfigAlert>
+        )}
+        {relaunch.asJson && initialSession ? (
           <>
+            <StaleConfigAlert what="This session" lost={relaunch.remaining}
+              onBackToForm={() => relaunchBackToForm(false)} onDropAndUseForm={() => relaunchBackToForm(true)}>
+              <Text size="sm" mt="xs">
+                Relaunching from this JSON takes the latest orchestrator and gnomepy
+                {initialSession.orchestratorVersion ? ` (the original ran orchestrator ${initialSession.orchestratorVersion})` : ''}:
+                an older version may not read today's config. Remove <Code>simulation.as_of</Code> to simulate with the
+                parameters recorded now rather than when the original launched.
+              </Text>
+            </StaleConfigAlert>
+            <JsonInput label="Session config" value={relaunch.json} onChange={relaunch.setJson} autosize minRows={12}
+              formatOnBlur validationError="Invalid JSON" error={relaunch.error} />
+          </>
+        ) : (
+          <>
+            <Switch
+              label="Inherit the position earlier sessions left"
+              checked={inherit}
+              onChange={e => setInherit(e.currentTarget.checked)}
+              description={inherit
+                ? 'Starts holding what earlier sessions of this strategy left on these listings, at their cost.'
+                : mode === 'live'
+                  ? 'Starts flat. Refused while the strategy still holds anything on these listings: flatten it, or adjust it to 0, first.'
+                  : 'Starts flat; the discarded position is recorded as a reset, so it is never silently forgotten.'}
+            />
+            <LaunchSettingsFields
+              value={launch}
+              onChange={patch => { patchLaunch(patch); if (patch.mode !== undefined) setLiveConfirmText(''); }}
+              listingCount={listingIds.length}
+              required
+            />
+
+            <Divider />
+            <StrategyArgsEditor rows={args} onChange={setArgs} title="Strategy Parameters" />
+
             <Divider />
             <MultiSelect
               label="Listings"
               placeholder="Search listings..."
-              data={liveListingMergedData}
-              value={selectedLiveListingIds}
-              onChange={handleLiveListingChange}
+              data={listingMergedData}
+              value={listingIds}
+              onChange={handleListingChange}
               searchable
-              searchValue={liveListingSearchValue}
-              onSearchChange={setLiveListingSearchValue}
-              nothingFoundMessage={liveListingSearchLoading ? 'Loading...' : 'No listings found'}
+              searchValue={listingSearchValue}
+              onSearchChange={setListingSearchValue}
+              nothingFoundMessage={listingSearchLoading ? 'Loading...' : 'No listings found'}
               required
             />
-            {pinnableExchanges.map(exchange => {
-              const active = (venueAccounts.data ?? []).filter(a => a.exchangeId === exchange.exchangeId && a.status === 'ACTIVE');
-              const pinned = accountPins[exchange.exchangeCode];
-              // A relaunch may carry a pin to an account that has since been drained; show it so it can be cleared.
-              const options = active.map(a => ({ value: a.label, label: a.label }));
-              if (pinned && !options.some(o => o.value === pinned)) options.push({ value: pinned, label: `${pinned} (not active)` });
-              return (
-                <Select
-                  key={exchange.exchangeId}
-                  label={`Account on ${exchange.exchangeName}`}
-                  description="Leave empty to let the registry choose: the account the strategy already holds positions on, else the one with the most free capital"
-                  placeholder={venueAccounts.isLoading ? 'Loading…' : active.length === 0 ? 'No active account' : 'Automatic'}
-                  data={options}
-                  value={pinned ?? null}
-                  onChange={v => setAccountPins(p => {
-                    const updated = { ...p };
-                    if (v) updated[exchange.exchangeCode] = v;
-                    else delete updated[exchange.exchangeCode];
-                    return updated;
-                  })}
-                  error={pinned && !active.some(a => a.label === pinned) ? 'Only an ACTIVE account can be bound' : undefined}
-                  clearable
-                />
-              );
-            })}
+            {mode === 'live' && (
+              <>
+                {pinnableExchanges.map(exchange => {
+                  const active = (venueAccounts.data ?? []).filter(a => a.exchangeId === exchange.exchangeId && a.status === 'ACTIVE');
+                  const pinned = accountPins[exchange.exchangeCode];
+                  // A relaunch may carry a pin to an account that has since been drained; show it so it can be cleared.
+                  const options = active.map(a => ({ value: a.label, label: a.label }));
+                  if (pinned && !options.some(o => o.value === pinned)) options.push({ value: pinned, label: `${pinned} (not active)` });
+                  return (
+                    <Select
+                      key={exchange.exchangeId}
+                      label={`Account on ${exchange.exchangeName}`}
+                      description="Leave empty to let the registry choose: the account the strategy already holds positions on, else the one with the most free capital"
+                      placeholder={venueAccounts.isLoading ? 'Loading…' : active.length === 0 ? 'No active account' : 'Automatic'}
+                      data={options}
+                      value={pinned ?? null}
+                      onChange={v => setAccountPins(p => {
+                        const updated = { ...p };
+                        if (v) updated[exchange.exchangeCode] = v;
+                        else delete updated[exchange.exchangeCode];
+                        return updated;
+                      })}
+                      error={pinned && !active.some(a => a.label === pinned) ? 'Only an ACTIVE account can be bound' : undefined}
+                      clearable
+                    />
+                  );
+                })}
+              </>
+            )}
+
+            {mode === 'paper' && (
+              <>
+                <Divider />
+                <SimulationSettingsEditor value={simulation} onChange={setSimulation} listingIds={listingIds.map(Number)} />
+                {originalAsOf && (
+                  <Switch
+                    label="Simulate as the original session did"
+                    description={`Reads the simulation parameters and fees recorded by ${new Date(originalAsOf).toLocaleString()}, when it launched, instead of the latest`}
+                    checked={reuseAsOf}
+                    onChange={e => setReuseAsOf(e.currentTarget.checked)}
+                  />
+                )}
+              </>
+            )}
+
+            <OrchestratorOverridesEditor value={overrides} onChange={setOverrides} version={launch.orchestratorVersion} />
           </>
         )}
-
-        {mode === 'paper' && (
-          <>
-            <Divider />
-            <ProfilesEditor
-              profiles={profiles}
-              listings={listings}
-              seed={simSeed}
-              onProfilesChange={setProfiles}
-              onListingsChange={setListings}
-              onSeedChange={setSimSeed}
-            />
-          </>
-        )}
-
-        <OrchestratorOverridesEditor value={overrides} onChange={setOverrides} version={orchestratorVersion} />
 
         {strategyKilled && strategyKillSwitch && (
           <Alert color="orange" title="Strategy is killed" icon={<IconAlertTriangle size={20} />}>

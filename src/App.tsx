@@ -51,9 +51,9 @@ const SessionsList = lazy(() => import('./pages/Sessions/SessionsList'));
 const SessionDetail = lazy(() => import('./pages/Sessions/SessionDetail'));
 const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
 const ServiceConfig = lazy(() => import('./pages/Tools/ServiceConfig'));
-const LaunchRules = lazy(() => import('./pages/Launcher/LaunchRules'));
-const LaunchHistory = lazy(() => import('./pages/Launcher/LaunchHistory'));
-const ManualTrigger = lazy(() => import('./pages/Launcher/ManualTrigger'));
+const Launcher = lazy(() => import('./pages/Launcher/Launcher'));
+const RuleDetail = lazy(() => import('./pages/Launcher/RuleDetail'));
+const LaunchDetail = lazy(() => import('./pages/Launcher/LaunchDetail'));
 const PipelineList = lazy(() => import('./pages/Pipelines/PipelineList'));
 const PipelineDetail = lazy(() => import('./pages/Pipelines/PipelineDetail'));
 
@@ -219,9 +219,9 @@ function AppContent() {
                 <Route path="/predictions/hedge-keywords" element={<HedgeKeywords />} />
                 <Route path="/sessions" element={<SessionsList />} />
                 <Route path="/sessions/:sessionId" element={<SessionDetail />} />
-                <Route path="/launcher/launch-rules" element={<LaunchRules />} />
-                <Route path="/launcher/launch-history" element={<LaunchHistory />} />
-                <Route path="/launcher/manual-trigger" element={<ManualTrigger />} />
+                <Route path="/launcher" element={<Launcher />} />
+                <Route path="/launcher/rules/:ruleId" element={<RuleDetail />} />
+                <Route path="/launcher/requests/:requestId" element={<LaunchDetail />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/logout" element={<Logout />} />
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />

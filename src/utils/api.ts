@@ -1,5 +1,8 @@
 import { fetchAuthSession, signOut } from 'aws-amplify/auth';
-import { LaunchRequest, LaunchRule, RuleType } from '../types/launcher';
+import {
+  DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
+  RuleType, TriggerEvaluation,
+} from '../types/launcher';
 import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ArtifactDetail, ArtifactSummary, Dataset, DatasetDetail } from '../types/data';
@@ -15,6 +18,7 @@ import {
   AccountConfigUpdate, AccountStatus, AccountStatusChange, CreateAccountRequest, CreatedAccount, DeletedSecrets, UpdateCredentialsRequest, ManualSnapshot, ReconDetail, SessionAccount, Transfer, TransferKind, TreasurySummary, VenueAccount,
 } from '../types/treasury';
 import { MarketDataKey } from '../types/credentials';
+import { SimulationParametersRow } from './simulation';
 
 export interface ServiceConfigResponse {
   config: Record<string, unknown>;
@@ -53,7 +57,7 @@ export interface LedgerPageParams extends LedgerFilters {
   limit?: number;
 }
 
-function definedParams(params: Record<string, string | number | undefined>): Record<string, string | number> {
+function definedParams(params: object): Record<string, string | number> {
   return Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined)) as Record<string, string | number>;
 }
 
@@ -64,7 +68,8 @@ const MARKET_DATA_API_URL = import.meta.env.VITE_MARKET_DATA_API_URL;
 const LAUNCHER_API_URL = import.meta.env.VITE_LAUNCHER_API_URL;
 
 export class ApiError extends Error {
-  constructor(public statusCode: number, message: string) {
+  // Validation failures some APIs itemise (the launcher's {message, problems}), one message per problem.
+  constructor(public statusCode: number, message: string, public problems: string[] = []) {
     super(message);
     this.name = 'ApiError';
   }
@@ -157,12 +162,14 @@ export async function sendApiRequest<T>(
       return (config.convertToCamelCase ? convertObjectToCamelCase(data, config.preserveKeys) : data) as T;
     } else {
       if (response.status === 401) endSession();
-      const body = data as { body?: string | { error?: string }; message?: string; error?: string } | null;
+      const body = data as {
+        body?: string | { error?: string }; message?: string; error?: string; problems?: string[];
+      } | null;
       const error = (typeof body?.body === 'string' ? body.body : body?.body?.error)
         ?? body?.message
         ?? body?.error
         ?? (text || `Request failed with status ${response.status}`);
-      throw new ApiError(response.status, error);
+      throw new ApiError(response.status, error, Array.isArray(body?.problems) ? body.problems : []);
     }
   } catch (error) {
     if (error instanceof ApiError) {
@@ -391,7 +398,7 @@ export const registryApi = {
     return sendApiRequest<Strategy[]>('/strategies', 'GET', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
-      preserveKeys: new Set(['args', 'config', 'overrides']),
+      preserveKeys: new Set(['args', 'config', 'overrides', 'simulation']),
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
   },
@@ -399,7 +406,7 @@ export const registryApi = {
     sendApiRequest<Strategy>('/strategies', 'POST', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
-      preserveKeys: new Set(['args', 'config']),
+      preserveKeys: new Set(['args', 'config', 'overrides', 'simulation']),
       body: strategy,
     }),
   updateStrategy: (strategyId: number, strategy: Partial<Strategy>) =>
@@ -653,6 +660,15 @@ export const registryApi = {
       convertToCamelCase: true,
       body: schedule,
     }),
+  // Each exchange's simulation parameters in force at knownAsOf (default now), or with history every version. Rows
+  // keep their snake_case: a definition's keys are the config shape every simulation config shares.
+  listSimulationParameters: (filters: { exchangeId?: number; knownAsOf?: string; history?: boolean } = {}) =>
+    sendApiRequest<SimulationParametersRow[]>('/simulation-parameters', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: Object.fromEntries(Object.entries({ ...filters, limit: 1000 }).filter(([, v]) => v !== undefined && v !== false)),
+    }),
+  recordSimulationParameters: (body: { exchangeId: number; definition: SimulationParametersRow['definition']; note?: string }) =>
+    sendApiRequest<SimulationParametersRow>('/simulation-parameters', 'POST', { apiUrl: REGISTRY_API_URL, body }),
   // PnL is derived by the registry from the ledger's fills and marks; see types/pnl for the shapes.
   getSessionSummary: (sessionId: string) =>
     sendApiRequest<SessionSummary>('/pnl/summary', 'GET', {
@@ -1143,47 +1159,56 @@ export const controllerApi = {
 }
 
 export const launcherApi = {
-  getRuleTypes: () =>
-    sendApiRequest<RuleType[]>('/rule-types', 'GET', {
-      apiUrl: LAUNCHER_API_URL,
-    }),
+  getRuleTypes: () => sendApiRequest<RuleType[]>('/rule-types', 'GET', { apiUrl: LAUNCHER_API_URL }),
 
-  listRules: () =>
-    sendApiRequest<LaunchRule[]>('/launch-rules', 'GET', {
-      apiUrl: LAUNCHER_API_URL,
-    }),
-  createRule: (body: Omit<LaunchRule, 'rule_id' | 'date_created' | 'date_modified'>) =>
-    sendApiRequest<LaunchRule>('/launch-rules', 'POST', {
-      apiUrl: LAUNCHER_API_URL,
-      body,
-    }),
-  updateRule: (ruleId: string, body: Partial<LaunchRule>) =>
+  listRules: () => sendApiRequest<LaunchRule[]>('/launch-rules', 'GET', { apiUrl: LAUNCHER_API_URL }),
+  getRule: (ruleId: string) => sendApiRequest<LaunchRule>(`/launch-rules/${ruleId}`, 'GET', { apiUrl: LAUNCHER_API_URL }),
+  createRule: (rule: EditableRule) =>
+    sendApiRequest<LaunchRule>('/launch-rules', 'POST', { apiUrl: LAUNCHER_API_URL, body: rule }),
+  // `revision` is the one the edit was based on: the launcher refuses it with 409 if someone saved since.
+  updateRule: (ruleId: string, revision: number, changes: Partial<EditableRule>) =>
     sendApiRequest<LaunchRule>(`/launch-rules/${ruleId}`, 'PATCH', {
-      apiUrl: LAUNCHER_API_URL,
-      body,
+      apiUrl: LAUNCHER_API_URL, body: { ...changes, revision },
     }),
-  deleteRule: (ruleId: string) =>
-    sendApiRequest<{ deleted: string }>(`/launch-rules/${ruleId}`, 'DELETE', {
-      apiUrl: LAUNCHER_API_URL,
+  archiveRule: (ruleId: string) =>
+    sendApiRequest<LaunchRule>(`/launch-rules/${ruleId}`, 'DELETE', { apiUrl: LAUNCHER_API_URL }),
+  validateRule: (rule: Partial<EditableRule>) =>
+    sendApiRequest<{ problems: string[] }>('/launch-rules/validate', 'POST', { apiUrl: LAUNCHER_API_URL, body: { rule } }),
+  ruleRevisions: (ruleId: string) =>
+    sendApiRequest<RuleRevision[]>(`/launch-rules/${ruleId}/revisions`, 'GET', { apiUrl: LAUNCHER_API_URL }),
+  ruleActivity: (ruleId: string, page: { before?: string; limit?: number } = {}) =>
+    sendApiRequest<Page<TriggerEvaluation>>(`/launch-rules/${ruleId}/activity`, 'GET', {
+      apiUrl: LAUNCHER_API_URL, queryParams: definedParams(page),
+    }),
+  ruleStats: (ruleId: string, days: number) =>
+    sendApiRequest<RuleStats>(`/launch-rules/${ruleId}/stats`, 'GET', { apiUrl: LAUNCHER_API_URL, queryParams: { days } }),
+  dryRun: (ruleId: string, data: Record<string, unknown>, action: 'launch' | 'shutdown') =>
+    sendApiRequest<DryRunResult>(`/launch-rules/${ruleId}/dry-run`, 'POST', {
+      apiUrl: LAUNCHER_API_URL, body: { data, action },
     }),
 
-  listRequests: (params?: { status?: string; rule_type?: string; limit?: number }) => {
-    const queryParams: Record<string, string | number | boolean> = {};
-    if (params?.status) queryParams.status = params.status;
-    if (params?.rule_type) queryParams.rule_type = params.rule_type;
-    if (params?.limit) queryParams.limit = params.limit;
-    return sendApiRequest<LaunchRequest[]>('/launch-requests', 'GET', {
-      apiUrl: LAUNCHER_API_URL,
-      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
-    });
-  },
+  listRequests: (filters: RequestFilters = {}) =>
+    sendApiRequest<Page<LaunchRequest>>('/launch-requests', 'GET', {
+      apiUrl: LAUNCHER_API_URL, queryParams: definedParams(filters),
+    }),
   getRequest: (requestId: string) =>
-    sendApiRequest<LaunchRequest>(`/launch-requests/${requestId}`, 'GET', {
-      apiUrl: LAUNCHER_API_URL,
+    sendApiRequest<LaunchRequestDetail>(`/launch-requests/${requestId}`, 'GET', { apiUrl: LAUNCHER_API_URL }),
+  actOnRequest: (requestId: string, action: RequestAction) =>
+    sendApiRequest<LaunchRequest>(`/launch-requests/${requestId}/${action}`, 'POST', { apiUrl: LAUNCHER_API_URL }),
+
+  listTriggers: (filters: { rule_type?: string; before?: string; limit?: number } = {}) =>
+    sendApiRequest<Page<TriggerEvaluation>>('/triggers', 'GET', {
+      apiUrl: LAUNCHER_API_URL, queryParams: definedParams(filters),
     }),
-  submitTrigger: (body: { rule_type: string; data: Record<string, unknown> }) =>
-    sendApiRequest<{ message: string }>('/triggers', 'POST', {
-      apiUrl: LAUNCHER_API_URL,
-      body,
-    }),
+  sendTrigger: (body: { rule_type: string; action: 'launch' | 'shutdown'; data: Record<string, unknown> }) =>
+    sendApiRequest<{ trigger_id: string }>('/triggers', 'POST', { apiUrl: LAUNCHER_API_URL, body }),
+};
+
+export interface RequestFilters {
+  rule_id?: string;
+  rule_type?: string;
+  status?: string;
+  action?: 'launch' | 'shutdown';
+  before?: string;
+  limit?: number;
 }

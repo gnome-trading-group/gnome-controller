@@ -41,7 +41,20 @@ export const keys = {
   transfers: (accountId: number | null) => ['treasury', 'transfers', accountId] as const,
   recon: (accountId: number) => ['treasury', 'recon', accountId] as const,
   sessionAccounts: (sessionId: string) => ['sessionAccounts', sessionId] as const,
+  // All under one prefix, so recording new parameters refreshes every view of them; each shape has its own key.
+  simulationParameters: (knownAsOf?: string) => ['simulationParameters', 'byExchange', knownAsOf ?? 'now'] as const,
+  simulationParameterRows: (history: boolean) => ['simulationParameters', 'rows', history ? 'history' : 'now'] as const,
+  simulationParametersOf: (exchangeId: number | null) => ['simulationParameters', 'exchange', exchangeId] as const,
 };
+
+// Each exchange's simulation parameters in force at knownAsOf (default now), by exchange id.
+export function useSimulationParameters(knownAsOf?: string) {
+  return useQuery({
+    queryKey: keys.simulationParameters(knownAsOf),
+    queryFn: async () => new Map((await registryApi.listSimulationParameters({ knownAsOf })).map(r => [r.exchange_id, r])),
+    staleTime: 60_000,
+  });
+}
 
 export function useActiveSessions() {
   return useQuery({
