@@ -25,6 +25,7 @@ import {
   formatContractType,
   formatSecurityType,
 } from '../../utils/security-master';
+import { usePageTitleLabels } from '../../context/PageTitleContext';
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -127,6 +128,8 @@ function SecurityDetail() {
     }).catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);
+
+  usePageTitleLabels([{ segment: securityId, label: security?.symbol }]);
 
   if (loading) {
     return <SecurityDetailSkeleton onBack={() => navigate('/security-master')} />;

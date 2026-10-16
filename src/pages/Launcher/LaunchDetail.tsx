@@ -24,6 +24,7 @@ import { SessionDetailsPanel } from '../Sessions/SessionDetailsPanel';
 import { ActionBadge, ConfirmButton, OutcomeBadge, RequestStatusBadge, SessionStatusBadge, ShortId } from './shared';
 import { SimulationSummary } from '../../components/simulation/SimulationSummary';
 import { toSessionSimulation } from '../../utils/simulation';
+import { usePageTitleLabels } from '../../context/PageTitleContext';
 
 const TABS = ['session', 'logs', 'trigger', 'config'] as const;
 type Tab = typeof TABS[number];
@@ -79,6 +80,8 @@ function LaunchDetail() {
   const [params, setParams] = useSearchParams();
   const requestQuery = useRequest(requestId);
   const request = requestQuery.data;
+  const heading = request ? `${request.action === 'launch' ? 'Launch' : 'Shutdown'} by ${request.matched_rule_name}` : null;
+  usePageTitleLabels([{ segment: requestId, label: heading }]);
   const sessionId = request?.session_id ?? undefined;
   const sessionQuery = useSession(sessionId);
   const session = sessionQuery.data;
@@ -130,7 +133,7 @@ function LaunchDetail() {
     <Container size="xl" py="xl">
       <PageHeader
         onBack={() => navigate(request ? `/launcher/rules/${request.matched_rule_id}` : '/launcher')}
-        title={request ? `${request.action === 'launch' ? 'Launch' : 'Shutdown'} by ${request.matched_rule_name}` : 'Launch request'}
+        title={heading ?? 'Launch request'}
         badges={request && (
           <>
             <RequestStatusBadge status={request.status} size="md" />

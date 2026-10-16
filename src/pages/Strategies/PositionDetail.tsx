@@ -20,6 +20,7 @@ import { FillsTable, OrdersTable } from '../../components/trading/LedgerTables';
 import { AdjustPositionModal } from '../../components/trading/AdjustPositionModal';
 import { formatDuration } from '../../utils/format';
 import { treasuryLink } from '../../utils/attention';
+import { usePageTitleLabels } from '../../context/PageTitleContext';
 
 const RANGES: Record<string, number | null> = { '1h': 3_600_000, '1d': 86_400_000, '7d': 7 * 86_400_000, All: null };
 
@@ -53,6 +54,10 @@ function PositionDetail() {
   const accountRows = summary.data?.listings.filter(l => l.listingId === listingId) ?? [];
   const row = accountRows.find(l => String(l.accountId) === search.get('account'))
     ?? accountRows.find(l => BigInt(l.netQuantity) !== 0n) ?? accountRows[0] ?? null;
+  usePageTitleLabels([
+    { segment: params.strategyId, label: strategy?.name },
+    { segment: params.listingId, label: row?.symbol },
+  ]);
   const selectAccount = (r: StrategyListingPnl) => setSearch(current => {
     const updated = new URLSearchParams(current);
     if (r.accountId === null) updated.delete('account');

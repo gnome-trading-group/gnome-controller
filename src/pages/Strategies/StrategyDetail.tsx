@@ -39,6 +39,7 @@ import { EventPositions } from '../../components/trading/EventPositions';
 import { PositionsTable } from '../../components/trading/PositionsTable';
 import { FillsTable, OrdersTable } from '../../components/trading/LedgerTables';
 import { AdjustPositionModal } from '../../components/trading/AdjustPositionModal';
+import { usePageTitleLabels } from '../../context/PageTitleContext';
 
 const RANGES: Record<string, number | null> = { '1d': 86_400_000, '7d': 7 * 86_400_000, '30d': 30 * 86_400_000, All: null };
 const TABS = ['positions', 'performance', 'sessions', 'fills', 'orders', 'risk'] as const;
@@ -59,6 +60,7 @@ function StrategyDetail() {
 
   const strategies = useStrategies();
   const strategy = strategies.data?.find(s => s.strategyId === id) ?? null;
+  usePageTitleLabels([{ segment: strategyId, label: strategy?.name }]);
   const sessionsQuery = useStrategySessions(id);
   const sessions = useMemo(() => sessionsQuery.data ?? [], [sessionsQuery.data]);
   const policiesQuery = useRiskPolicies();

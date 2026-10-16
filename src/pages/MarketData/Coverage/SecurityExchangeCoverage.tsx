@@ -29,6 +29,7 @@ import { StatValue } from '../../../components/StatValue';
 import { Security, DenormalizedListing } from '../../../types';
 import { SecurityExchangeCoverageResponse, DayCoverage } from '../../../types/coverage';
 import { ListingStatisticsHistoryPoint, QualityIssue, formatRuleType, getRuleTypeColor, QualityRuleType } from '../../../types/quality-issues';
+import { usePageTitleLabels } from '../../../context/PageTitleContext';
 
 // Helper function to format bytes to human-readable string
 function formatBytes(bytes: number): string {
@@ -110,6 +111,10 @@ function SecurityExchangeCoverage() {
   const [listing, setListing] = useState<DenormalizedListing | null>(null);
 
   const exchange = exchanges.find(e => e.exchangeId === Number(exchangeId));
+  usePageTitleLabels([
+    { segment: securityId, label: security?.symbol },
+    { segment: exchangeId, label: exchange?.exchangeName },
+  ]);
 
   const loadData = async () => {
     if (!securityId || !exchangeId) return;

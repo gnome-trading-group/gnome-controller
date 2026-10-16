@@ -29,6 +29,7 @@ import ReactTimeAgo from 'react-time-ago';
 import { marketDataApi, ApiError } from '../../utils/api';
 import { useLatestRequest } from '../../hooks/useLatestRequest';
 import { errorMessage } from '../../utils/kill-switch';
+import { usePageTitleLabels } from '../../context/PageTitleContext';
 
 interface Collector {
   listingId: number;
@@ -105,6 +106,9 @@ function CollectorDetail() {
   const [collector, setCollector] = useState<Collector | null>(null);
   const listingIds = collector?.listingIds ?? (listingId ? [Number(listingId)] : []);
   const listingDetails = useListingDetails(listingIds);
+  const listing = listingId ? listingDetails[Number(listingId)] : undefined;
+  const collectorLabel = listing ? `${listing.securitySymbol} @ ${listing.exchangeName}` : `Collector ${listingId}`;
+  usePageTitleLabels([{ segment: listingId, label: listing && collectorLabel }]);
   const [taskDetails, setTaskDetails] = useState<TaskDetail[]>([]);
   const [logs, setLogs] = useState<LogsResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -289,9 +293,9 @@ function CollectorDetail() {
       <Container size="xl" py="xl">
         <Breadcrumbs mb="md">
           <Anchor onClick={() => navigate('/market-data/collectors')} size="sm">Collectors</Anchor>
-          <Text size="sm">Collector {listingId}</Text>
+          <Text size="sm">{collectorLabel}</Text>
         </Breadcrumbs>
-        <Title order={2} mb="md">Collector {listingId}</Title>
+        <Title order={2} mb="md">{collectorLabel}</Title>
         <CollectorDetailSkeleton />
       </Container>
     );
@@ -313,10 +317,10 @@ function CollectorDetail() {
     <Container size="xl" py="xl">
       <Breadcrumbs mb="md">
         <Anchor onClick={() => navigate('/market-data/collectors')} size="sm">Collectors</Anchor>
-        <Text size="sm">Collector {listingId}</Text>
+        <Text size="sm">{collectorLabel}</Text>
       </Breadcrumbs>
       <Group justify="space-between" mb="md">
-        <Title order={2}>Collector {listingId}</Title>
+        <Title order={2}>{collectorLabel}</Title>
         <Group>
           <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
             <ActionIcon 

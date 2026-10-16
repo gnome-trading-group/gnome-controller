@@ -11,6 +11,7 @@ import './amplify-config';
 import Navbar from './components/Navbar/Navbar';
 import { AlertWatcher } from './components/AlertWatcher';
 import { GlobalStateProvider } from './context/GlobalStateContext';
+import { PageTitleProvider } from './context/PageTitleContext';
 
 // Each page is its own chunk, so the first load only downloads the shell and the page being opened.
 const Collectors = lazy(() => import('./pages/MarketData/Collectors/Collectors'));
@@ -123,113 +124,115 @@ function AppContent() {
   // Mounted only once signed in: the provider loads registry data, which needs the user's Cognito token.
   return (
     <GlobalStateProvider>
-      <Router>
-        <PageTitle />
-        <CloseOnNavigate onNavigate={closeMobileNav} />
-        <AlertWatcher />
-        <AppShell
-          header={{ height: 56, collapsed: !isMobile }}
-          navbar={{
-            width: 240,
-            breakpoint: 'sm',
-            collapsed: { mobile: !mobileNavOpened, desktop: !navbarOpened },
-          }}
-          padding="md"
-        >
-          <AppShell.Header px="md">
-            <Group h="100%" gap="sm">
-              <Burger opened={mobileNavOpened} onClick={toggleMobileNav} size="sm" aria-label="Toggle navigation" />
-              <img src={logo} alt="Logo" style={{ height: '1.25rem', width: 'auto' }} />
-              <Title order={4}>GTG</Title>
-            </Group>
-          </AppShell.Header>
-          <Navbar onToggle={isMobile ? closeMobileNav : toggleNavbar} />
-          <AppShell.Main>
-            {/* Floating logo button when navbar is collapsed */}
-            <Transition mounted={!navbarOpened && !isMobile} transition="fade" duration={200}>
-              {(styles) => (
-                <UnstyledButton
-                  onClick={toggleNavbar}
-                  style={{
-                    ...styles,
-                    position: 'fixed',
-                    top: 'var(--mantine-spacing-md)',
-                    left: 'var(--mantine-spacing-md)',
-                    zIndex: 100,
-                  }}
-                >
-                  <Paper
-                    radius="xl"
-                    p="xs"
+      <PageTitleProvider>
+        <Router>
+          <PageTitle />
+          <CloseOnNavigate onNavigate={closeMobileNav} />
+          <AlertWatcher />
+          <AppShell
+            header={{ height: 56, collapsed: !isMobile }}
+            navbar={{
+              width: 240,
+              breakpoint: 'sm',
+              collapsed: { mobile: !mobileNavOpened, desktop: !navbarOpened },
+            }}
+            padding="md"
+          >
+            <AppShell.Header px="md">
+              <Group h="100%" gap="sm">
+                <Burger opened={mobileNavOpened} onClick={toggleMobileNav} size="sm" aria-label="Toggle navigation" />
+                <img src={logo} alt="Logo" style={{ height: '1.25rem', width: 'auto' }} />
+                <Title order={4}>GTG</Title>
+              </Group>
+            </AppShell.Header>
+            <Navbar onToggle={isMobile ? closeMobileNav : toggleNavbar} />
+            <AppShell.Main>
+              {/* Floating logo button when navbar is collapsed */}
+              <Transition mounted={!navbarOpened && !isMobile} transition="fade" duration={200}>
+                {(styles) => (
+                  <UnstyledButton
+                    onClick={toggleNavbar}
                     style={{
-                      background: 'var(--mantine-primary-color-light-hover)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '2.5rem',
-                      height: '2.5rem',
-                      border: '1px solid var(--mantine-primary-color-light)',
-                      cursor: 'pointer',
+                      ...styles,
+                      position: 'fixed',
+                      top: 'var(--mantine-spacing-md)',
+                      left: 'var(--mantine-spacing-md)',
+                      zIndex: 100,
                     }}
                   >
-                    <img src={logo} alt="Logo" style={{ height: '1.25rem', width: 'auto' }} />
-                  </Paper>
-                </UnstyledButton>
-              )}
-            </Transition>
-            <Suspense fallback={<Center h="50vh"><Loader /></Center>}>
-              <Routes>
-                <Route path="/security-master" element={<SecurityMaster />} />
-                <Route path="/security-master/listings/:listingId" element={<ListingDetail />} />
-                <Route path="/security-master/securities/:securityId" element={<SecurityDetail />} />
-                <Route path="/market-data/collectors" element={<Collectors />} />
-                <Route path="/market-data/collectors/:listingId" element={<CollectorDetail />} />
-                <Route path="/market-data/coverage" element={<CoverageSummary />} />
-                <Route path="/market-data/coverage/:securityId" element={<SecurityCoverage />} />
-                <Route path="/market-data/coverage/:securityId/:exchangeId" element={<SecurityExchangeCoverage />} />
-                <Route path="/market-data/transform-jobs" element={<TransformJobs />} />
-                <Route path="/market-data/gaps" element={<Gaps />} />
-                <Route path="/market-data/credentials" element={<MarketDataCredentials />} />
-                <Route path="/market-data/quality-issues" element={<QualityIssues />} />
-                <Route path="/market-data/quality-issues/investigate/:listingId/:timestamp" element={<MinuteInvestigation />} />
-                <Route path="/tools/service-config" element={<ServiceConfig />} />
-                <Route path="/tools/latency-probe" element={<LatencyProbe />} />
-                <Route path="/strategies" element={<Strategies />} />
-                <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
-                <Route path="/strategies/:strategyId/listings/:listingId" element={<PositionDetail />} />
-                <Route path="/trading/blotter" element={<Blotter />} />
-                <Route path="/system" element={<SystemHealth />} />
-                <Route path="/system/alerts" element={<Alerts />} />
-                <Route path="/risk/policies" element={<RiskPolicies />} />
-                <Route path="/treasury" element={<Treasury />} />
-                <Route path="/backtests" element={<BacktestList />} />
-                <Route path="/backtests/:runId" element={<BacktestDetail />} />
-                <Route path="/research" element={<Navigate to="/research/sessions" replace />} />
-                <Route path="/research/sessions" element={<ResearchList />} />
-                <Route path="/research/sessions/:sessionName" element={<ResearchDetail />} />
-                <Route path="/research/artifacts" element={<ArtifactList />} />
-                <Route path="/research/artifacts/:artifactType/:name" element={<ArtifactDetail />} />
-                <Route path="/research/datasets" element={<DatasetList />} />
-                <Route path="/research/datasets/:name" element={<DatasetDetail />} />
-                <Route path="/research/pipelines" element={<PipelineList />} />
-                <Route path="/research/pipelines/:pipelineName" element={<PipelineDetail />} />
-                <Route path="/predictions/events" element={<EventsList />} />
-                <Route path="/predictions/events/:eventId" element={<EventDetail />} />
-                <Route path="/predictions/relationships" element={<ContractRelationships />} />
-                <Route path="/predictions/hedge-keywords" element={<HedgeKeywords />} />
-                <Route path="/sessions" element={<SessionsList />} />
-                <Route path="/sessions/:sessionId" element={<SessionDetail />} />
-                <Route path="/launcher" element={<Launcher />} />
-                <Route path="/launcher/rules/:ruleId" element={<RuleDetail />} />
-                <Route path="/launcher/requests/:requestId" element={<LaunchDetail />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/logout" element={<Logout />} />
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              </Routes>
-            </Suspense>
-          </AppShell.Main>
-        </AppShell>
-      </Router>
+                    <Paper
+                      radius="xl"
+                      p="xs"
+                      style={{
+                        background: 'var(--mantine-primary-color-light-hover)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '2.5rem',
+                        height: '2.5rem',
+                        border: '1px solid var(--mantine-primary-color-light)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <img src={logo} alt="Logo" style={{ height: '1.25rem', width: 'auto' }} />
+                    </Paper>
+                  </UnstyledButton>
+                )}
+              </Transition>
+              <Suspense fallback={<Center h="50vh"><Loader /></Center>}>
+                <Routes>
+                  <Route path="/security-master" element={<SecurityMaster />} />
+                  <Route path="/security-master/listings/:listingId" element={<ListingDetail />} />
+                  <Route path="/security-master/securities/:securityId" element={<SecurityDetail />} />
+                  <Route path="/market-data/collectors" element={<Collectors />} />
+                  <Route path="/market-data/collectors/:listingId" element={<CollectorDetail />} />
+                  <Route path="/market-data/coverage" element={<CoverageSummary />} />
+                  <Route path="/market-data/coverage/:securityId" element={<SecurityCoverage />} />
+                  <Route path="/market-data/coverage/:securityId/:exchangeId" element={<SecurityExchangeCoverage />} />
+                  <Route path="/market-data/transform-jobs" element={<TransformJobs />} />
+                  <Route path="/market-data/gaps" element={<Gaps />} />
+                  <Route path="/market-data/credentials" element={<MarketDataCredentials />} />
+                  <Route path="/market-data/quality-issues" element={<QualityIssues />} />
+                  <Route path="/market-data/quality-issues/investigate/:listingId/:timestamp" element={<MinuteInvestigation />} />
+                  <Route path="/tools/service-config" element={<ServiceConfig />} />
+                  <Route path="/tools/latency-probe" element={<LatencyProbe />} />
+                  <Route path="/strategies" element={<Strategies />} />
+                  <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
+                  <Route path="/strategies/:strategyId/listings/:listingId" element={<PositionDetail />} />
+                  <Route path="/trading/blotter" element={<Blotter />} />
+                  <Route path="/system" element={<SystemHealth />} />
+                  <Route path="/system/alerts" element={<Alerts />} />
+                  <Route path="/risk/policies" element={<RiskPolicies />} />
+                  <Route path="/treasury" element={<Treasury />} />
+                  <Route path="/backtests" element={<BacktestList />} />
+                  <Route path="/backtests/:runId" element={<BacktestDetail />} />
+                  <Route path="/research" element={<Navigate to="/research/sessions" replace />} />
+                  <Route path="/research/sessions" element={<ResearchList />} />
+                  <Route path="/research/sessions/:sessionName" element={<ResearchDetail />} />
+                  <Route path="/research/artifacts" element={<ArtifactList />} />
+                  <Route path="/research/artifacts/:artifactType/:name" element={<ArtifactDetail />} />
+                  <Route path="/research/datasets" element={<DatasetList />} />
+                  <Route path="/research/datasets/:name" element={<DatasetDetail />} />
+                  <Route path="/research/pipelines" element={<PipelineList />} />
+                  <Route path="/research/pipelines/:pipelineName" element={<PipelineDetail />} />
+                  <Route path="/predictions/events" element={<EventsList />} />
+                  <Route path="/predictions/events/:eventId" element={<EventDetail />} />
+                  <Route path="/predictions/relationships" element={<ContractRelationships />} />
+                  <Route path="/predictions/hedge-keywords" element={<HedgeKeywords />} />
+                  <Route path="/sessions" element={<SessionsList />} />
+                  <Route path="/sessions/:sessionId" element={<SessionDetail />} />
+                  <Route path="/launcher" element={<Launcher />} />
+                  <Route path="/launcher/rules/:ruleId" element={<RuleDetail />} />
+                  <Route path="/launcher/requests/:requestId" element={<LaunchDetail />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/logout" element={<Logout />} />
+                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                </Routes>
+              </Suspense>
+            </AppShell.Main>
+          </AppShell>
+        </Router>
+      </PageTitleProvider>
     </GlobalStateProvider>
   );
 }

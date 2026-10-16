@@ -52,6 +52,7 @@ import { useLatestRequest } from '../../hooks/useLatestRequest';
 import { errorMessage } from '../../utils/kill-switch';
 import RelationshipGraph from './RelationshipGraph';
 import BulkCreateRelationshipModal from './BulkCreateRelationshipModal';
+import { usePageTitleLabels } from '../../context/PageTitleContext';
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
@@ -546,6 +547,8 @@ function EventDetail() {
     }
     return map;
   }, [contracts, relationships]);
+
+  usePageTitleLabels([{ segment: eventId, label: event?.title }]);
 
   if (loading) {
     return <EventDetailSkeleton />;

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useRegisteredTitleLabels } from '../context/PageTitleContext';
 
 function toTitleCase(segment: string): string {
   return segment
@@ -10,11 +11,19 @@ function toTitleCase(segment: string): string {
 
 export function usePageTitle() {
   const { pathname } = useLocation();
+  const labels = useRegisteredTitleLabels();
 
   useEffect(() => {
-    const segments = pathname.split('/').filter(Boolean);
-    document.title = segments.length > 0
-      ? 'GTG - ' + segments.map(toTitleCase).join(' - ')
-      : 'GTG';
-  }, [pathname]);
+    const segments = pathname.split('/').filter(Boolean).map(decodeURIComponent);
+    let next = 0;
+    const parts = segments.map(segment => {
+      const entry = labels[next];
+      if (entry && entry.segment === segment) {
+        next++;
+        if (entry.label) return entry.label;
+      }
+      return toTitleCase(segment);
+    });
+    document.title = parts.length > 0 ? 'GTG - ' + parts.join(' - ') : 'GTG';
+  }, [pathname, labels]);
 }

@@ -28,6 +28,7 @@ import {
   Ago, NeedsAttentionBadge, NeedsAttentionCard, RequestsTable, RuleStatusBadge, SessionStatusBadge, ShortId, TriggerLogTable,
 } from './shared';
 import { triggerSummary } from '../../utils/launch-status';
+import { usePageTitleLabels } from '../../context/PageTitleContext';
 
 const TABS = ['activity', 'triggers', 'sessions', 'config', 'revisions'] as const;
 const DAY = 86_400_000;
@@ -49,6 +50,7 @@ function RuleDetail() {
 
   const ruleQuery = useRule(ruleId);
   const rule = ruleQuery.data;
+  usePageTitleLabels([{ segment: ruleId, label: rule?.name }]);
   const ruleTypes = useRuleTypes();
   const ruleType = ruleTypes.data?.find(t => t.type === rule?.rule_type);
   const attention = useRuleAttention(rule ? [rule] : [], ruleTypes.data);

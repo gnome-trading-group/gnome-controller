@@ -38,6 +38,7 @@ import { SecurityCoverageResponse, ExchangeCoverage } from '../../../types/cover
 import { ListingStatisticsHistoryPoint } from '../../../types/quality-issues';
 import { useLatestRequest } from '../../../hooks/useLatestRequest';
 import { errorMessage } from '../../../utils/kill-switch';
+import { usePageTitleLabels } from '../../../context/PageTitleContext';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -214,6 +215,8 @@ function SecurityCoverage() {
     metricsHistory.forEach(point => Object.keys(point.metrics).forEach(m => seen.add(m)));
     return Array.from(seen).sort();
   }, [metricsHistory]);
+
+  usePageTitleLabels([{ segment: securityId, label: security?.symbol }]);
 
   const breadcrumbItems = [
     { title: 'Coverage', href: '/market-data/coverage' },

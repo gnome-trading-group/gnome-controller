@@ -38,6 +38,7 @@ import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
 import { SettlementBadge } from '../../components/trading/SettlementBadge';
 import { Time } from '../../components/trading/values';
 import { describeFeeDefinition, FEE_SCOPE_LABELS } from '../../utils/fees';
+import { usePageTitleLabels } from '../../context/PageTitleContext';
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -265,6 +266,8 @@ function ListingDetail() {
     return () => { cancelled = true; };
   }, [id]);
 
+  usePageTitleLabels([{ segment: listingId, label: listing && `${listing.securitySymbol} @ ${listing.exchangeName}` }]);
+
   if (loading) {
     return <ListingDetailSkeleton id={id} onBack={() => navigate('/security-master')} />;
   }
@@ -287,7 +290,7 @@ function ListingDetail() {
     <Container size="xl" py="xl">
       <Breadcrumbs mb="md">
         <Anchor onClick={() => navigate('/security-master')} size="sm">Security Master</Anchor>
-        <Text size="sm">Listing {id}</Text>
+        <Text size="sm">{listing.securitySymbol} @ {listing.exchangeName}</Text>
       </Breadcrumbs>
 
       <Group mb="xl" justify="space-between">

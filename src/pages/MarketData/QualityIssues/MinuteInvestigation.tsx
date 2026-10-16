@@ -35,6 +35,7 @@ import {
   formatRuleType,
   getRuleTypeColor,
 } from '../../../types/quality-issues';
+import { usePageTitleLabels } from '../../../context/PageTitleContext';
 
 const METRIC_LABELS: Record<string, string> = {
   tickCount: 'Tick Count',
@@ -236,6 +237,11 @@ function MinuteInvestigation() {
       })
       .catch(() => {});
   }, [listingId]);
+
+  usePageTitleLabels([
+    { segment: listingId, label: listingLabel },
+    { segment: timestamp, label: timestamp && formatFullUtc(Number(timestamp)) },
+  ]);
 
   useEffect(() => {
     if (!listingId || !timestamp) return;
