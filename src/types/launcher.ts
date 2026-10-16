@@ -91,8 +91,8 @@ export interface RequestLink {
 
 // Worked out by the launcher when the request was made; absent on older requests.
 export interface RequestLinks {
-  // The listings' event title, when the launcher could find it.
-  title?: string | null;
+  // The titles of the events the listings belong to; empty for listings outside any event.
+  titles: string[];
   strategy: RequestLink | null;
   listings: RequestLink[];
   pages: RequestLink[];

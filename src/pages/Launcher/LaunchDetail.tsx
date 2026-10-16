@@ -291,8 +291,10 @@ function LinksCard({ links }: { links: RequestLinks }) {
   ];
   return (
     <Card withBorder mb="md">
-      <Text fw={600} mb={links.title ? 0 : 'xs'}>Links</Text>
-      {links.title && <Text size="sm" c="dimmed" mb="xs">{links.title}</Text>}
+      <Text fw={600} mb={links.titles.length ? 0 : 'xs'}>Links</Text>
+      {links.titles.length > 0 && (
+        <Stack gap={0} mb="xs">{links.titles.map(title => <Text key={title} size="sm" c="dimmed">{title}</Text>)}</Stack>
+      )}
       <Table withRowBorders={false} fz="sm" verticalSpacing={4}>
         <Table.Tbody>
           {rows.filter(([, items]) => items.length > 0).map(([name, items]) => (
