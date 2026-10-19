@@ -10,7 +10,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { LaunchRequestDetail, RequestAction, RequestLink, RequestLinks, ResolvedStrategyConfig } from '../../types/launcher';
 import { launcherApi, registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
-import { actorLabel, canCancel, canRetry, isPending, REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS } from '../../utils/launch-status';
+import { actorLabel, canCancel, canRetry, isExpired, isPending, REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS, showsExpiry } from '../../utils/launch-status';
 import { SESSION_STATUS_COLORS, stopSummary } from '../../utils/session-status';
 import { launcherKeys, LAUNCHER_POLL, useRequest } from '../../query/launcher';
 import { isLive, POLL, useSession, useSessionSummary } from '../../query/hooks';
@@ -176,6 +176,7 @@ function LaunchDetail() {
           request.rule_revision != null && `rule revision ${request.rule_revision}`,
           request.retry_of && <>retry of <ShortId id={request.retry_of} to={`/launcher/requests/${request.retry_of}`} /></>,
           request.scheduled_time && request.status === 'SCHEDULED' && <>launches at <Time value={request.scheduled_time} size="sm" /></>,
+          showsExpiry(request) && request.expires_at && <>{isExpired(request) ? 'expired' : 'expires'} <Time value={request.expires_at} size="sm" /></>,
         ] : []}
       />
       {config && <ModeBand mode={config.mode} />}

@@ -11,7 +11,7 @@ import { LaunchRequest, LaunchRule, RequestAction, RequestStatus, RuleStats } fr
 import { launcherApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { navigateRowProps } from '../../utils/navigation';
-import { REQUEST_STATUS_LABELS } from '../../utils/launch-status';
+import { isPending, REQUEST_STATUS_LABELS } from '../../utils/launch-status';
 import { launcherKeys, LAUNCHER_POLL, useRequests, useRuleAttention, useRuleTypes, useRules, useTriggers } from '../../query/launcher';
 import { LastUpdated } from '../../components/LastUpdated';
 import { Kpi, KpiStrip, ModeBadge } from '../../components/trading/layout';
@@ -66,7 +66,7 @@ function Launcher() {
   const recentRows = useMemo(() => recent.data ?? [], [recent.data]);
   const dayAgo = Date.now() - DAY;
   const lastDay = recentRows.filter(r => Date.parse(r.date_created) >= dayAgo && r.action === 'launch');
-  const pending = recentRows.filter(r => r.status === 'PENDING_APPROVAL' || r.status === 'PENDING_SHUTDOWN_APPROVAL');
+  const pending = recentRows.filter(isPending);
   const failed = lastDay.filter(r => r.status === 'FAILED');
   const running = Object.values(statsById).reduce((n, s) => n + (s?.running_sessions.length ?? 0), 0);
 

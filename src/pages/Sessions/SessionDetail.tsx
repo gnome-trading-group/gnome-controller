@@ -111,6 +111,8 @@ function SessionDetail() {
   const loadError = sessionQuery.error ?? summary.error ?? policiesQuery.error;
   const relaunchable = session && !isActiveSession(session.status);
   const reviewCount = summary.data?.listings.filter(l => l.needsReview).length ?? 0;
+  const heldToSettlement = summary.data?.listings.some(
+    l => l.afterSession?.kind === 'SETTLED' || l.afterSession?.kind === 'AWAITING_SETTLEMENT') ?? false;
 
   return (
     <Container size="xl" py="xl">
@@ -234,6 +236,16 @@ function SessionDetail() {
               )}
             />
           </KpiStrip>
+
+          {heldToSettlement && (
+            <Alert color="gray" mb="md">
+              This session ended holding positions on markets that settle later. Its PnL is valued when it stopped;
+              {' '}how they settled counts in the{' '}
+              <Anchor component={Link} to={`/strategies/${session.strategyId}?mode=${session.mode}`} size="sm">
+                strategy's PnL
+              </Anchor>.
+            </Alert>
+          )}
 
           <Card withBorder mb="md">
             <Group justify="space-between" mb="xs">

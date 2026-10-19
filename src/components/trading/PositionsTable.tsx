@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { ActionIcon, Badge, Group, Switch, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Anchor, Badge, Group, Switch, Text, Tooltip } from '@mantine/core';
 import { IconAdjustments, IconAlertTriangle } from '@tabler/icons-react';
 import { MantineReactTable, MRT_ColumnDef, useMantineReactTable } from 'mantine-react-table';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
-import { SessionListingPnl, StrategyListingPnl } from '../../types';
+import { AfterSession, SessionListingPnl, StrategyListingPnl } from '../../types';
 import { formatDuration, formatMoney } from '../../utils/format';
 import { ListingLabel, Money, Price, Qty } from './values';
 import { useCents } from '../../hooks/useCents';
@@ -53,6 +53,46 @@ function Outcomes({ row }: { row: Row }) {
   );
 }
 
+const AFTER_SESSION_LABELS: Record<AfterSession['kind'], string> = {
+  SETTLED: 'settled at',
+  CLOSED_MANUALLY: 'closed by hand at',
+  ADJUSTED: 'adjusted',
+  RESET: 'written off by',
+  INHERITED: 'held by',
+  AWAITING_SETTLEMENT: 'awaiting settlement',
+  OPEN: 'still open',
+};
+
+// What became of a position after the session stopped holding it. The session's PnL stays as it was when it stopped;
+// what happened later counts in the strategy's PnL outside sessions.
+function AfterSessionCell({ row }: { row: SessionListingPnl }) {
+  const after = row.afterSession;
+  if (!after) return <Text span c="dimmed">—</Text>;
+  const label = AFTER_SESSION_LABELS[after.kind];
+  const sessionLink = after.sessionId && (
+    <Anchor component={Link} to={`/sessions/${after.sessionId}`} size="sm" onClick={e => e.stopPropagation()}>
+      {after.kind === 'RESET' ? 'a flat start' : 'the next session'}
+    </Anchor>
+  );
+  const price = after.settlementPrice ?? after.price;
+  return (
+    <Tooltip
+      withArrow multiline w={280} openDelay={300}
+      label="Not part of this session's PnL: anything booked after it stopped counts in the strategy's PnL outside sessions."
+    >
+      <Text span size="sm" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+        {after.kind === 'AWAITING_SETTLEMENT' && price !== null ? 'settled at' : label}{' '}
+        {sessionLink}
+        {price !== null && (after.kind === 'SETTLED' || after.kind === 'CLOSED_MANUALLY' || after.kind === 'AWAITING_SETTLEMENT') && (
+          <Price value={price} exchangeId={row.exchangeId} tickSize={row.tickSize} size="sm" />
+        )}
+        {after.kind === 'AWAITING_SETTLEMENT' && price !== null && ', not booked yet'}
+        {after.impact !== null && <> · <Money value={after.impact} size="sm" /></>}
+      </Text>
+    </Tooltip>
+  );
+}
+
 interface PositionsTableProps {
   rows: Row[];
   loading: boolean;
@@ -65,6 +105,7 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
   const navigate = useNavigate();
   const [showFlat, setShowFlat] = useState(false);
   const session = rows.length > 0 && isSessionRow(rows[0]);
+  const ended = session && rows.some(r => isSessionRow(r) && r.afterSession !== null);
   // A strategy's live rows are one per listing and venue account; paper ones belong to no account.
   const byAccount = rows.some(r => !isSessionRow(r) && r.accountLabel !== null);
   const shown = useMemo(
@@ -140,12 +181,18 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
           );
         },
       });
+      if (ended) {
+        cols.push({
+          id: 'afterSession', header: 'After session', size: 170,
+          Cell: ({ row }) => <AfterSessionCell row={row.original as SessionListingPnl} />,
+        });
+      }
     } else {
       cols.push(money('today' as keyof Row, 'Today'));
     }
     cols.push({ id: 'outcomes', header: 'Settles between', size: 150, Cell: ({ row }) => <Outcomes row={row.original} /> });
     return cols;
-  }, [session, byAccount]);
+  }, [session, ended, byAccount]);
 
   const table = useMantineReactTable({
     columns,

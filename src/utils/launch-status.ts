@@ -16,6 +16,7 @@ export const REQUEST_STATUS_COLORS: Record<RequestStatus, string> = {
   STOPPED: 'gray',
   STOP_FAILED: 'red',
   SHUTDOWN_REJECTED: 'gray',
+  EXPIRED: 'gray',
 };
 
 export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
@@ -33,6 +34,7 @@ export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
   STOPPED: 'Stopped',
   STOP_FAILED: 'Stop failed',
   SHUTDOWN_REJECTED: 'Shutdown rejected',
+  EXPIRED: 'Expired',
 };
 
 export const OUTCOME_COLORS: Record<TriggerOutcome, string> = {
@@ -44,6 +46,7 @@ export const OUTCOME_COLORS: Record<TriggerOutcome, string> = {
   ERROR: 'red',
   INVALID: 'red',
   NO_RULES: 'gray',
+  EXPIRED: 'gray',
 };
 
 export const OUTCOME_LABELS: Record<TriggerOutcome, string> = {
@@ -55,6 +58,7 @@ export const OUTCOME_LABELS: Record<TriggerOutcome, string> = {
   ERROR: 'Error',
   INVALID: 'Invalid trigger',
   NO_RULES: 'No rules',
+  EXPIRED: 'Too late',
 };
 
 export const RULE_STATUS_COLORS: Record<RuleStatus, string> = { active: 'green', disabled: 'gray', archived: 'dark' };
@@ -63,7 +67,12 @@ const PENDING: RequestStatus[] = ['PENDING_APPROVAL', 'PENDING_SHUTDOWN_APPROVAL
 // Statuses a request can still leave on its own; a page showing one keeps polling.
 const MOVING: RequestStatus[] = ['APPROVED', 'SCHEDULED', 'LAUNCHING', 'SHUTDOWN_APPROVED', 'STOPPING', ...PENDING];
 
-export const isPending = (request: LaunchRequest) => PENDING.includes(request.status);
+// The sweeper marks a request EXPIRED up to five minutes after its deadline; until then it can't be approved either.
+export const isExpired = (request: LaunchRequest) => !!request.expires_at && Date.parse(request.expires_at) <= Date.now();
+export const isPending = (request: LaunchRequest) => PENDING.includes(request.status) && !isExpired(request);
+// Whether the request's deadline still matters: it hasn't launched yet, or it ran out of time.
+export const showsExpiry = (request: LaunchRequest) => !!request.expires_at
+  && ['PENDING_APPROVAL', 'APPROVED', 'SCHEDULED', 'EXPIRED'].includes(request.status);
 export const isMoving = (request: LaunchRequest) => MOVING.includes(request.status)
   || (!!request.session_status && !['STOPPED', 'FAILED', 'MISSING'].includes(request.session_status));
 export const canRetry = (request: LaunchRequest) => request.action === 'launch' && request.status === 'FAILED';

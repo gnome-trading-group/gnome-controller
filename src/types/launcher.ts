@@ -75,7 +75,8 @@ export interface ResolvedStrategyConfig {
 
 export type RequestStatus =
   | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'SCHEDULED' | 'CANCELLED' | 'LAUNCHING' | 'LAUNCHED' | 'FAILED'
-  | 'PENDING_SHUTDOWN_APPROVAL' | 'SHUTDOWN_APPROVED' | 'SHUTDOWN_REJECTED' | 'STOPPING' | 'STOPPED' | 'STOP_FAILED';
+  | 'PENDING_SHUTDOWN_APPROVAL' | 'SHUTDOWN_APPROVED' | 'SHUTDOWN_REJECTED' | 'STOPPING' | 'STOPPED' | 'STOP_FAILED'
+  | 'EXPIRED';
 
 export interface RequestEvent {
   at: string;
@@ -118,6 +119,8 @@ export interface LaunchRequest {
   session_id: string | null;
   target_session_ids: string[] | null;
   scheduled_time: string | null;
+  // The trigger's deadline (a CS2 match's kickoff): past it the request can't launch. Absent or null never expires.
+  expires_at?: string | null;
   launch_error: string | null;
   links?: RequestLinks | null;
   events: RequestEvent[];
@@ -132,7 +135,7 @@ export interface LaunchRequest {
 }
 
 export type TriggerOutcome =
-  | 'REQUESTED' | 'DUPLICATE' | 'RATE_LIMITED' | 'NO_MATCH' | 'BLOCKED' | 'ERROR' | 'INVALID' | 'NO_RULES';
+  | 'REQUESTED' | 'DUPLICATE' | 'RATE_LIMITED' | 'NO_MATCH' | 'BLOCKED' | 'ERROR' | 'INVALID' | 'NO_RULES' | 'EXPIRED';
 
 export interface TriggerEvaluation {
   trigger_id: string;

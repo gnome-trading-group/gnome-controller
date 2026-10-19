@@ -7,7 +7,8 @@ import ReactTimeAgo from 'react-time-ago';
 import { LaunchRequest, RequestAction, RequestStatus, RuleStatus, TriggerEvaluation, TriggerOutcome } from '../../types/launcher';
 import { StrategySessionStatus } from '../../types';
 import {
-  OUTCOME_COLORS, OUTCOME_LABELS, REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS, RULE_STATUS_COLORS, triggerSummary,
+  isExpired, OUTCOME_COLORS, OUTCOME_LABELS, REQUEST_STATUS_COLORS, REQUEST_STATUS_LABELS, RULE_STATUS_COLORS, showsExpiry,
+  triggerSummary,
 } from '../../utils/launch-status';
 import { SESSION_STATUS_COLORS } from '../../utils/session-status';
 import { navigateRowProps } from '../../utils/navigation';
@@ -129,7 +130,9 @@ export function RequestsTable({ showRule = true, ...props }: PagedProps<LaunchRe
         ? <Text size="xs" c="red" truncate maw={240}>{row.original.launch_error}</Text>
         : row.original.scheduled_time && row.original.status === 'SCHEDULED'
           ? <Text size="xs" c="dimmed">at {new Date(row.original.scheduled_time).toLocaleString()}</Text>
-          : null,
+          : showsExpiry(row.original) && row.original.expires_at
+            ? <Text size="xs" c="dimmed">{isExpired(row.original) ? 'expired' : 'expires'} {new Date(row.original.expires_at).toLocaleString()}</Text>
+            : null,
     },
   ], [showRule]);
   const table = useMantineReactTable({

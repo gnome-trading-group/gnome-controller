@@ -29,9 +29,26 @@ interface ValuedListing extends ListingRef {
   lastFillAt: string | null;
 }
 
+// What became of a position a stopped session left open, for reading only: it never changes the session's PnL, and
+// counts in the strategy's PnL outside sessions instead. impact is what that booking changed the strategy's PnL by.
+export type AfterSessionKind =
+  | 'SETTLED' | 'CLOSED_MANUALLY' | 'ADJUSTED' | 'RESET' | 'INHERITED' | 'AWAITING_SETTLEMENT' | 'OPEN';
+
+export interface AfterSession {
+  kind: AfterSessionKind;
+  at: string | null;
+  // INHERITED: the session that held it next; RESET: the session that started flat.
+  sessionId: string | null;
+  price: string | null;
+  impact: string | null;
+  // SETTLED, or AWAITING_SETTLEMENT once the result is recorded but not yet booked.
+  settlementPrice: string | null;
+}
+
 export interface SessionListingPnl extends ValuedListing {
   carry: string;
   trading: string;
+  afterSession: AfterSession | null;
   opening: {
     source: OpeningSource;
     netQuantity: string;
@@ -86,7 +103,15 @@ export interface StrategySummary {
     realized: string;
     unrealized: string;
     fees: string;
-    betweenSessions: string;
+    // How lifetime differs from the sum of the sessions' PnL; carry is the mark moving on inventory no session held.
+    outsideSessions: {
+      total: string;
+      settlements: string;
+      manual: string;
+      adjustments: string;
+      resets: string;
+      carry: string;
+    };
   };
   openPositions: number;
   listings: StrategyListingPnl[];

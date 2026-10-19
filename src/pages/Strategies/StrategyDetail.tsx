@@ -8,7 +8,10 @@ import {
 import { MantineReactTable, MRT_ColumnDef, MRT_Row, useMantineReactTable } from 'mantine-react-table';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { isActiveSession, Mode, RiskPolicy, StrategyListingPnl, StrategySession, StrategySessionStatus } from '../../types';
+import {
+  isActiveSession, Mode, RiskPolicy, StrategyListingPnl, StrategySession, StrategySessionStatus, StrategySummary,
+} from '../../types';
+import { formatMoney } from '../../utils/format';
 import { strategyActivity } from '../../utils/strategy-activity';
 import { navigateRowProps } from '../../utils/navigation';
 import { errorMessage, findKillSwitch, isKilled, listingKills, setKillSwitch } from '../../utils/kill-switch';
@@ -48,6 +51,27 @@ type Tab = typeof TABS[number];
 function rangeStart(range: string): string | undefined {
   const span = RANGES[range];
   return span === null ? undefined : new Date(Date.now() - span).toISOString();
+}
+
+type OutsideSessionTerms = StrategySummary['totals']['outsideSessions'];
+
+const OUTSIDE_SESSION_TERMS: [Exclude<keyof OutsideSessionTerms, 'total'>, string, string][] = [
+  ['settlements', 'Settlements', 'markets settling after the session that held them stopped'],
+  ['manual', 'Manual trades', 'trades booked by hand'],
+  ['adjustments', 'Adjustments', 'corrections to the ledger'],
+  ['resets', 'Resets', 'inventory a session starting flat wrote off'],
+  ['carry', 'Carry', 'price moves while no session held the position'],
+];
+
+function OutsideSessions({ terms }: { terms: OutsideSessionTerms }) {
+  return (
+    <Stack gap={2}>
+      <Text size="xs">Lifetime PnL that no session's PnL includes:</Text>
+      {OUTSIDE_SESSION_TERMS.filter(([key]) => terms[key] !== '0').map(([key, label, why]) => (
+        <Text key={key} size="xs">{label} {formatMoney(terms[key]).text}: {why}</Text>
+      ))}
+    </Stack>
+  );
 }
 
 function StrategyDetail() {
@@ -299,9 +323,9 @@ function StrategyDetail() {
           label="Lifetime PnL"
           hint="Every session's realized PnL and fees, plus the unrealized PnL of what the strategy holds now, valued at the mid (else the last trade)."
           value={<Money value={totals?.lifetime} arrow />}
-          footer={totals && totals.betweenSessions !== '0' && (
-            <Tooltip label="Price moves on inventory held while no session ran, reset write-offs and adjustments" multiline w={260} withArrow>
-              <span>between sessions <Money value={totals.betweenSessions} size="xs" /></span>
+          footer={totals && totals.outsideSessions.total !== '0' && (
+            <Tooltip label={<OutsideSessions terms={totals.outsideSessions} />} multiline w={320} withArrow>
+              <span>outside sessions <Money value={totals.outsideSessions.total} size="xs" /></span>
             </Tooltip>
           )}
         />
