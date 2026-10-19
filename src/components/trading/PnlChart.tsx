@@ -9,12 +9,13 @@ import { PnlSeries, SeriesEventKind } from '../../types';
 import { formatMoney, formatQty, formatTime, moneyToNumber, sizeToNumber } from '../../utils/format';
 import { chartPoints, ChartPoint, chartTime, drawdown, fromChartTime, snapToPoint } from './chart-data';
 import { ChartTooltip, TooltipState } from './ChartTooltip';
+import { MarkerKind, MarkerToggles } from './MarkerToggles';
 
 export type ChartView = 'total' | 'listings' | 'position' | 'fees';
 
 const LISTING_COLORS = ['#4dabf7', '#ffa94d', '#da77f2', '#69db7c', '#ffd43b', '#f783ac', '#3bc9db', '#a9e34b'];
 
-const EVENT_STYLE: Record<SeriesEventKind, { color: string; shape: 'arrowUp' | 'arrowDown' | 'circle' | 'square'; text: string }> = {
+const EVENT_STYLE: Record<SeriesEventKind, { color: string; shape: MarkerKind['shape']; text: string }> = {
   SESSION_START: { color: '#40c057', shape: 'arrowUp', text: 'start' },
   SESSION_STOP: { color: '#868e96', shape: 'arrowDown', text: 'stop' },
   RESET: { color: '#fa5252', shape: 'square', text: 'reset' },
@@ -57,7 +58,7 @@ interface PnlChartProps {
 }
 
 export function PnlChart({ series, loading, views = ['total'], height = 280 }: PnlChartProps) {
-  const { timeZone } = usePreferences();
+  const { timeZone, hiddenMarkers } = usePreferences();
   const scheme = useComputedColorScheme('dark');
   const [view, setView] = useState<ChartView>(views[0]);
   const container = useRef<HTMLDivElement>(null);
@@ -90,6 +91,13 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
         }));
     }
   }, [series, view, timeZone]);
+
+  const markerKinds = useMemo<MarkerKind[]>(() => {
+    const present = new Set(series?.events.map(e => e.kind) ?? []);
+    return (Object.keys(EVENT_STYLE) as SeriesEventKind[])
+      .filter(kind => present.has(kind))
+      .map(kind => ({ key: `pnl:${kind}`, label: EVENT_STYLE[kind].text, color: EVENT_STYLE[kind].color, shape: EVENT_STYLE[kind].shape }));
+  }, [series]);
 
   const drawdownPoints = useMemo(() => (view === 'total' && lines.length > 0 ? drawdown(lines[0].points) : []), [view, lines]);
 
@@ -178,6 +186,7 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
     if (current.markers && series) {
       const markers: SeriesMarker<Time>[] = [];
       for (const event of series.events) {
+        if (hiddenMarkers.has(`pnl:${event.kind}`)) continue;
         const time = snapToPoint(lines[0].points, chartTime(Date.parse(event.time), timeZone));
         if (time === null) continue;
         const style = EVENT_STYLE[event.kind];
@@ -191,7 +200,7 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
       fitted.current = key;
       chart.timeScale().fitContent();
     }
-  }, [chart, lines, drawdownPoints, series, structure, timeZone]);
+  }, [chart, lines, drawdownPoints, series, structure, timeZone, hiddenMarkers]);
 
   const legendTime = hover?.time ?? lines[0]?.points[lines[0].points.length - 1]?.time ?? null;
   const valueAt = (line: Line, time: number) => [...line.points].reverse().find(p => p.time <= time);
@@ -248,10 +257,13 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
         )}
       </Box>
       {series && (
-        <Text size="xs" c="dimmed" mt={4}>
-          One point per {series.resolutionMs >= 60_000 ? `${series.resolutionMs / 60_000} min` : `${series.resolutionMs / 1000}s`}
-          {' '}· marked at the mid (else the last trade); drawdown below
-        </Text>
+        <Group justify="space-between" gap="sm" mt={4} wrap="wrap">
+          <Text size="xs" c="dimmed">
+            One point per {series.resolutionMs >= 60_000 ? `${series.resolutionMs / 60_000} min` : `${series.resolutionMs / 1000}s`}
+            {' '}· marked at the mid (else the last trade); drawdown below
+          </Text>
+          {view === 'total' && <MarkerToggles kinds={markerKinds} />}
+        </Group>
       )}
     </Box>
   );

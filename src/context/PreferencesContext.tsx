@@ -7,6 +7,7 @@ import { isMode } from '../utils/mode';
 // data), so every read and write tolerates failure and the defaults always work.
 const TIME_ZONE_KEY = 'pref.timeZone';
 const MODE_KEY = 'pref.mode';
+const HIDDEN_MARKERS_KEY = 'pref.hiddenMarkers';
 
 function read(key: string): string | null {
   try {
@@ -24,11 +25,23 @@ function write(key: string, value: string) {
   }
 }
 
+function readHiddenMarkers(): ReadonlySet<string> {
+  try {
+    const parsed: unknown = JSON.parse(read(HIDDEN_MARKERS_KEY) ?? '[]');
+    return new Set(Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
 interface Preferences {
   timeZone: TimeZoneChoice;
   setTimeZone: (zone: TimeZoneChoice) => void;
   rememberedMode: Mode | null;
   rememberMode: (mode: Mode) => void;
+  // Chart marker kinds switched off, keyed by chart (`pnl:SETTLEMENT`, `price:buy`) so every chart of a kind agrees.
+  hiddenMarkers: ReadonlySet<string>;
+  setMarkersHidden: (keys: string[], hidden: boolean) => void;
 }
 
 const PreferencesContext = createContext<Preferences | null>(null);
@@ -39,6 +52,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     const stored = read(MODE_KEY);
     return isMode(stored) ? stored : null;
   });
+  const [hiddenMarkers, setHiddenMarkers] = useState<ReadonlySet<string>>(readHiddenMarkers);
   const setTimeZone = useCallback((zone: TimeZoneChoice) => {
     setZone(zone);
     write(TIME_ZONE_KEY, zone);
@@ -47,9 +61,20 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     setRememberedMode(mode);
     write(MODE_KEY, mode);
   }, []);
+  const setMarkersHidden = useCallback((keys: string[], hidden: boolean) => {
+    setHiddenMarkers(prior => {
+      const next = new Set(prior);
+      for (const key of keys) {
+        if (hidden) next.add(key);
+        else next.delete(key);
+      }
+      write(HIDDEN_MARKERS_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
   const value = useMemo(
-    () => ({ timeZone, setTimeZone, rememberedMode, rememberMode }),
-    [timeZone, setTimeZone, rememberedMode, rememberMode],
+    () => ({ timeZone, setTimeZone, rememberedMode, rememberMode, hiddenMarkers, setMarkersHidden }),
+    [timeZone, setTimeZone, rememberedMode, rememberMode, hiddenMarkers, setMarkersHidden],
   );
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }

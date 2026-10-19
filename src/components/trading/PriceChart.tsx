@@ -9,9 +9,15 @@ import { LedgerFill, PnlSeries, PriceHistory } from '../../types';
 import { formatMoney, formatPrice, formatQty, formatTime, moneyToNumber, sizeToNumber } from '../../utils/format';
 import { chartPoints, chartTime, ChartPoint, fromChartTime, snapToPoint } from './chart-data';
 import { ChartTooltip, TooltipState } from './ChartTooltip';
+import { MarkerKind, MarkerToggles } from './MarkerToggles';
 
 // Past this many fills a marker's text would bury the price line; the markers alone still show where trading was.
 const LABELLED_FILLS = 40;
+
+const FILL_MARKERS: MarkerKind[] = [
+  { key: 'price:buy', label: 'buy', color: '#38d9a9', shape: 'arrowUp' },
+  { key: 'price:sell', label: 'sell', color: '#ff6b6b', shape: 'arrowDown' },
+];
 
 interface PriceChartProps {
   prices: PriceHistory | undefined;
@@ -44,7 +50,7 @@ function known(points: ChartPoint[]): ChartPoint[] {
 }
 
 export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, loading, height = 420 }: PriceChartProps) {
-  const { timeZone } = usePreferences();
+  const { timeZone, hiddenMarkers } = usePreferences();
   const scheme = useComputedColorScheme('dark');
   const container = useRef<HTMLDivElement>(null);
   const [chart, setChart] = useState<IChartApi | null>(null);
@@ -133,6 +139,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
       const time = snapToPoint(markPoints, chartTime(Date.parse(f.recordedAt), timeZone));
       if (time === null) continue;
       const buy = f.side === 0;
+      if (hiddenMarkers.has(buy ? 'price:buy' : 'price:sell')) continue;
       markers.push({
         time: time as UTCTimestamp,
         position: buy ? 'belowBar' : 'aboveBar',
@@ -148,7 +155,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
       fitted.current = key;
       chart.timeScale().fitContent();
     }
-  }, [chart, lines, traded, prices, timeZone, tickSize, lotSize, cents]);
+  }, [chart, lines, traded, prices, timeZone, tickSize, lotSize, cents, hiddenMarkers]);
 
   const at = (points: ChartPoint[], time: number) => [...points].reverse().find(p => p.time <= time);
   const tooltip: TooltipState | null = hover && (() => {
@@ -193,7 +200,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
             <Text size="xs" c="dimmed">{name}</Text>
           </Group>
         ))}
-        <Text size="xs" c="dimmed">▲ buy ▼ sell</Text>
+        <MarkerToggles kinds={FILL_MARKERS} />
       </Group>
       <Box pos="relative" h={height}>
         <div ref={container} style={{ position: 'absolute', inset: 0 }} />
