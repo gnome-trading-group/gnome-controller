@@ -266,19 +266,12 @@ function CollectorDetail() {
   // The 10s collector poll replaces taskDetails every time; keying on the ARNs keeps the logs interval from restarting.
   const taskArnsKey = taskDetails.map(t => t.taskArn).join(',');
 
+  // With nothing running the endpoint serves the last run's logs, which no longer change, so only live tasks poll.
   useEffect(() => {
-    // Load logs for all tasks when component mounts or listingId changes
-    if (taskArnsKey) {
-      loadLogs();
-    }
-    
-    // Auto-refresh logs every 5 seconds
-    const interval = setInterval(() => {
-      if (taskArnsKey) {
-        loadLogs(false);
-      }
-    }, 5000);
-    
+    loadLogs();
+    if (!taskArnsKey) return;
+
+    const interval = setInterval(() => loadLogs(false), 5000);
     return () => clearInterval(interval);
   }, [listingId, taskArnsKey]);
 

@@ -1,5 +1,8 @@
 import { ReactNode } from 'react';
-import { Accordion, Anchor, Badge, Card, Code, Group, Skeleton, Stack, Table, Text } from '@mantine/core';
+import {
+  Accordion, ActionIcon, Anchor, Badge, Card, Code, CopyButton, Group, Skeleton, Stack, Table, Text, Tooltip,
+} from '@mantine/core';
+import { IconCheck, IconCopy } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import { ConfigValue, StrategySession } from '../../types';
 import { configuredListings } from '../../utils/policy-target';
@@ -11,6 +14,48 @@ import { BLOCK_LABELS, describeBlock, SimulationBlocks, toSessionSimulation } fr
 import { useExchangeName } from '../../hooks/useExchangeName';
 import { ACCOUNT_STATUS_COLORS } from '../../utils/treasury';
 import { treasuryLink } from '../../utils/attention';
+
+const STAGE = import.meta.env.VITE_STAGE;
+
+// A session ships its journal, strategy metrics included, to this bucket as it runs.
+const JOURNAL_BUCKET_REGION = 'us-east-1';
+
+function journalConsoleUrl(sessionId: string): string {
+  const bucket = `gnome-journals-${STAGE}`;
+  return `https://${JOURNAL_BUCKET_REGION}.console.aws.amazon.com/s3/buckets/${bucket}?region=${JOURNAL_BUCKET_REGION}&prefix=${encodeURIComponent(`${sessionId}/`)}`;
+}
+
+function SessionMetrics({ sessionId }: { sessionId: string }) {
+  const snippet = `from gnomepy import load_session_metrics\nmetrics = load_session_metrics("${sessionId}", stage="${STAGE}")`;
+  return (
+    <Card withBorder p="sm">
+      <Stack gap="xs">
+        <Text size="sm" c="dimmed">
+          The strategy's metric streams are recorded in the session's journal, uploaded every five minutes and when
+          the session ends.
+        </Text>
+        <Group gap="xs">
+          <Text size="sm" fw={500}>Journal</Text>
+          <Anchor size="sm" href={journalConsoleUrl(sessionId)} target="_blank">
+            <Code>s3://gnome-journals-{STAGE}/{sessionId}/</Code>
+          </Anchor>
+        </Group>
+        <Group gap={6} wrap="nowrap" align="flex-start">
+          <Code block style={{ flex: 1, fontSize: '0.72rem' }}>{snippet}</Code>
+          <CopyButton value={snippet} timeout={2000}>
+            {({ copied, copy }) => (
+              <Tooltip label={copied ? 'Copied!' : 'Copy'} withArrow position="left">
+                <ActionIcon size="sm" variant="subtle" color={copied ? 'teal' : 'gray'} onClick={copy}>
+                  {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </CopyButton>
+        </Group>
+      </Stack>
+    </Card>
+  );
+}
 
 function groupConfig(config: Record<string, ConfigValue>) {
   const params = Object.entries(config).filter(([k]) => k.startsWith('strategy.args.'));
@@ -260,6 +305,12 @@ export function SessionDetailsPanel({ session }: { session: StrategySession }) {
             </Table>
           </Table.ScrollContainer>
         </Card>
+      </CollapsibleSection>
+    )}
+
+    {session.instanceId && STAGE && (
+      <CollapsibleSection title="Metrics" storageKey="session-metrics">
+        <SessionMetrics sessionId={session.sessionId} />
       </CollapsibleSection>
     )}
 
