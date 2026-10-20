@@ -330,4 +330,17 @@ export interface SessionHealth {
   gateways: { name: string; reconnecting: boolean; resyncsLast5m?: number }[];
   risk?: { stale: boolean; unguarded: boolean; unbuildablePolicies: number; droppedLatches: number } | null;
   rateLimit?: { account: string; throttling: boolean }[];
+  // A reading the host can't give (no /proc off Linux, no CPU share before the second sample) is -1.
+  host?: {
+    cpuBusyPermille: number;
+    cpuStealPermille: number;
+    memAvailableBytes: number;
+    memTotalBytes: number;
+    processRssBytes: number;
+    heapUsedBytes: number;
+    heapMaxBytes: number;
+    diskFreeBytes: number;
+  } | null;
+  // Null with the journal off.
+  journal?: { pendingSegments: number; oldestPendingMs: number; segmentBytes: number } | null;
 }

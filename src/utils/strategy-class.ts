@@ -8,7 +8,7 @@ export interface StrategyClassHint {
 export function strategyClassHint(strategyType: string | null): StrategyClassHint {
   if (strategyType === 'python') {
     return {
-      placeholder: 'gnomepy_research.strategies.market_maker:MarketMaker',
+      placeholder: 'gnomepy_research.sessions.cs2_series.strategy:CS2Series',
       description: "Python import path and class, separated by ':' (module.path:ClassName)",
     };
   }

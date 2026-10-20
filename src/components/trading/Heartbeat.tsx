@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Box, Divider, Group, HoverCard, Stack, Text } from '@mantine/core';
 import { isActiveSession, SessionHealth, StrategySession } from '../../types';
 import { formatDuration } from '../../utils/format';
-import { healthProblems, HealthProblem } from '../../utils/health';
+import { formatPermille, healthProblems, HealthProblem } from '../../utils/health';
+import { formatBytes } from '../../utils/system';
 
 // Whether a running session is alive, from the heartbeat its process sends every few seconds whatever the market is
 // doing. A quiet market reads as quiet, not dead: a listing whose price hasn't moved is information, not a fault.
@@ -96,10 +97,50 @@ function HealthDetail({ health, problems }: { health: SessionHealth | null; prob
           {health.ledger.fenced && <Row name="Fenced" value="writes refused" warn />}
         </>
       )}
+      {health.host && <HostDetail host={health.host} flagged={flagged} />}
+      {health.journal !== undefined && (
+        <>
+          <Divider label="Journal" labelPosition="left" />
+          {health.journal === null ? (
+            <Row name="Journal" value="off" />
+          ) : (
+            <Row
+              name="Waiting to ship"
+              value={health.journal.pendingSegments === 0
+                ? 'none'
+                : `${health.journal.pendingSegments}, oldest ${formatDuration(health.journal.oldestPendingMs)}`}
+              warn={flagged.has('Journal')}
+            />
+          )}
+        </>
+      )}
       <Divider label="Prices (quiet is normal)" labelPosition="left" />
       {health.listings.map(listing => (
         <Row key={listing.listingId} name={`Listing ${listing.listingId}`} value={`unchanged ${formatDuration(listing.priceUnchangedMs)}`} />
       ))}
     </Stack>
+  );
+}
+
+// -1 is a reading the host couldn't give: no /proc off Linux, or no CPU share before the second heartbeat.
+function bytesOrNa(bytes: number): string {
+  return bytes < 0 ? 'n/a' : formatBytes(bytes);
+}
+
+function HostDetail({ host, flagged }: { host: NonNullable<SessionHealth['host']>; flagged: Set<string> }) {
+  const steal = host.cpuStealPermille > 0 ? `, ${formatPermille(host.cpuStealPermille)} stolen` : '';
+  return (
+    <>
+      <Divider label="Host" labelPosition="left" />
+      <Row name="CPU" value={`${formatPermille(host.cpuBusyPermille)} busy${steal}`} warn={flagged.has('CPU')} />
+      <Row
+        name="Memory available"
+        value={host.memTotalBytes < 0 ? 'n/a' : `${bytesOrNa(host.memAvailableBytes)} of ${bytesOrNa(host.memTotalBytes)}`}
+        warn={flagged.has('Memory')}
+      />
+      <Row name="Process memory (RSS)" value={bytesOrNa(host.processRssBytes)} />
+      <Row name="JVM heap" value={`${formatBytes(host.heapUsedBytes)} of ${formatBytes(host.heapMaxBytes)}`} />
+      <Row name="Disk free" value={bytesOrNa(host.diskFreeBytes)} warn={flagged.has('Disk')} />
+    </>
   );
 }
