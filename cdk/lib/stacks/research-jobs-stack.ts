@@ -271,6 +271,19 @@ export class ResearchJobsStack extends cdk.Stack {
       resources: ["*"],
     }));
 
+    const logsLambda = new PythonLambdaFunction(this, "ResearchJobLogsLambda", {
+      codePath: "lambda/functions/batch-logs",
+      functionName: "gnome-research-job-logs",
+      description: "Read a research job task's log lines",
+      timeout: cdk.Duration.seconds(30),
+      environment: { ...commonEnv, TASK_SK_PREFIX: "TASK#" },
+    });
+    table.grantReadData(logsLambda.function);
+    logsLambda.function.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["logs:GetLogEvents"],
+      resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/aws/batch/job:*`],
+    }));
+
     const statusHandlerLambda = new PythonLambdaFunction(this, "ResearchJobStatusHandlerLambda", {
       codePath: "lambda/functions/research-jobs/status-handler",
       description: "Record research job task state changes from Batch",
@@ -307,6 +320,8 @@ export class ResearchJobsStack extends cdk.Stack {
     const runResource = jobsResource.addResource("{runId}");
     runResource.addMethod("GET", new apigateway.LambdaIntegration(getLambda.function), cognitoOpts);
     runResource.addMethod("DELETE", new apigateway.LambdaIntegration(cancelLambda.function), cognitoOpts);
+    runResource.addResource("tasks").addResource("{index}").addResource("logs")
+      .addMethod("GET", new apigateway.LambdaIntegration(logsLambda.function), cognitoOpts);
 
     new cdk.CfnOutput(this, "EcrRepositoryUri", {
       value: ecrRepo.repositoryUri,

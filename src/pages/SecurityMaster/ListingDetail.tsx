@@ -39,6 +39,8 @@ import { SettlementBadge } from '../../components/trading/SettlementBadge';
 import { Time } from '../../components/trading/values';
 import { describeFeeDefinition, FEE_SCOPE_LABELS } from '../../utils/fees';
 import { usePageTitleLabels } from '../../context/PageTitleContext';
+import { useTradedSessions } from '../../query/hooks';
+import { RunningSessionsBadge, TradedSessionsPanel } from '../../components/TradedSessions';
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -172,6 +174,7 @@ function ListingDetail() {
   const [historyTarget, setHistoryTarget] = useState<RiskPolicy | null>(null);
 
   const killSwitchTarget = useMemo(() => ({ listingId: id }), [id]);
+  const tradedSessions = useTradedSessions({ listingId: id });
   const killSwitch = findKillSwitch(policies, killSwitchTarget);
   const listingKilled = isKilled(policies, killSwitchTarget);
   const latestKillSwitchEntry = useLatestPolicyHistory(killSwitch);
@@ -298,17 +301,20 @@ function ListingDetail() {
           <Title order={2}>{listing.securitySymbol}</Title>
           <Text c="dimmed">{listing.exchangeName} &mdash; {listing.exchangeSecuritySymbol}</Text>
         </div>
-        {listingKilled === null ? (
-          <Button variant="default" disabled>Kill status unknown</Button>
-        ) : (
-          <Button
-            color={listingKilled ? 'green' : 'red'}
-            leftSection={listingKilled ? <IconPlayerPlay size={16} /> : <IconPlayerStop size={16} />}
-            onClick={() => setKillAction(listingKilled ? 'resume' : 'kill')}
-          >
-            {listingKilled ? 'Resume listing' : 'Kill listing'}
-          </Button>
-        )}
+        <Group gap="sm">
+          <RunningSessionsBadge sessions={tradedSessions.data} />
+          {listingKilled === null ? (
+            <Button variant="default" disabled>Kill status unknown</Button>
+          ) : (
+            <Button
+              color={listingKilled ? 'green' : 'red'}
+              leftSection={listingKilled ? <IconPlayerPlay size={16} /> : <IconPlayerStop size={16} />}
+              onClick={() => setKillAction(listingKilled ? 'resume' : 'kill')}
+            >
+              {listingKilled ? 'Resume listing' : 'Kill listing'}
+            </Button>
+          )}
+        </Group>
       </Group>
 
       {policiesError && (
@@ -419,6 +425,14 @@ function ListingDetail() {
               <InfoRow label="Schema Type" value={exchange?.schemaType ?? '-'} />
             </Stack>
           </Paper>
+        </Grid.Col>
+
+        <Grid.Col span={12}>
+          <TradedSessionsPanel
+            sessions={tradedSessions.data}
+            isLoading={tradedSessions.isLoading}
+            error={tradedSessions.error}
+          />
         </Grid.Col>
 
         <Grid.Col span={12}>

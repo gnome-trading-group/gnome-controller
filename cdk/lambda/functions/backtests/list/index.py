@@ -5,7 +5,7 @@ import os
 from decimal import Decimal
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 from utils import create_response
 
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
@@ -25,40 +25,33 @@ def _decimal_to_native(obj):
     return obj
 
 
+def _paginate(call, **kwargs) -> list[dict]:
+    out = []
+    while True:
+        response = call(**kwargs)
+        out += response.get("Items", [])
+        if "LastEvaluatedKey" not in response:
+            return out
+        kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+
+
 def handler(event: dict, context) -> dict:
     params = event.get("queryStringParameters") or {}
-    status_filter = params.get("status")
     try:
-        limit = int(params.get("limit", DEFAULT_LIMIT))
+        limit = max(1, int(params.get("limit", DEFAULT_LIMIT)))
     except (ValueError, TypeError):
         limit = DEFAULT_LIMIT
 
-    # Scan for all META records; DynamoDB doesn't support filtering by SK prefix
-    # in a scan efficiently, so we filter client-side on the small META set.
-    # The GSI on status lets us filter by status without a full scan.
-    if status_filter:
-        response = _table.query(
-            IndexName="status-submitted-index",
-            KeyConditionExpression=Key("status").eq(status_filter),
-            ScanIndexForward=False,
-            Limit=limit,
-            FilterExpression="sk = :meta",
-            ExpressionAttributeValues={":meta": "META"},
-        )
-        items = _decimal_to_native(response.get("Items", []))
+    # JOB rows carry submitted_at too, so the status index holds them alongside META rows; a Limit on the query
+    # would count them before the filter drops them, hence reading every page and limiting afterwards.
+    if status := params.get("status"):
+        rows = _paginate(_table.query, IndexName="status-submitted-index",
+                         KeyConditionExpression=Key("status").eq(status), FilterExpression=Attr("sk").eq("META"))
     else:
-        # Scan for META records; table is small (90-day TTL), this is fine.
-        response = _table.scan(
-            FilterExpression="sk = :meta",
-            ExpressionAttributeValues={":meta": "META"},
-        )
-        items = _decimal_to_native(response.get("Items", []))
-        # Sort by submitted_at descending and apply limit
-        items.sort(key=lambda i: i.get("submitted_at", ""), reverse=True)
-        items = items[:limit]
+        # A scan is fine: rows expire after 90 days.
+        rows = _paginate(_table.scan, FilterExpression=Attr("sk").eq("META"))
 
-    # Strip large fields from list view
-    for item in items:
-        item.pop("config_yaml", None)
-
-    return create_response(200, {"runs": items, "count": len(items)})
+    runs = sorted(_decimal_to_native(rows), key=lambda r: r.get("submitted_at", ""), reverse=True)[:limit]
+    for run in runs:
+        run.pop("config_yaml", None)
+    return create_response(200, {"runs": runs, "count": len(runs)})

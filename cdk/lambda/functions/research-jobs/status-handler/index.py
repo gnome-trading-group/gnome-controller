@@ -3,6 +3,7 @@ every task has finished."""
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -84,12 +85,13 @@ def _update_task(run_id: str, index: int, detail: dict) -> None:
         pass
 
 
-def _set_run_status(run_id: str, status: str, allowed_from: tuple[str, ...]) -> None:
-    values: dict = {":s": status, **{f":from{i}": s for i, s in enumerate(allowed_from)}}
+def _set_run_status(run_id: str, status: str, allowed_from: tuple[str, ...], stamp: str) -> None:
+    values: dict = {":s": status, ":t": datetime.now(timezone.utc).isoformat(),
+                    **{f":from{i}": s for i, s in enumerate(allowed_from)}}
     try:
         _table.update_item(
             Key={"run_id": run_id, "sk": "META"},
-            UpdateExpression="SET #st = :s",
+            UpdateExpression=f"SET #st = :s, {stamp} = :t",
             ConditionExpression=f"#st IN ({', '.join(f':from{i}' for i in range(len(allowed_from)))})",
             ExpressionAttributeNames={"#st": "status"},
             ExpressionAttributeValues=values,
@@ -123,7 +125,7 @@ def _on_task_finished(run_id: str) -> None:
     _set_counts(run_id, statuses.count("SUCCEEDED"), statuses.count("FAILED"))
     final = run_status(statuses, int(meta["task_count"]))
     if final:
-        _set_run_status(run_id, final, ("SUBMITTED", "RUNNING"))
+        _set_run_status(run_id, final, ("SUBMITTED", "RUNNING"), "finished_at")
 
 
 def handler(event: dict, context) -> None:
@@ -135,6 +137,6 @@ def handler(event: dict, context) -> None:
     _update_task(run_id, index, detail)
     status = STATUS.get(detail.get("status", ""))
     if status == "RUNNING":
-        _set_run_status(run_id, "RUNNING", ("SUBMITTED",))
+        _set_run_status(run_id, "RUNNING", ("SUBMITTED",), "started_at")
     elif status in TERMINAL:
         _on_task_finished(run_id)

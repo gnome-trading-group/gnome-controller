@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import io
 
 
 class ClientError(Exception):
@@ -11,6 +12,7 @@ class ClientError(Exception):
 class _Exceptions:
     ClientError = ClientError
     ConditionalCheckFailedException = type("ConditionalCheckFailedException", (Exception,), {})
+    ResourceNotFoundException = type("ResourceNotFoundException", (Exception,), {})
 
 
 class FakeS3:
@@ -21,6 +23,11 @@ class FakeS3:
 
     def put_object(self, Bucket, Key, Body, **_):
         self.objects[Key] = Body
+
+    def get_object(self, Bucket, Key):
+        if Key not in self.objects:
+            raise ClientError(Key)
+        return {"Body": io.BytesIO(self.objects[Key])}
 
     def head_object(self, Bucket, Key):
         if Key not in self.objects:
@@ -45,6 +52,23 @@ class FakeBatch:
 
     def terminate_job(self, jobId, reason):
         self.terminated.append(jobId)
+
+
+class FakeLogs:
+    """Streams of (timestamp, message) events; a page is the newest `limit` events before the token's position."""
+    exceptions = _Exceptions
+
+    def __init__(self, streams=None):
+        self.streams = streams or {}
+
+    def get_log_events(self, logGroupName, logStreamName, limit, startFromHead, nextToken=None):
+        if logStreamName not in self.streams:
+            raise _Exceptions.ResourceNotFoundException()
+        events = self.streams[logStreamName]
+        end = int(nextToken.removeprefix("b/")) if nextToken else len(events)
+        start = max(0, end - limit)
+        page = [{"timestamp": t, "message": m} for t, m in events[start:end]]
+        return {"events": page, "nextBackwardToken": f"b/{start}"}
 
 
 class FakeTable:

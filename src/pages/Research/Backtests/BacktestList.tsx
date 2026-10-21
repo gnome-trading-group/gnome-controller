@@ -1,127 +1,134 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ActionIcon, Badge, Container, Group, Select, Title, Tooltip } from '@mantine/core';
+import { useState, useCallback, useMemo } from 'react';
+import { ActionIcon, Alert, Badge, Container, Group, Text, Title, Tooltip } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
 import { navigateRowProps } from '../../../utils/navigation';
-import { BacktestRun, BacktestStatus } from '../../../types/backtests';
+import { BacktestRun } from '../../../types/backtests';
 import { controllerApi } from '../../../utils/api';
+import { formatDuration } from '../../../utils/format';
+import { LastUpdated } from '../../../components/LastUpdated';
+import { CopyIcon, RunStatusBadge } from '../../../components/batch/BatchBits';
+import { CancelRunModal } from '../../../components/batch/CancelRunModal';
+import { ActiveRunCards, RunFilterBar } from '../../../components/batch/RunListParts';
+import { usePolledLoad } from '../../../components/batch/usePolledLoad';
+import { RunFilter, isRunActive, runElapsedMs, runMatches } from '../../../components/batch/status';
 
-const STATUS_COLORS: Record<BacktestStatus, string> = {
-  SUBMITTED: 'blue',
-  PENDING: 'gray',
-  RUNNING: 'yellow',
-  COMPLETED: 'green',
-  PARTIALLY_FAILED: 'orange',
-  FAILED: 'red',
-  CANCELLED: 'gray',
-};
+const POLL_INTERVAL_MS = 15000;
+const RUN_LIMIT = 200;
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
-  { value: 'RUNNING', label: 'Running' },
-  { value: 'COMPLETED', label: 'Completed' },
-  { value: 'PARTIALLY_FAILED', label: 'Partially Failed' },
-  { value: 'FAILED', label: 'Failed' },
-  { value: 'SUBMITTED', label: 'Submitted' },
-  { value: 'CANCELLED', label: 'Cancelled' },
-];
+// Strategies are named by import path (pkg.module:Class or pkg.module.Class); the last part is the readable one.
+const shortStrategy = (name: string) => (name.includes(':') ? name.split(':').pop() : name.split('.').pop()) ?? name;
 
 function BacktestList() {
   const navigate = useNavigate();
-  const [runs, setRuns] = useState<BacktestRun[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [filter, setFilter] = useState<RunFilter>('all');
+  const [search, setSearch] = useState('');
+  const [cancelling, setCancelling] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await controllerApi.listBacktests({
-        status: statusFilter || undefined,
-        limit: 50,
-      });
-      setRuns(result.runs as BacktestRun[]);
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter]);
+  const load = useCallback(() => controllerApi.listBacktests({ limit: RUN_LIMIT }).then(r => r.runs), []);
+  const anyActive = useCallback((runs: BacktestRun[]) => runs.some(r => isRunActive(r.status)), []);
+  const { data, loading, error, failing, lastUpdated, live, refresh } =
+    usePolledLoad(load, anyActive, POLL_INTERVAL_MS, 'Failed to load backtests');
+  const runs = useMemo(() => data ?? [], [data]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  const shown = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return runs.filter(r => runMatches(filter, r.status)
+      && (!needle || [r.runId, r.strategy ?? '', r.submittedBy, ...(r.scenarios ?? [])]
+        .some(field => field.toLowerCase().includes(needle))));
+  }, [runs, filter, search]);
+
+  const active = useMemo(() => runs.filter(r => isRunActive(r.status)).map(r => ({
+    runId: r.runId,
+    href: `/research/backtests/${r.runId}`,
+    title: shortStrategy(r.strategy ?? ''),
+    subtitle: r.runId,
+    status: r.status,
+    submittedAt: r.submittedAt,
+    startedAt: r.startedAt,
+    counts: { total: r.jobCount, succeeded: r.completedCount, failed: r.failedCount },
+  })), [runs]);
 
   const columns = useMemo<MRT_ColumnDef<BacktestRun>[]>(() => [
     {
       accessorKey: 'runId',
       header: 'Run ID',
-      size: 140,
+      size: 240,
       Cell: ({ row }: { row: MRT_Row<BacktestRun> }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
-          {row.original.runId.slice(-12)}
-        </span>
+        <Group gap={4} wrap="nowrap">
+          <Text ff="monospace" size="xs">{row.original.runId}</Text>
+          <CopyIcon value={row.original.runId} label="Copy run ID" />
+        </Group>
       ),
     },
     {
       accessorKey: 'status',
       header: 'Status',
-      size: 150,
-      Cell: ({ row }: { row: MRT_Row<BacktestRun> }) => (
-        <Badge color={STATUS_COLORS[row.original.status]} variant="light">
-          {row.original.status}
-        </Badge>
-      ),
+      size: 140,
+      Cell: ({ row }: { row: MRT_Row<BacktestRun> }) => <RunStatusBadge status={row.original.status} />,
     },
     {
       accessorKey: 'strategy',
       header: 'Strategy',
-      Cell: ({ row }: { row: MRT_Row<BacktestRun> }) => {
-        const name = row.original.strategy ?? '';
-        const short = name.includes(':') ? name.split(':').pop() : name.split('.').pop();
-        return <span title={name}>{short}</span>;
-      },
+      size: 220,
+      Cell: ({ row }: { row: MRT_Row<BacktestRun> }) => (
+        <Text size="sm" title={row.original.strategy}>{shortStrategy(row.original.strategy ?? '')}</Text>
+      ),
     },
     {
-      accessorKey: 'jobCount',
+      id: 'jobs',
       header: 'Jobs',
-      size: 90,
-      Cell: ({ row }: { row: MRT_Row<BacktestRun> }) =>
-        `${row.original.completedCount}/${row.original.jobCount}`,
+      size: 120,
+      accessorFn: r => r.jobCount,
+      Cell: ({ row }: { row: MRT_Row<BacktestRun> }) => (
+        <Group gap={6} wrap="nowrap">
+          <Text size="sm">{row.original.completedCount}/{row.original.jobCount}</Text>
+          {row.original.failedCount > 0 && <Badge color="red" variant="light" size="sm">{row.original.failedCount} failed</Badge>}
+        </Group>
+      ),
     },
     {
-      accessorKey: 'failedCount',
-      header: 'Failed',
-      size: 75,
-      Cell: ({ row }: { row: MRT_Row<BacktestRun> }) => {
-        const n = row.original.failedCount;
-        return n > 0 ? <Badge color="red" variant="light">{n}</Badge> : <span>0</span>;
-      },
+      id: 'scenarios',
+      header: 'Scenarios',
+      size: 180,
+      accessorFn: r => (r.scenarios ?? []).join(', '),
+      Cell: ({ row }: { row: MRT_Row<BacktestRun> }) => (
+        <Text size="sm" c={row.original.scenarios?.length ? undefined : 'dimmed'} lineClamp={1}>
+          {row.original.scenarios?.join(', ') || '—'}
+        </Text>
+      ),
     },
-    {
-      accessorKey: 'submittedBy',
-      header: 'Submitted By',
-      size: 130,
-    },
+    { accessorKey: 'submittedBy', header: 'Submitted by', size: 150 },
     {
       accessorKey: 'submittedAt',
       header: 'Submitted',
-      size: 130,
+      size: 120,
       Cell: ({ row }: { row: MRT_Row<BacktestRun> }) =>
-        row.original.submittedAt
-          ? <ReactTimeAgo date={new Date(row.original.submittedAt)} timeStyle="round" />
-          : '-',
+        row.original.submittedAt ? <ReactTimeAgo date={new Date(row.original.submittedAt)} timeStyle="round" /> : '—',
+    },
+    {
+      id: 'duration',
+      header: 'Duration',
+      size: 100,
+      accessorFn: r => runElapsedMs(r) ?? -1,
+      Cell: ({ row }: { row: MRT_Row<BacktestRun> }) => formatDuration(runElapsedMs(row.original)),
     },
   ], []);
 
   const table = useMantineReactTable({
     columns,
-    data: runs,
-    state: { isLoading: loading },
-    enableColumnFilters: true,
+    data: shown,
+    getRowId: r => r.runId,
+    state: { isLoading: loading && data === null },
+    enableColumnFilters: false,
     enableSorting: true,
     enablePagination: true,
     enableBottomToolbar: true,
     enableTopToolbar: false,
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    initialState: { sorting: [{ id: 'submittedAt', desc: true }], density: 'xs' },
+    initialState: { sorting: [{ id: 'submittedAt', desc: true }], density: 'xs', pagination: { pageIndex: 0, pageSize: 50 } },
     mantineTableBodyRowProps: ({ row }: { row: MRT_Row<BacktestRun> }) => (
       navigateRowProps(navigate, `/research/backtests/${row.original.runId}`)
     ),
@@ -129,27 +136,40 @@ function BacktestList() {
 
   return (
     <Container size="xl" py="xl">
-      <Group justify="space-between" mb="md">
-        <Title order={2}>Backtests</Title>
-        <Group>
-          <Select
-            size="sm"
-            placeholder="All statuses"
-            data={STATUS_OPTIONS}
-            value={statusFilter}
-            onChange={(v) => setStatusFilter(v ?? '')}
-            clearable={false}
-            w={170}
-          />
-          <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={refresh} loading={loading}>
-              <IconRefresh size={20} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
+      <Group mb="md">
+        <Title order={2} style={{ flex: 1 }}>Backtests</Title>
+        {live && <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={failing} />}
+        <Tooltip label="Refresh" withArrow openDelay={500}>
+          <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
+            <IconRefresh size={20} />
+          </ActionIcon>
+        </Tooltip>
       </Group>
+      <Text size="sm" c="dimmed" mb="md">The latest {RUN_LIMIT} runs of the last 90 days.</Text>
 
+      {error && <Alert color="red" mb="md" title="Error loading backtests">{error}</Alert>}
+
+      <ActiveRunCards runs={active} onCancel={setCancelling} />
+      <RunFilterBar
+        statuses={runs.map(r => r.status)}
+        filter={filter}
+        onFilter={setFilter}
+        search={search}
+        onSearch={setSearch}
+        searchPlaceholder="Search run, strategy, scenario, submitter"
+      />
       <MantineReactTable table={table} />
+
+      <CancelRunModal
+        runId={cancelling}
+        opened={cancelling !== null}
+        onClose={() => setCancelling(null)}
+        onConfirm={async () => {
+          if (!cancelling) return;
+          await controllerApi.cancelBacktest(cancelling);
+          await refresh(true);
+        }}
+      />
     </Container>
   );
 }

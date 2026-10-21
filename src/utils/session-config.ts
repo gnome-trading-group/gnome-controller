@@ -48,6 +48,11 @@ export function sessionConfigFrom(form: SessionForm, asOf?: string | null): Reco
   return config;
 }
 
+export function sessionListingIds(session: StrategySession): number[] {
+  const listings = session.config['listings'];
+  return Array.isArray(listings) ? listings.map(Number) : [];
+}
+
 // Relaunching reruns the exact versions the previous session ran; clearing a field takes the latest.
 export function sessionFormFrom(session: StrategySession): SessionForm {
   const config = session.config;

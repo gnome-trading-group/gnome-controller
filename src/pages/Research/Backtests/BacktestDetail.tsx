@@ -9,19 +9,17 @@ import {
   Card,
   Code,
   Container,
-  CopyButton,
   Divider,
   Group,
   HoverCard,
-  Modal,
+  SegmentedControl,
   SimpleGrid,
   Skeleton,
   Stack,
   Text,
-  Title,
   Tooltip,
 } from '@mantine/core';
-import { IconAlertTriangle, IconArrowLeft, IconCheck, IconCopy, IconRefresh, IconX } from '@tabler/icons-react';
+import { IconAlertTriangle, IconFileText, IconRefresh, IconX } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -35,81 +33,53 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { BacktestJob, BacktestRun, BacktestStatus, JobStatus } from '../../../types/backtests';
+import { BacktestJob, BacktestRun, BacktestStatus } from '../../../types/backtests';
 import { controllerApi } from '../../../utils/api';
-import { errorMessage } from '../../../utils/kill-switch';
-import { useLatestRequest } from '../../../hooks/useLatestRequest';
+import { formatDuration } from '../../../utils/format';
 import { LastUpdated } from '../../../components/LastUpdated';
+import { PageHeader } from '../../../components/PageHeader';
+import RunLogsDrawer from '../../../components/RunLogsDrawer';
+import { CopyIcon, CopyableCode, InfoRow, RunProgress, RunStatusBadge, TaskStatusBadge } from '../../../components/batch/BatchBits';
+import { CancelRunModal } from '../../../components/batch/CancelRunModal';
+import { TAIL_LINES, TaskDetailPanel } from '../../../components/batch/TaskDetailPanel';
+import { TaskGrid } from '../../../components/batch/TaskGrid';
+import { usePolledLoad } from '../../../components/batch/usePolledLoad';
+import {
+  TaskFilter, isRunActive, isTaskFinished, runElapsedMs, taskElapsedMs, taskMatches,
+} from '../../../components/batch/status';
 
-const RUN_STATUS_COLORS: Record<BacktestStatus, string> = {
-  SUBMITTED: 'blue',
-  PENDING: 'gray',
-  RUNNING: 'yellow',
-  COMPLETED: 'green',
-  PARTIALLY_FAILED: 'orange',
-  FAILED: 'red',
-  CANCELLED: 'gray',
-};
-
-const JOB_STATUS_COLORS: Record<JobStatus, string> = {
-  PENDING: 'gray',
-  RUNNING: 'yellow',
-  SUCCEEDED: 'green',
-  FAILED: 'red',
-};
-
-const CANCELLABLE = new Set<BacktestStatus>(['SUBMITTED', 'PENDING', 'RUNNING']);
 const EXPLORABLE = new Set<BacktestStatus>(['COMPLETED', 'PARTIALLY_FAILED']);
-const TERMINAL_JOB_STATUSES = new Set<JobStatus>(['SUCCEEDED', 'FAILED']);
 const POLL_INTERVAL_MS = 10000;
+
+const FILTERS: { value: TaskFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'running', label: 'Running' },
+  { value: 'waiting', label: 'Waiting' },
+  { value: 'succeeded', label: 'Succeeded' },
+];
 
 function toCamelWords(key: string): string {
   return key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).trim();
 }
 
-function CliCommand({ command }: { command: string }) {
-  return (
-    <Group gap={6} wrap="nowrap" align="center">
-      <Code style={{ flex: 1, fontFamily: 'monospace', fontSize: '0.72rem', padding: '3px 6px', wordBreak: 'break-all' }}>
-        {command}
-      </Code>
-      <CopyButton value={command} timeout={2000}>
-        {({ copied, copy }) => (
-          <Tooltip label={copied ? 'Copied!' : 'Copy command'} withArrow position="right">
-            <ActionIcon size="sm" variant="subtle" color={copied ? 'teal' : 'gray'} onClick={copy} style={{ flexShrink: 0 }}>
-              {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
-            </ActionIcon>
-          </Tooltip>
-        )}
-      </CopyButton>
-    </Group>
-  );
-}
-
-function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Group gap="xs" wrap="nowrap">
-      <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>{label}</Text>
-      <Text size="sm">{children}</Text>
-    </Group>
-  );
+function jobLabel(job: BacktestJob): string {
+  const params = Object.entries(job.configParams ?? {}).map(([k, v]) => `${k}=${v}`).join(', ');
+  return [job.scenario, params].filter(Boolean).join(' / ');
 }
 
 function RunInfoSkeleton() {
   return (
-    <Card withBorder mb="md" p="md">
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
-        {[['Run ID', 'Status', 'Strategy', 'Commit'], ['Jobs', 'Submitted by', 'Submitted']].map((labels, i) => (
-          <Stack key={i} gap={4}>
-            {labels.map(label => (
-              <Group key={label} gap="xs" wrap="nowrap">
-                <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>{label}</Text>
-                <Skeleton h={14} w="45%" />
-              </Group>
-            ))}
-          </Stack>
+    <Card withBorder my="md" p="md">
+      <Stack gap={6}>
+        <Skeleton h={12} />
+        {['Strategy', 'Commit'].map(label => (
+          <Group key={label} gap="xs" wrap="nowrap">
+            <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>{label}</Text>
+            <Skeleton h={14} w="45%" />
+          </Group>
         ))}
-      </SimpleGrid>
+      </Stack>
     </Card>
   );
 }
@@ -117,63 +87,35 @@ function RunInfoSkeleton() {
 function BacktestDetail() {
   const { runId } = useParams<{ runId: string }>();
   const navigate = useNavigate();
-  const [run, setRun] = useState<BacktestRun | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [cancelModalOpen, setCancelModalOpen] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<TaskFilter>('all');
+  const [selected, setSelected] = useState<number | null>(null);
+  const [logsFor, setLogsFor] = useState<number | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
   const [visibilityInitialized, setVisibilityInitialized] = useState(false);
 
-  const beginRefresh = useLatestRequest();
+  const load = useCallback(() => controllerApi.getBacktest(runId ?? ''), [runId]);
+  const inProgress = useCallback((r: BacktestRun) =>
+    isRunActive(r.status) || (r.jobs ?? []).some(j => !isTaskFinished(j.status)), []);
+  const { data: run, loading, error, failing, lastUpdated, live, refresh } =
+    usePolledLoad(load, inProgress, POLL_INTERVAL_MS, 'Failed to load backtest');
 
-  const refresh = useCallback(async (showLoading = true) => {
-    if (!runId) return;
-    const isCurrent = beginRefresh();
-    if (showLoading) setLoading(true);
-    try {
-      const data = await controllerApi.getBacktest(runId);
-      if (!isCurrent()) return;
-      setRun(data as BacktestRun);
-      setLoadError(null);
-      setLastUpdated(new Date());
-    } catch (e) {
-      if (!isCurrent()) return;
-      setLoadError(errorMessage(e, 'Failed to load backtest'));
-    } finally {
-      // Not gated on showLoading: a superseded load skips this, so the newest must clear a spinner it didn't start.
-      if (isCurrent()) setLoading(false);
-    }
-  }, [runId, beginRefresh]);
+  const jobs = useMemo(() => run?.jobs ?? [], [run]);
+  const shown = useMemo(() => jobs.filter(j => taskMatches(filter, j.status)), [jobs, filter]);
+  const running = jobs.filter(j => j.status === 'RUNNING').length;
+  const logsJob = logsFor === null ? null : jobs.find(j => j.arrayIndex === logsFor) ?? null;
 
-  useEffect(() => { refresh(); }, [refresh]);
+  const loadLogs = useMemo(
+    () => (runId && logsFor !== null
+      ? (before?: string) => controllerApi.getBacktestJobLogs(runId, logsFor, { before })
+      : null),
+    [runId, logsFor],
+  );
 
-  const inProgress = run !== null
-    && (CANCELLABLE.has(run.status) || (run.jobs ?? []).some((j) => !TERMINAL_JOB_STATUSES.has(j.status)));
-  useEffect(() => {
-    if (!inProgress) return;
-    const interval = setInterval(() => refresh(false), POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [inProgress, refresh]);
-
-  const handleCancel = async () => {
-    if (!runId) return;
-    setCancelling(true);
-    setCancelError(null);
-    try {
-      await controllerApi.cancelBacktest(runId);
-      setCancelModalOpen(false);
-      refresh();
-    } catch (e) {
-      setCancelError(errorMessage(e, 'Failed to cancel backtest'));
-    } finally {
-      setCancelling(false);
-    }
-  };
-
-  const jobs = run?.jobs ?? [];
+  const openLogs = useCallback((index: number) => {
+    setSelected(index);
+    setLogsFor(index);
+  }, []);
 
   const hasScenarios = (run?.scenarios?.length ?? 0) > 0;
 
@@ -189,18 +131,12 @@ function BacktestDetail() {
   const chartData = useMemo(() =>
     jobs
       .filter((j) => j.finalPnl !== undefined)
-      .map((j) => {
-        const paramLabel = Object.values(j.configParams ?? {}).join(', ');
-        const label = j.scenario
-          ? (paramLabel ? `${j.scenario} / ${paramLabel}` : j.scenario)
-          : (paramLabel || `job ${j.arrayIndex}`);
-        return {
-          label,
-          pnl: j.finalPnl ?? 0,
-          positive: (j.finalPnl ?? 0) >= 0,
-          scenario: j.scenario ?? '',
-        };
-      }),
+      .map((j) => ({
+        label: jobLabel(j) || `job ${j.arrayIndex}`,
+        pnl: j.finalPnl ?? 0,
+        positive: (j.finalPnl ?? 0) >= 0,
+        scenario: j.scenario ?? '',
+      })),
     [jobs],
   );
 
@@ -244,9 +180,7 @@ function BacktestDetail() {
       header: 'Status',
       size: 110,
       Cell: ({ row }: { row: MRT_Row<BacktestJob> }) => (
-        <Badge color={JOB_STATUS_COLORS[row.original.status]} variant="light" size="sm">
-          {row.original.status}
-        </Badge>
+        <TaskStatusBadge status={row.original.status} reason={row.original.statusReason} />
       ),
     },
     ...(hasScenarios ? [{
@@ -294,54 +228,35 @@ function BacktestDetail() {
     },
     ...metricColumns,
     {
-      id: 'report',
-      header: 'Report',
-      size: 80,
-      enableSorting: false,
-      Cell: ({ row }: { row: MRT_Row<BacktestJob> }) =>
-        row.original.reportUrl
-          ? <Anchor href={row.original.reportUrl} target="_blank" size="sm">Open</Anchor>
-          : <Text c="dimmed" size="sm">—</Text>,
-    },
-    {
-      id: 'explore',
-      header: 'Explore',
+      id: 'duration',
+      header: 'Duration',
       size: 100,
-      enableSorting: false,
-      Cell: ({ row }: { row: MRT_Row<BacktestJob> }) => {
-        if (row.original.status !== 'SUCCEEDED') return <Text c="dimmed" size="sm">—</Text>;
-        const cmd = `gnomepy explore --run-id ${runId} --job ${row.original.arrayIndex}`;
-        return (
-          <CopyButton value={cmd} timeout={2000}>
-            {({ copied, copy }) => (
-              <Tooltip label={copied ? 'Copied!' : cmd} withArrow position="left" multiline maw={420}>
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  color={copied ? 'teal' : 'blue'}
-                  leftSection={copied ? <IconCheck size={12} /> : <IconCopy size={12} />}
-                  onClick={copy}
-                  px={6}
-                >
-                  {copied ? 'Copied' : 'Copy'}
-                </Button>
-              </Tooltip>
-            )}
-          </CopyButton>
-        );
-      },
+      accessorFn: j => taskElapsedMs(j) ?? -1,
+      Cell: ({ row }: { row: MRT_Row<BacktestJob> }) => formatDuration(taskElapsedMs(row.original)),
     },
     {
-      id: 'logs',
-      header: 'Logs',
-      size: 70,
+      id: 'actions',
+      header: '',
+      size: 150,
       enableSorting: false,
-      Cell: ({ row }: { row: MRT_Row<BacktestJob> }) =>
-        row.original.logUrl
-          ? <Anchor href={row.original.logUrl} target="_blank" size="sm">Open</Anchor>
-          : <Text c="dimmed" size="sm">—</Text>,
+      enableHiding: false,
+      Cell: ({ row }: { row: MRT_Row<BacktestJob> }) => (
+        <Group gap={4} wrap="nowrap">
+          <Tooltip label="Logs" withArrow>
+            <ActionIcon size="sm" variant="subtle" onClick={e => { e.stopPropagation(); openLogs(row.original.arrayIndex); }}>
+              <IconFileText size={16} />
+            </ActionIcon>
+          </Tooltip>
+          {row.original.reportUrl && (
+            <Anchor href={row.original.reportUrl} target="_blank" size="sm" onClick={e => e.stopPropagation()}>Report</Anchor>
+          )}
+          {row.original.status === 'SUCCEEDED' && (
+            <CopyIcon value={`gnomepy explore --run-id ${runId} --job ${row.original.arrayIndex}`} label="Copy explore command" />
+          )}
+        </Group>
+      ),
     },
-  ], [metricColumns, hasScenarios]);
+  ], [metricColumns, hasScenarios, openLogs, runId]);
 
   useEffect(() => {
     if (!visibilityInitialized && summaryKeys.length > 0) {
@@ -356,130 +271,140 @@ function BacktestDetail() {
     }
   }, [summaryKeys, visibilityInitialized]);
 
-  const awaitingRun = !run && !loadError;
+  const awaitingRun = !run && !error;
 
   const table = useMantineReactTable({
     columns,
-    data: jobs,
-    state: { isLoading: loading || awaitingRun, columnVisibility },
+    data: shown,
+    getRowId: j => String(j.arrayIndex),
+    state: { isLoading: awaitingRun, columnVisibility },
     onColumnVisibilityChange: setColumnVisibility,
     enableColumnFilters: false,
     enableSorting: true,
-    enablePagination: jobs.length > 25,
-    enableBottomToolbar: jobs.length > 25,
+    enablePagination: shown.length > 25,
+    enableBottomToolbar: shown.length > 25,
     enableTopToolbar: true,
     enableHiding: true,
+    enableExpandAll: false,
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
+    mantineTableBodyRowProps: ({ row }) => ({
+      onClick: () => row.toggleExpanded(),
+      style: {
+        cursor: 'pointer',
+        outline: row.original.arrayIndex === selected ? '1px solid var(--mantine-color-blue-6)' : undefined,
+      },
+    }),
     initialState: { sorting: [{ id: 'summary_finalPnl', desc: true }], density: 'xs' },
+    renderDetailPanel: ({ row }: { row: MRT_Row<BacktestJob> }) => runId && (
+      <TaskDetailPanel
+        task={{ ...row.original, elapsedMs: taskElapsedMs(row.original), hasLogs: !!row.original.logUrl }}
+        loadTail={() => controllerApi.getBacktestJobLogs(runId, row.original.arrayIndex, { limit: TAIL_LINES })}
+        onOpenLogs={() => openLogs(row.original.arrayIndex)}
+      >
+        {row.original.warnings && row.original.warnings.length > 0 && (
+          <Stack gap={2}>
+            <Text size="xs" c="dimmed" tt="uppercase" fw={600}>Warnings</Text>
+            {row.original.warnings.map((w, i) => <Text key={i} size="xs">{w}</Text>)}
+          </Stack>
+        )}
+      </TaskDetailPanel>
+    ),
   });
 
   return (
     <Container size="xl" py="xl">
-      <Group mb="md">
-        <Tooltip label="Back to list" position="right" withArrow openDelay={500}>
-          <ActionIcon variant="subtle" onClick={() => navigate('/research/backtests')}>
-            <IconArrowLeft size={18} />
-          </ActionIcon>
-        </Tooltip>
-        <Title order={2}>Backtest Detail</Title>
-        <Group ml="auto">
-          {inProgress && (
-            <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={loadError !== null} />
-          )}
-          {run && CANCELLABLE.has(run.status) && (
-            <Button
-              size="sm"
-              color="red"
-              variant="light"
-              leftSection={<IconX size={14} />}
-              onClick={() => { setCancelError(null); setCancelModalOpen(true); }}
-            >
-              Cancel
-            </Button>
-          )}
-          <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
-              <IconRefresh size={20} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
-      </Group>
+      <PageHeader
+        onBack={() => navigate('/research/backtests')}
+        title={run?.strategy ?? 'Backtest'}
+        badges={run && <RunStatusBadge status={run.status} />}
+        actions={(
+          <>
+            {live && <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={failing} />}
+            {run && isRunActive(run.status) && (
+              <Button size="sm" color="red" variant="light" leftSection={<IconX size={14} />} onClick={() => setCancelOpen(true)}>
+                Cancel
+              </Button>
+            )}
+            <Tooltip label="Refresh" withArrow openDelay={500}>
+              <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
+                <IconRefresh size={20} />
+              </ActionIcon>
+            </Tooltip>
+          </>
+        )}
+        meta={run ? [
+          <Group gap={4} key="id"><Text span ff="monospace" size="sm">{run.runId}</Text><CopyIcon value={run.runId} /></Group>,
+          run.submittedBy,
+          run.submittedAt && <span key="at">submitted <ReactTimeAgo date={new Date(run.submittedAt)} timeStyle="round" /></span>,
+          run.startedAt && `${isRunActive(run.status) ? 'running' : 'took'} ${formatDuration(runElapsedMs(run))}`,
+        ] : []}
+      />
 
-      {loadError && (
-        <Alert color="red" title="Error" mb="md">
-          {loadError}
-        </Alert>
-      )}
+      {error && <Alert color="red" title="Error loading backtest" my="md">{error}</Alert>}
 
       {awaitingRun && <RunInfoSkeleton />}
 
       {run && (
-        <Card withBorder mb="md" p="md">
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
-            <Stack gap={4}>
-              <InfoRow label="Run ID">
-                <span style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{run.runId}</span>
-              </InfoRow>
-              <InfoRow label="Status">
-                <Badge color={RUN_STATUS_COLORS[run.status]} variant="light">{run.status}</Badge>
-              </InfoRow>
-              <InfoRow label="Strategy">{run.strategy}</InfoRow>
-              <InfoRow label="Commit">{run.researchCommit ?? 'main'}</InfoRow>
-            </Stack>
-            <Stack gap={4}>
-              <InfoRow label="Jobs">{run.completedCount}/{run.jobCount} completed, {run.failedCount} failed</InfoRow>
-              <InfoRow label="Submitted by">{run.submittedBy}</InfoRow>
-              <InfoRow label="Submitted">
-                {run.submittedAt ? <ReactTimeAgo date={new Date(run.submittedAt)} timeStyle="round" /> : '—'}
-              </InfoRow>
-            </Stack>
-          </SimpleGrid>
-          {run.scenarios && run.scenarios.length > 0 && (
-            <Group gap="xs" mt="xs" wrap="nowrap">
-              <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>Scenarios</Text>
-              <Group gap={4}>
-                {run.scenarios.map((name) => (
-                  <Badge key={name} variant="light" size="sm" color="blue">{name}</Badge>
-                ))}
-              </Group>
+        <Card withBorder my="md" p="md">
+          <Stack gap="sm">
+            <Group gap="sm" wrap="nowrap">
+              <div style={{ flex: 1 }}>
+                <RunProgress counts={{ total: run.jobCount, succeeded: run.completedCount, failed: run.failedCount, running }} />
+              </div>
+              <Text size="sm" c="dimmed" style={{ flexShrink: 0 }}>
+                {run.completedCount}/{run.jobCount} succeeded
+                {run.failedCount > 0 && <Text span c="red" size="sm"> · {run.failedCount} failed</Text>}
+              </Text>
             </Group>
-          )}
-          {run.sweepParams && Object.keys(run.sweepParams).length > 0 && (
-            <Stack gap={4} mt="xs">
-              {Object.entries(run.sweepParams).map(([param, values]) => (
-                <Group key={param} gap="xs" wrap="nowrap">
-                  <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>{param}</Text>
-                  <Group gap={4}>
-                    {values.map((v) => (
-                      <Badge key={v} variant="outline" size="sm" color="gray">{v}</Badge>
-                    ))}
-                  </Group>
-                </Group>
-              ))}
-            </Stack>
-          )}
-          {EXPLORABLE.has(run.status) && (
-            <>
-              <Divider mt="sm" mb="xs" />
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
               <Stack gap={4}>
-                <Text size="xs" c="dimmed" fw={500} tt="uppercase" style={{ letterSpacing: '0.05em' }}>
-                  Explore CLI
-                </Text>
-                <CliCommand
-                  command={
-                    run.jobCount === 1
-                      ? `gnomepy explore --run-id ${run.runId}`
-                      : `gnomepy explore --run-id ${run.runId} --job 0`
-                  }
-                />
-                {run.jobCount > 1 && (
-                  <Text size="xs" c="dimmed">
-                    Use <Code style={{ fontSize: '0.7rem' }}>--job N</Code> for a specific sweep job — copy per-job commands from the table below.
-                  </Text>
-                )}
+                <InfoRow label="Strategy"><Text span ff="monospace" size="sm">{run.strategy}</Text></InfoRow>
+                <InfoRow label="Commit">
+                  <Text span ff="monospace" size="xs">{run.researchCommit ?? 'main'}</Text>
+                </InfoRow>
               </Stack>
-            </>
-          )}
+              <Stack gap={4}>
+                {hasScenarios && (
+                  <InfoRow label="Scenarios">
+                    <Group gap={4}>
+                      {run.scenarios!.map((name) => (
+                        <Badge key={name} variant="light" size="sm" color="blue">{name}</Badge>
+                      ))}
+                    </Group>
+                  </InfoRow>
+                )}
+                {Object.entries(run.sweepParams ?? {}).map(([param, values]) => (
+                  <InfoRow key={param} label={param}>
+                    <Group gap={4}>
+                      {values.map((v) => (
+                        <Badge key={v} variant="outline" size="sm" color="gray">{v}</Badge>
+                      ))}
+                    </Group>
+                  </InfoRow>
+                ))}
+              </Stack>
+            </SimpleGrid>
+            {EXPLORABLE.has(run.status) && (
+              <>
+                <Divider />
+                <InfoRow label="Explore">
+                  <Stack gap={4}>
+                    <CopyableCode
+                      value={run.jobCount === 1
+                        ? `gnomepy explore --run-id ${run.runId}`
+                        : `gnomepy explore --run-id ${run.runId} --job 0`}
+                    />
+                    {run.jobCount > 1 && (
+                      <Text size="xs" c="dimmed">
+                        Use <Code style={{ fontSize: '0.7rem' }}>--job N</Code> for a specific sweep job — copy per-job
+                        commands from the table below.
+                      </Text>
+                    )}
+                  </Stack>
+                </InfoRow>
+              </>
+            )}
+          </Stack>
         </Card>
       )}
 
@@ -494,6 +419,24 @@ function BacktestDetail() {
             </Accordion.Panel>
           </Accordion.Item>
         </Accordion>
+      )}
+
+      {run && run.failedCount > 0 && filter !== 'failed' && (
+        <Alert color="red" variant="light" mb="md"
+               title={`${run.failedCount} job${run.failedCount === 1 ? '' : 's'} failed`}>
+          <Button size="compact-xs" variant="light" color="red" onClick={() => setFilter('failed')}>Show failed jobs</Button>
+        </Alert>
+      )}
+
+      {jobs.length > 1 && (
+        <Card withBorder mb="md" p="sm">
+          <Text size="xs" c="dimmed" mb={6}>Jobs — click one for its logs</Text>
+          <TaskGrid
+            tasks={jobs.map(j => ({ index: j.arrayIndex, status: j.status, label: jobLabel(j) }))}
+            selected={selected}
+            onSelect={openLogs}
+          />
+        </Card>
       )}
 
       {chartData.length > 0 && (
@@ -532,23 +475,33 @@ function BacktestDetail() {
         </Card>
       )}
 
+      <SegmentedControl
+        size="xs"
+        mb="xs"
+        value={filter}
+        onChange={v => setFilter(v as TaskFilter)}
+        data={FILTERS.map(f => ({ value: f.value, label: `${f.label} ${jobs.filter(j => taskMatches(f.value, j.status)).length}` }))}
+      />
       <MantineReactTable table={table} />
 
-      <Modal
-        opened={cancelModalOpen}
-        onClose={() => setCancelModalOpen(false)}
-        title="Cancel backtest?"
-        size="sm"
-      >
-        <Stack>
-          <Text size="sm">This will terminate all running Batch jobs for this run.</Text>
-          {cancelError && <Text c="red" size="sm">{cancelError}</Text>}
-          <Group justify="flex-end">
-            <Button variant="outline" onClick={() => setCancelModalOpen(false)}>Back</Button>
-            <Button color="red" loading={cancelling} onClick={handleCancel}>Cancel Run</Button>
-          </Group>
-        </Stack>
-      </Modal>
+      <RunLogsDrawer
+        opened={logsJob !== null}
+        title={logsJob ? `Job ${logsJob.arrayIndex}${jobLabel(logsJob) ? ` · ${jobLabel(logsJob)}` : ''}` : ''}
+        active={logsJob ? !isTaskFinished(logsJob.status) : false}
+        load={loadLogs}
+        consoleUrl={logsJob?.logUrl}
+        onClose={() => setLogsFor(null)}
+      />
+      <CancelRunModal
+        runId={runId ?? null}
+        opened={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        onConfirm={async () => {
+          if (!runId) return;
+          await controllerApi.cancelBacktest(runId);
+          await refresh(true);
+        }}
+      />
     </Container>
   );
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ActionIcon, Anchor, Badge, Group, Switch, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Anchor, Badge, Group, SegmentedControl, Text, Tooltip } from '@mantine/core';
 import { IconAdjustments, IconAlertTriangle } from '@tabler/icons-react';
 import { MantineReactTable, MRT_ColumnDef, useMantineReactTable } from 'mantine-react-table';
 import { Link, useNavigate } from 'react-router-dom';
@@ -103,16 +103,19 @@ interface PositionsTableProps {
 
 export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTableProps) {
   const navigate = useNavigate();
-  const [showFlat, setShowFlat] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'open' | 'flat'>('all');
   const session = rows.length > 0 && isSessionRow(rows[0]);
   const ended = session && rows.some(r => isSessionRow(r) && r.afterSession !== null);
   // A strategy's live rows are one per listing and venue account; paper ones belong to no account.
   const byAccount = rows.some(r => !isSessionRow(r) && r.accountLabel !== null);
-  const shown = useMemo(
-    () => (showFlat ? rows : rows.filter(r => BigInt(r.netQuantity) !== 0n || r.needsReview)),
-    [rows, showFlat],
-  );
-  const flat = rows.length - rows.filter(r => BigInt(r.netQuantity) !== 0n || r.needsReview).length;
+  const isOpen = (r: Row) => BigInt(r.netQuantity) !== 0n || r.needsReview;
+  // Open positions first, so showing flat ones too doesn't bury them.
+  const shown = useMemo(() => {
+    const open = rows.filter(isOpen);
+    const flat = rows.filter(r => !isOpen(r));
+    return filter === 'open' ? open : filter === 'flat' ? flat : [...open, ...flat];
+  }, [rows, filter]);
+  const openCount = rows.filter(isOpen).length;
 
   const columns = useMemo<MRT_ColumnDef<Row>[]>(() => {
     const money = (key: keyof Row, header: string, pnl = true): MRT_ColumnDef<Row> => ({
@@ -123,6 +126,7 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
     const cols: MRT_ColumnDef<Row>[] = [
       {
         id: 'listing', header: 'Listing', size: 150,
+        accessorFn: row => row.symbol ?? String(row.listingId),
         Cell: ({ row }) => (
           <Group gap={6} wrap="nowrap">
             <ListingLabel listingId={row.original.listingId} symbol={row.original.symbol} />
@@ -136,6 +140,7 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
       },
       ...(byAccount ? [{
         id: 'account', header: 'Account', size: 130,
+        accessorFn: row => (row as StrategyListingPnl).accountLabel ?? '',
         Cell: ({ row }) => {
           const label = (row.original as StrategyListingPnl).accountLabel;
           return label ? <Text span size="sm" ff="monospace">{label}</Text> : <Text span size="sm" c="dimmed">—</Text>;
@@ -206,7 +211,16 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
     enableRowActions: !!onAdjust,
     positionActionsColumn: 'last',
     renderTopToolbarCustomActions: () => (
-      <Switch size="xs" label={`Show flat listings${flat ? ` (${flat})` : ''}`} checked={showFlat} onChange={e => setShowFlat(e.currentTarget.checked)} />
+      <SegmentedControl
+        size="xs"
+        value={filter}
+        onChange={v => setFilter(v as typeof filter)}
+        data={[
+          { value: 'all', label: `All (${rows.length})` },
+          { value: 'open', label: `Open (${openCount})` },
+          { value: 'flat', label: `Flat (${rows.length - openCount})` },
+        ]}
+      />
     ),
     renderRowActions: ({ row }) => (
       <Tooltip label="Adjust position" withArrow openDelay={400}>
@@ -219,7 +233,7 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     mantineTableBodyRowProps: ({ row }) => (rowHref ? navigateRowProps(navigate, rowHref(row.original)) : {}),
     renderEmptyRowsFallback: () => (
-      <Text c="dimmed" size="sm" p="md">{rows.length === 0 ? 'No positions in this mode.' : 'Everything is flat.'}</Text>
+      <Text c="dimmed" size="sm" p="md">{rows.length === 0 ? 'No positions in this mode.' : filter === 'open' ? 'Everything is flat.' : 'No listings match.'}</Text>
     ),
   });
 

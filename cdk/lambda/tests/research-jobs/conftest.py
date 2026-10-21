@@ -8,6 +8,7 @@ sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
 FUNCTIONS = os.path.join(HERE, "..", "..", "functions", "research-jobs")
 sys.path.insert(0, os.path.join(HERE, "..", "..", "layers", "common", "python"))
+sys.path.insert(0, os.path.join(HERE, ".."))
 
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 os.environ.update({

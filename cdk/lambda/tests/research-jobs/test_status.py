@@ -57,6 +57,7 @@ def test_a_run_goes_running_then_completes_as_its_tasks_finish(table):
     t = table(rows(["SUBMITTED", "SUBMITTED"]))
     status.handler(batch_event("RUNNING", 0, container={"logStreamName": "gnome-research-job/default/abc"}), None)
     assert t.items[("r1", "META")]["status"] == "RUNNING"
+    assert "started_at" in t.items[("r1", "META")]
     assert t.items[("r1", "TASK#0000")]["log_stream_name"] == "gnome-research-job/default/abc"
 
     status.handler(batch_event("SUCCEEDED", 0, container={"exitCode": 0}), None)
@@ -66,6 +67,7 @@ def test_a_run_goes_running_then_completes_as_its_tasks_finish(table):
     status.handler(batch_event("FAILED", 1, container={"exitCode": 1}, statusReason="Essential container exited"), None)
     meta = t.items[("r1", "META")]
     assert (meta["status"], meta["succeeded_count"], meta["failed_count"]) == ("PARTIALLY_FAILED", 1, 1)
+    assert "finished_at" in meta
     assert t.items[("r1", "TASK#0001")]["status_reason"] == "Essential container exited"
 
 

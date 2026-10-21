@@ -7,7 +7,7 @@ export type BacktestStatus =
   | 'FAILED'
   | 'CANCELLED';
 
-export type JobStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+export type JobStatus = 'SUBMITTED' | 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
 
 export interface BacktestJob {
   runId: string;
@@ -24,6 +24,12 @@ export interface BacktestJob {
   reportUrl?: string;
   logUrl?: string;
   batchJobId?: string;
+  // Batch's epoch milliseconds.
+  startedAt?: number;
+  stoppedAt?: number;
+  attemptCount?: number;
+  exitCode?: number;
+  statusReason?: string;
 }
 
 export interface BacktestRun {
@@ -32,6 +38,8 @@ export interface BacktestRun {
   status: BacktestStatus;
   submittedAt: string;
   submittedBy: string;
+  startedAt?: string;
+  finishedAt?: string;
   strategy: string;
   jobCount: number;
   completedCount: number;

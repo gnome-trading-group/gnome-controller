@@ -27,6 +27,7 @@ export const keys = {
   sparklines: (mode: Mode) => ['sparklines', mode] as const,
   session: (id: string) => ['session', id] as const,
   strategySessions: (strategyId: number) => ['strategySessions', strategyId] as const,
+  tradedSessions: (scope: TradedScope) => ['tradedSessions', scope] as const,
   policies: ['riskPolicies'] as const,
   sessionSummary: (id: string) => ['pnlSummary', 'session', id] as const,
   strategySummary: (id: number, mode: Mode, tz: string) => ['pnlSummary', 'strategy', id, mode, tz] as const,
@@ -216,6 +217,17 @@ export function useStrategySessions(strategyId: number) {
   return useQuery({
     queryKey: keys.strategySessions(strategyId),
     queryFn: () => registryApi.listSessions({ strategyId }),
+    refetchInterval: POLL.sessions,
+  });
+}
+
+export type TradedScope = { listingId: number } | { eventId: number };
+
+// Every session that has traded the listing, or any of the event's listings, whether or not it still runs.
+export function useTradedSessions(scope: TradedScope) {
+  return useQuery({
+    queryKey: keys.tradedSessions(scope),
+    queryFn: () => registryApi.listSessions(scope),
     refetchInterval: POLL.sessions,
   });
 }

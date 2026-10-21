@@ -27,7 +27,7 @@ import { errorMessage } from '../../../utils/kill-switch';
 import { useLatestRequest } from '../../../hooks/useLatestRequest';
 import { LastUpdated } from '../../../components/LastUpdated';
 import RunPipelineModal from './RunPipelineModal';
-import RunLogsDrawer from './RunLogsDrawer';
+import RunLogsDrawer from '../../../components/RunLogsDrawer';
 import ScheduleConfirmModal from './ScheduleConfirmModal';
 import { CodeVersion, RunStatusBadge } from './RunBits';
 import { duration, isActive, nextScheduled, utcTime } from './runs';
@@ -94,6 +94,12 @@ function PipelineDetail() {
 
   // The drawer follows the latest copy of its run, so its status (and whether to keep polling) stays current.
   const logsRun = logsFor ? runs.find(r => r.runId === logsFor.runId) ?? logsFor : null;
+  const logsPipeline = logsRun?.pipelineName;
+  const logsRunId = logsRun?.runId;
+  const loadLogs = useMemo(
+    () => (logsPipeline && logsRunId ? (before?: string) => controllerApi.getRunLogs(logsPipeline, logsRunId, before) : null),
+    [logsPipeline, logsRunId],
+  );
 
   const switchSchedule = async (schedule: PipelineSchedule) => {
     if (!pipelineName) return;
@@ -318,7 +324,8 @@ function PipelineDetail() {
 
       <RunPipelineModal pipeline={pipeline} opened={runModal} onClose={() => setRunModal(false)}
                         onStarted={runId => { navigate(`/data/pipelines/${pipelineName}?run=${runId}`); refresh(); }} />
-      <RunLogsDrawer run={logsRun} onClose={() => setLogsFor(null)} />
+      <RunLogsDrawer opened={logsRun !== null} title={logsRun ? `${logsRun.pipelineName} · ${logsRun.runId}` : ''}
+                     active={logsRun ? isActive(logsRun) : false} load={loadLogs} onClose={() => setLogsFor(null)} />
       <ScheduleConfirmModal pipelineName={pipelineName ?? ''} schedule={confirmingSchedule}
                             onClose={() => setConfirmingSchedule(null)} onConfirm={switchSchedule} />
     </Container>

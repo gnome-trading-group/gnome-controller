@@ -5,6 +5,7 @@ import {
   Alert,
   Anchor,
   Badge,
+  Box,
   Breadcrumbs,
   Button,
   Card,
@@ -42,7 +43,7 @@ import {
   ReferenceArea,
   Legend,
 } from 'recharts';
-import { ContractRelationship, ContractRelationshipType, DenormalizedListing, Event, EventContract } from '../../types';
+import { ContractRelationship, ContractRelationshipType, DenormalizedListing, Event, EventContract, isActiveSession } from '../../types';
 import { SETTLEMENT_COLORS, SettlementBadge } from '../../components/trading/SettlementBadge';
 import { settlementState } from '../../utils/format';
 import { BboDataPoint } from '../../types/bbo-timeline';
@@ -53,6 +54,9 @@ import { errorMessage } from '../../utils/kill-switch';
 import RelationshipGraph from './RelationshipGraph';
 import BulkCreateRelationshipModal from './BulkCreateRelationshipModal';
 import { usePageTitleLabels } from '../../context/PageTitleContext';
+import { useTradedSessions } from '../../query/hooks';
+import { RunningSessionsBadge, TradedSessionsPanel } from '../../components/TradedSessions';
+import { sessionListingIds } from '../../utils/session-config';
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
@@ -225,6 +229,25 @@ function EventDetail() {
 
   const settledCount = contracts.filter(c => c.settlementPrice !== null && c.settlementPrice !== undefined).length;
 
+  const tradedSessions = useTradedSessions({ eventId: id });
+  const listingLabels = useMemo(() => Object.fromEntries(contracts.flatMap(c =>
+    (listingsBySecurityId[c.securityId] ?? []).map(l => [l.listingId, `${c.outcomeLabel} @ ${l.exchangeName}`]),
+  )) as Record<number, string>, [contracts, listingsBySecurityId]);
+  const sessionsBySecurityId = useMemo(() => {
+    const securityOf = new Map(Object.entries(listingsBySecurityId)
+      .flatMap(([securityId, listings]) => listings.map(l => [l.listingId, Number(securityId)] as const)));
+    const bySecurity: Record<number, { running: number; total: number }> = {};
+    for (const session of tradedSessions.data ?? []) {
+      const securities = new Set(sessionListingIds(session).map(l => securityOf.get(l)).filter(s => s !== undefined));
+      for (const securityId of securities) {
+        const counts = (bySecurity[securityId] ??= { running: 0, total: 0 });
+        counts.total += 1;
+        if (isActiveSession(session.status)) counts.running += 1;
+      }
+    }
+    return bySecurity;
+  }, [tradedSessions.data, listingsBySecurityId]);
+
   const contractColumns = useMemo<MRT_ColumnDef<EnrichedContract>[]>(() => [
     {
       accessorKey: 'securityId',
@@ -255,6 +278,19 @@ function EventDetail() {
       ),
     },
     {
+      id: 'sessions',
+      header: 'Sessions',
+      size: 110,
+      enableSorting: false,
+      Cell: ({ row }) => {
+        const counts = sessionsBySecurityId[row.original.securityId];
+        if (!counts) return <Text span size="sm" c="dimmed">—</Text>;
+        return counts.running > 0
+          ? <Badge color="green" variant="light" size="sm">{counts.running} running</Badge>
+          : <Text span size="sm" c="dimmed">{counts.total} past</Text>;
+      },
+    },
+    {
       accessorKey: 'eventContractId',
       header: 'Contract ID',
       size: 130,
@@ -281,7 +317,7 @@ function EventDetail() {
           <ReactTimeAgo date={new Date(row.original.dateCreated)} timeStyle="round" />
         ) : '-',
     },
-  ], [event?.exchangeId]);
+  ], [event?.exchangeId, sessionsBySecurityId]);
 
   const requestDelete = (relationship: ContractRelationship) => {
     setDeleteError(null);
@@ -582,6 +618,7 @@ function EventDetail() {
           <Title order={2}>{event.title}</Title>
           {event.category && <Text c="dimmed">{event.category}</Text>}
         </div>
+        <RunningSessionsBadge sessions={tradedSessions.data} />
         <Badge color={event.resolved ? 'green' : 'blue'} variant="light" size="lg">
           {event.resolved ? 'Resolved' : 'Active'}
         </Badge>
@@ -673,6 +710,15 @@ function EventDetail() {
         {listingsError && <Alert color="red" title="Error" mb="sm">{listingsError}</Alert>}
         <MantineReactTable table={contractTable} />
       </Paper>
+
+      <Box mb="md">
+        <TradedSessionsPanel
+          sessions={tradedSessions.data}
+          isLoading={tradedSessions.isLoading}
+          error={tradedSessions.error}
+          listingLabels={listingLabels}
+        />
+      </Box>
 
       <Paper withBorder p="md" mb="md">
         <Group justify="space-between" mb="sm">

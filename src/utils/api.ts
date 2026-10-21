@@ -6,6 +6,7 @@ import {
 import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
+import { BacktestRun } from '../types/backtests';
 import { ArtifactDetail, ArtifactSummary, Dataset, DatasetDetail } from '../types/data';
 import { PipelineDetailResponse, PipelineListResponse, PipelineRun, RunLogsResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
@@ -453,11 +454,14 @@ export const registryApi = {
       queryParams,
     }).then(r => r.count);
   },
-  listSessions: (params?: { sessionId?: string; strategyId?: number; status?: string }) => {
+  // listingId and eventId find the sessions that traded that listing, or any listing of that event, at any time.
+  listSessions: (params?: { sessionId?: string; strategyId?: number; status?: string; listingId?: number; eventId?: number }) => {
     const queryParams: Record<string, string | number | boolean> = {};
     if (params?.sessionId) queryParams.sessionId = params.sessionId;
     if (params?.strategyId !== undefined) queryParams.strategyId = params.strategyId;
     if (params?.status) queryParams.status = params.status;
+    if (params?.listingId !== undefined) queryParams.listingId = params.listingId;
+    if (params?.eventId !== undefined) queryParams.eventId = params.eventId;
     return sendApiRequest<StrategySession[]>('/strategy-sessions', 'GET', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
@@ -1033,6 +1037,12 @@ export const registryApi = {
     }),
 }
 
+function logQuery(params?: { before?: string; limit?: number }): Record<string, string | number> | undefined {
+  const query: Record<string, string | number> = {};
+  if (params?.before) query.before = params.before;
+  if (params?.limit) query.limit = params.limit;
+  return Object.keys(query).length > 0 ? query : undefined;
+}
 
 export const controllerApi = {
   // One section of the System page; see types/system.
@@ -1058,7 +1068,7 @@ export const controllerApi = {
     const queryParams: Record<string, string | number | boolean> = {};
     if (params?.status) queryParams.status = params.status;
     if (params?.limit) queryParams.limit = params.limit;
-    return sendApiRequest<{ runs: any[]; count: number }>('/backtests', 'GET', {
+    return sendApiRequest<{ runs: BacktestRun[]; count: number }>('/backtests', 'GET', {
       apiUrl: CONTROLLER_API_URL,
       convertToCamelCase: true,
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
@@ -1066,10 +1076,14 @@ export const controllerApi = {
   },
   // Parameter and metric names are user-defined (e.g. spread_bps) and shown verbatim next to the run's YAML.
   getBacktest: (runId: string) =>
-    sendApiRequest<any>(`/backtests/${runId}`, 'GET', {
+    sendApiRequest<BacktestRun>(`/backtests/${runId}`, 'GET', {
       apiUrl: CONTROLLER_API_URL,
       convertToCamelCase: true,
       preserveKeys: new Set(['configParams', 'sweepParams', 'summary']),
+    }),
+  getBacktestJobLogs: (runId: string, index: number, params?: { before?: string; limit?: number }) =>
+    sendApiRequest<RunLogsResponse>(`/backtests/${runId}/jobs/${index}/logs`, 'GET', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, queryParams: logQuery(params),
     }),
   cancelBacktest: (runId: string) =>
     sendApiRequest<{ runId: string; status: string }>(`/backtests/${runId}`, 'DELETE', {
@@ -1093,6 +1107,10 @@ export const controllerApi = {
       apiUrl: CONTROLLER_API_URL,
       convertToCamelCase: true,
       preserveKeys: new Set(['inputs']),
+    }),
+  getResearchJobTaskLogs: (runId: string, index: number, params?: { before?: string; limit?: number }) =>
+    sendApiRequest<RunLogsResponse>(`/research-jobs/${runId}/tasks/${index}/logs`, 'GET', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, queryParams: logQuery(params),
     }),
   cancelResearchJob: (runId: string) =>
     sendApiRequest<{ runId: string; status: string }>(`/research-jobs/${runId}`, 'DELETE', {

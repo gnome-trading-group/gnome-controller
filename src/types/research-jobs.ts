@@ -29,6 +29,9 @@ export interface ResearchJob {
   status: ResearchJobStatus;
   submittedAt: string;
   submittedBy: string;
+  // When its first task started and when its last finished (ISO); absent on runs from before they were recorded.
+  startedAt?: string;
+  finishedAt?: string;
   module: string;
   researchCommit: string;
   researchRef?: string;

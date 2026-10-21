@@ -1,126 +1,77 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   ActionIcon,
   Alert,
   Anchor,
-  Badge,
   Button,
   Card,
-  Code,
   Container,
-  CopyButton,
   Group,
-  Modal,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Text,
-  Title,
   Tooltip,
 } from '@mantine/core';
-import { IconArrowLeft, IconCheck, IconCopy, IconRefresh, IconX } from '@tabler/icons-react';
+import { IconExternalLink, IconFileText, IconRefresh, IconX } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ResearchJob, ResearchJobStatus, ResearchTask, ResearchTaskStatus } from '../../../types/research-jobs';
+import { ResearchJob, ResearchTask } from '../../../types/research-jobs';
 import { controllerApi } from '../../../utils/api';
-import { errorMessage } from '../../../utils/kill-switch';
-import { useLatestRequest } from '../../../hooks/useLatestRequest';
+import { formatDuration } from '../../../utils/format';
 import { LastUpdated } from '../../../components/LastUpdated';
-import { RUN_STATUS_COLORS, TASK_STATUS_COLORS } from './status';
+import { PageHeader } from '../../../components/PageHeader';
+import RunLogsDrawer from '../../../components/RunLogsDrawer';
+import { CopyIcon, CopyableCode, InfoRow, RunProgress, RunStatusBadge, TaskStatusBadge } from '../../../components/batch/BatchBits';
+import { CancelRunModal } from '../../../components/batch/CancelRunModal';
+import { TAIL_LINES, TaskDetailPanel } from '../../../components/batch/TaskDetailPanel';
+import { TaskGrid } from '../../../components/batch/TaskGrid';
+import { usePolledLoad } from '../../../components/batch/usePolledLoad';
+import {
+  TaskFilter, isRunActive, isTaskFinished, runElapsedMs, taskElapsedMs, taskMatches,
+} from '../../../components/batch/status';
 
-const CANCELLABLE = new Set<ResearchJobStatus>(['SUBMITTED', 'RUNNING']);
-const TERMINAL_TASK_STATUSES = new Set<ResearchTaskStatus>(['SUCCEEDED', 'FAILED']);
 const POLL_INTERVAL_MS = 10000;
 
-function Copyable({ value }: { value: string }) {
-  return (
-    <Group gap={6} wrap="nowrap" align="center">
-      <Code style={{ fontFamily: 'monospace', fontSize: '0.72rem', padding: '3px 6px', wordBreak: 'break-all' }}>
-        {value}
-      </Code>
-      <CopyButton value={value} timeout={2000}>
-        {({ copied, copy }) => (
-          <Tooltip label={copied ? 'Copied!' : 'Copy'} withArrow position="right">
-            <ActionIcon size="sm" variant="subtle" color={copied ? 'teal' : 'gray'} onClick={copy} style={{ flexShrink: 0 }}>
-              {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
-            </ActionIcon>
-          </Tooltip>
-        )}
-      </CopyButton>
-    </Group>
-  );
-}
-
-function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Group gap="xs" wrap="nowrap" align="flex-start">
-      <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>{label}</Text>
-      <Text size="sm" component="div">{children}</Text>
-    </Group>
-  );
-}
-
-function duration(task: ResearchTask): string {
-  if (!task.startedAt) return '—';
-  const seconds = Math.round(((task.stoppedAt ?? Date.now()) - task.startedAt) / 1000);
-  return seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`;
-}
+const FILTERS: { value: TaskFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'running', label: 'Running' },
+  { value: 'waiting', label: 'Waiting' },
+  { value: 'succeeded', label: 'Succeeded' },
+];
 
 function ResearchJobDetail() {
   const { runId } = useParams<{ runId: string }>();
   const navigate = useNavigate();
-  const [run, setRun] = useState<ResearchJob | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [cancelModalOpen, setCancelModalOpen] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<TaskFilter>('all');
+  const [selected, setSelected] = useState<number | null>(null);
+  const [logsFor, setLogsFor] = useState<number | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
-  const beginRefresh = useLatestRequest();
+  const load = useCallback(() => controllerApi.getResearchJob(runId ?? ''), [runId]);
+  const inProgress = useCallback((run: ResearchJob) =>
+    isRunActive(run.status) || (run.tasks ?? []).some(t => !isTaskFinished(t.status)), []);
+  const { data: run, loading, error, failing, lastUpdated, live, refresh } =
+    usePolledLoad(load, inProgress, POLL_INTERVAL_MS, 'Failed to load research job');
 
-  const refresh = useCallback(async (showLoading = true) => {
-    if (!runId) return;
-    const isCurrent = beginRefresh();
-    if (showLoading) setLoading(true);
-    try {
-      const data = await controllerApi.getResearchJob(runId);
-      if (!isCurrent()) return;
-      setRun(data);
-      setLoadError(null);
-      setLastUpdated(new Date());
-    } catch (e) {
-      if (!isCurrent()) return;
-      setLoadError(errorMessage(e, 'Failed to load research job'));
-    } finally {
-      if (isCurrent()) setLoading(false);
-    }
-  }, [runId, beginRefresh]);
+  const tasks = useMemo(() => run?.tasks ?? [], [run]);
+  const shown = useMemo(() => tasks.filter(t => taskMatches(filter, t.status)), [tasks, filter]);
+  const running = tasks.filter(t => t.status === 'RUNNING').length;
+  const logsTask = logsFor === null ? null : tasks.find(t => t.arrayIndex === logsFor) ?? null;
 
-  useEffect(() => { refresh(); }, [refresh]);
+  const loadLogs = useMemo(
+    () => (runId && logsFor !== null
+      ? (before?: string) => controllerApi.getResearchJobTaskLogs(runId, logsFor, { before })
+      : null),
+    [runId, logsFor],
+  );
 
-  const inProgress = run !== null
-    && (CANCELLABLE.has(run.status) || (run.tasks ?? []).some((t) => !TERMINAL_TASK_STATUSES.has(t.status)));
-  useEffect(() => {
-    if (!inProgress) return;
-    const interval = setInterval(() => refresh(false), POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [inProgress, refresh]);
-
-  const handleCancel = async () => {
-    if (!runId) return;
-    setCancelling(true);
-    setCancelError(null);
-    try {
-      await controllerApi.cancelResearchJob(runId);
-      setCancelModalOpen(false);
-      refresh();
-    } catch (e) {
-      setCancelError(errorMessage(e, 'Failed to cancel research job'));
-    } finally {
-      setCancelling(false);
-    }
-  };
+  const openLogs = useCallback((index: number) => {
+    setSelected(index);
+    setLogsFor(index);
+  }, []);
 
   const columns = useMemo<MRT_ColumnDef<ResearchTask>[]>(() => [
     { accessorKey: 'arrayIndex', header: '#', size: 60 },
@@ -129,29 +80,23 @@ function ResearchJobDetail() {
       header: 'Status',
       size: 120,
       Cell: ({ row }: { row: MRT_Row<ResearchTask> }) => (
-        <Tooltip label={row.original.statusReason} disabled={!row.original.statusReason} withArrow multiline w={320}>
-          <Badge color={TASK_STATUS_COLORS[row.original.status]} variant="light">{row.original.status}</Badge>
-        </Tooltip>
+        <TaskStatusBadge status={row.original.status} reason={row.original.statusReason} />
       ),
     },
     {
-      accessorKey: 'args',
+      id: 'args',
       header: 'Args',
+      accessorFn: t => t.args.join(' '),
       Cell: ({ row }: { row: MRT_Row<ResearchTask> }) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '0.72rem' }}>{row.original.args.join(' ')}</span>
+        <Text ff="monospace" size="xs">{row.original.args.join(' ')}</Text>
       ),
     },
     {
       id: 'duration',
       header: 'Duration',
       size: 100,
-      accessorFn: (task) => duration(task),
-    },
-    {
-      accessorKey: 'attemptCount',
-      header: 'Attempts',
-      size: 90,
-      Cell: ({ row }: { row: MRT_Row<ResearchTask> }) => row.original.attemptCount ?? '—',
+      accessorFn: t => taskElapsedMs(t) ?? -1,
+      Cell: ({ row }: { row: MRT_Row<ResearchTask> }) => formatDuration(taskElapsedMs(row.original)),
     },
     {
       accessorKey: 'exitCode',
@@ -160,132 +105,178 @@ function ResearchJobDetail() {
       Cell: ({ row }: { row: MRT_Row<ResearchTask> }) => row.original.exitCode ?? '—',
     },
     {
-      id: 'links',
-      header: 'Links',
-      size: 170,
+      id: 'actions',
+      header: '',
+      size: 120,
+      enableSorting: false,
       Cell: ({ row }: { row: MRT_Row<ResearchTask> }) => (
-        <Group gap="xs" wrap="nowrap">
-          {row.original.logUrl && <Anchor href={row.original.logUrl} target="_blank" size="sm">Logs</Anchor>}
-          <Anchor href={row.original.s3ConsoleUrl} target="_blank" size="sm">Outputs</Anchor>
-          <CopyButton value={row.original.outputPrefix} timeout={2000}>
-            {({ copied, copy }) => (
-              <Tooltip label={copied ? 'Copied!' : row.original.outputPrefix} withArrow>
-                <ActionIcon size="sm" variant="subtle" color={copied ? 'teal' : 'gray'} onClick={copy}>
-                  {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
-                </ActionIcon>
-              </Tooltip>
-            )}
-          </CopyButton>
+        <Group gap={4} wrap="nowrap">
+          <Tooltip label="Logs" withArrow>
+            <ActionIcon size="sm" variant="subtle" onClick={e => { e.stopPropagation(); openLogs(row.original.arrayIndex); }}>
+              <IconFileText size={16} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Outputs in S3" withArrow>
+            <ActionIcon size="sm" variant="subtle" component="a" href={row.original.s3ConsoleUrl} target="_blank"
+                        onClick={e => e.stopPropagation()}>
+              <IconExternalLink size={16} />
+            </ActionIcon>
+          </Tooltip>
+          <CopyIcon value={row.original.outputPrefix} label={`Copy ${row.original.outputPrefix}`} />
         </Group>
       ),
     },
-  ], []);
+  ], [openLogs]);
 
   const table = useMantineReactTable({
     columns,
-    data: run?.tasks ?? [],
+    data: shown,
+    getRowId: t => String(t.arrayIndex),
     state: { isLoading: loading && run === null },
-    enableColumnFilters: true,
+    enableColumnFilters: false,
     enableSorting: true,
-    enablePagination: true,
-    enableBottomToolbar: true,
+    enablePagination: shown.length > 50,
+    enableBottomToolbar: shown.length > 50,
     enableTopToolbar: false,
+    enableExpandAll: false,
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
+    mantineTableBodyRowProps: ({ row }) => ({
+      onClick: () => row.toggleExpanded(),
+      style: {
+        cursor: 'pointer',
+        outline: row.original.arrayIndex === selected ? '1px solid var(--mantine-color-blue-6)' : undefined,
+      },
+    }),
     initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 50 } },
+    renderDetailPanel: ({ row }: { row: MRT_Row<ResearchTask> }) => runId && (
+      <TaskDetailPanel
+        task={{ ...row.original, elapsedMs: taskElapsedMs(row.original), hasLogs: !!row.original.logUrl }}
+        loadTail={() => controllerApi.getResearchJobTaskLogs(runId, row.original.arrayIndex, { limit: TAIL_LINES })}
+        onOpenLogs={() => openLogs(row.original.arrayIndex)}
+      />
+    ),
   });
 
   return (
     <Container size="xl" py="xl">
-      <Group mb="md">
-        <Tooltip label="Back to list" position="right" withArrow openDelay={500}>
-          <ActionIcon variant="subtle" onClick={() => navigate('/research/jobs')}>
-            <IconArrowLeft size={18} />
-          </ActionIcon>
-        </Tooltip>
-        <Title order={2}>Research Job</Title>
-        <Group ml="auto">
-          {inProgress && <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={loadError !== null} />}
-          {run && CANCELLABLE.has(run.status) && (
-            <Button
-              size="sm"
-              color="red"
-              variant="light"
-              leftSection={<IconX size={14} />}
-              onClick={() => { setCancelError(null); setCancelModalOpen(true); }}
-            >
-              Cancel
-            </Button>
-          )}
-          <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
-            <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
-              <IconRefresh size={20} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
-      </Group>
+      <PageHeader
+        onBack={() => navigate('/research/jobs')}
+        title={run ? run.module.replace(/^gnomepy_research\./, '') : 'Research Job'}
+        badges={run && <RunStatusBadge status={run.status} />}
+        actions={(
+          <>
+            {live && <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={failing} />}
+            {run && isRunActive(run.status) && (
+              <Button size="sm" color="red" variant="light" leftSection={<IconX size={14} />} onClick={() => setCancelOpen(true)}>
+                Cancel
+              </Button>
+            )}
+            <Tooltip label="Refresh" withArrow openDelay={500}>
+              <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
+                <IconRefresh size={20} />
+              </ActionIcon>
+            </Tooltip>
+          </>
+        )}
+        meta={run ? [
+          <Group gap={4} key="id"><Text span ff="monospace" size="sm">{run.runId}</Text><CopyIcon value={run.runId} /></Group>,
+          run.submittedBy,
+          run.submittedAt && <span key="at">submitted <ReactTimeAgo date={new Date(run.submittedAt)} timeStyle="round" /></span>,
+          run.startedAt && `${isRunActive(run.status) ? 'running' : 'took'} ${formatDuration(runElapsedMs(run))}`,
+        ] : []}
+      />
 
-      {loadError && <Alert color="red" title="Error" mb="md">{loadError}</Alert>}
-      {run?.error && <Alert color="red" title="Submit failed" mb="md">{run.error}</Alert>}
+      {error && <Alert color="red" title="Error loading research job" my="md">{error}</Alert>}
+      {run?.error && <Alert color="red" title="Submit failed" my="md">{run.error}</Alert>}
 
       {run && (
-        <Card withBorder mb="md" p="md">
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
-            <Stack gap={4}>
-              <InfoRow label="Run ID">
-                <span style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{run.runId}</span>
-              </InfoRow>
-              <InfoRow label="Status">
-                <Badge color={RUN_STATUS_COLORS[run.status]} variant="light">{run.status}</Badge>
-              </InfoRow>
-              <InfoRow label="Module"><span style={{ fontFamily: 'monospace' }}>{run.module}</span></InfoRow>
-              <InfoRow label="Commit">
-                {run.researchRef && <>{run.researchRef} </>}
-                <span style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{run.researchCommit}</span>
-              </InfoRow>
-              {run.description && <InfoRow label="Description">{run.description}</InfoRow>}
-            </Stack>
-            <Stack gap={4}>
-              <InfoRow label="Tasks">
-                {run.succeededCount}/{run.taskCount} succeeded, {run.failedCount} failed
-              </InfoRow>
-              {run.cpu && run.memoryGib && (
-                <InfoRow label="Per task">{run.cpu} vCPU, {run.memoryGib} GiB</InfoRow>
-              )}
-              <InfoRow label="Submitted by">{run.submittedBy}</InfoRow>
-              <InfoRow label="Submitted">
-                {run.submittedAt ? <ReactTimeAgo date={new Date(run.submittedAt)} timeStyle="round" /> : '—'}
-              </InfoRow>
-            </Stack>
-          </SimpleGrid>
-          <Stack gap={4} mt="xs">
+        <Card withBorder my="md" p="md">
+          <Stack gap="sm">
+            <Group gap="sm" wrap="nowrap">
+              <div style={{ flex: 1 }}>
+                <RunProgress counts={{ total: run.taskCount, succeeded: run.succeededCount, failed: run.failedCount, running }} />
+              </div>
+              <Text size="sm" c="dimmed" style={{ flexShrink: 0 }}>
+                {run.succeededCount}/{run.taskCount} succeeded
+                {run.failedCount > 0 && <Text span c="red" size="sm"> · {run.failedCount} failed</Text>}
+              </Text>
+            </Group>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
+              <Stack gap={4}>
+                <InfoRow label="Module"><Text span ff="monospace" size="sm">{run.module}</Text></InfoRow>
+                <InfoRow label="Commit">
+                  {run.researchRef && <>{run.researchRef} </>}
+                  <Text span ff="monospace" size="xs">{run.researchCommit}</Text>
+                </InfoRow>
+                {run.description && <InfoRow label="Description">{run.description}</InfoRow>}
+              </Stack>
+              <Stack gap={4}>
+                {run.cpu && run.memoryGib && <InfoRow label="Per task">{run.cpu} vCPU, {run.memoryGib} GiB</InfoRow>}
+                {Object.entries(run.inputs ?? {}).map(([name, digest]) => (
+                  <InfoRow key={name} label={`Input ${name}`}>
+                    <Text span ff="monospace" size="xs" title={digest}>{digest.slice(0, 16)}…</Text>
+                  </InfoRow>
+                ))}
+              </Stack>
+            </SimpleGrid>
             <InfoRow label="Outputs">
               <Group gap="xs" wrap="nowrap">
-                <Copyable value={run.outputPrefix} />
+                <CopyableCode value={run.outputPrefix} />
                 {run.s3ConsoleUrl && <Anchor href={run.s3ConsoleUrl} target="_blank" size="sm">S3 console</Anchor>}
               </Group>
             </InfoRow>
             <InfoRow label="Download">
-              <Copyable value={`poetry run research jobs download ${run.runId} ./${run.runId}`} />
+              <CopyableCode value={`poetry run research jobs download ${run.runId} ./${run.runId}`} />
             </InfoRow>
-            {Object.entries(run.inputs ?? {}).map(([name, digest]) => (
-              <InfoRow key={name} label={`Input ${name}`}>
-                <span style={{ fontFamily: 'monospace', fontSize: '0.72rem' }} title={digest}>{digest.slice(0, 16)}…</span>
-              </InfoRow>
-            ))}
           </Stack>
         </Card>
       )}
 
+      {run && run.failedCount > 0 && filter !== 'failed' && (
+        <Alert color="red" variant="light" mb="md"
+               title={`${run.failedCount} task${run.failedCount === 1 ? '' : 's'} failed`}>
+          <Button size="compact-xs" variant="light" color="red" onClick={() => setFilter('failed')}>Show failed tasks</Button>
+        </Alert>
+      )}
+
+      {tasks.length > 1 && (
+        <Card withBorder mb="md" p="sm">
+          <Text size="xs" c="dimmed" mb={6}>Tasks — click one for its logs</Text>
+          <TaskGrid
+            tasks={tasks.map(t => ({ index: t.arrayIndex, status: t.status, label: t.args.join(' ') }))}
+            selected={selected}
+            onSelect={openLogs}
+          />
+        </Card>
+      )}
+
+      <SegmentedControl
+        size="xs"
+        mb="xs"
+        value={filter}
+        onChange={v => setFilter(v as TaskFilter)}
+        data={FILTERS.map(f => ({ value: f.value, label: `${f.label} ${tasks.filter(t => taskMatches(f.value, t.status)).length}` }))}
+      />
       <MantineReactTable table={table} />
 
-      <Modal opened={cancelModalOpen} onClose={() => setCancelModalOpen(false)} title="Cancel research job" centered>
-        <Text size="sm" mb="md">Terminate every unfinished task of this run? Outputs already written stay in S3.</Text>
-        {cancelError && <Alert color="red" mb="md">{cancelError}</Alert>}
-        <Group justify="flex-end">
-          <Button variant="outline" onClick={() => setCancelModalOpen(false)}>Back</Button>
-          <Button color="red" onClick={handleCancel} loading={cancelling}>Cancel run</Button>
-        </Group>
-      </Modal>
+      <RunLogsDrawer
+        opened={logsTask !== null}
+        title={logsTask ? `Task ${logsTask.arrayIndex} · ${logsTask.args.join(' ')}` : ''}
+        active={logsTask ? !isTaskFinished(logsTask.status) : false}
+        load={loadLogs}
+        consoleUrl={logsTask?.logUrl}
+        onClose={() => setLogsFor(null)}
+      />
+      <CancelRunModal
+        runId={runId ?? null}
+        opened={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        onConfirm={async () => {
+          if (!runId) return;
+          await controllerApi.cancelResearchJob(runId);
+          await refresh(true);
+        }}
+      />
     </Container>
   );
 }

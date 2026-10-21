@@ -204,24 +204,30 @@ export class BacktestStack extends cdk.Stack {
       resources: ["*"],
     }));
 
+    const logsLambda = new PythonLambdaFunction(this, "BacktestLogsLambda", {
+      codePath: "lambda/functions/batch-logs",
+      functionName: "gnome-backtest-logs",
+      description: "Read a backtest job's log lines",
+      timeout: cdk.Duration.seconds(30),
+      environment: { ...commonEnv, TASK_SK_PREFIX: "JOB#" },
+    });
+    table.grantReadData(logsLambda.function);
+    logsLambda.function.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["logs:GetLogEvents"],
+      resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/aws/batch/job:*`],
+    }));
+
     const statusHandlerLambda = new PythonLambdaFunction(this, "BacktestStatusHandlerLambda", {
       codePath: "lambda/functions/backtests/status-handler",
       description: "Handle Batch job state changes and update DynamoDB",
       timeout: cdk.Duration.seconds(60),
       memorySize: 256,
-      environment: {
-        ...commonEnv,
-        BATCH_JOB_QUEUE_ARN: jobQueue.jobQueueArn,
-      },
+      environment: { ...commonEnv },
     });
     table.grantReadWriteData(statusHandlerLambda.function);
     statusHandlerLambda.function.addToRolePolicy(new iam.PolicyStatement({
       actions: ["s3:GetObject"],
       resources: [`${researchBucket.bucketArn}/backtests/*`],
-    }));
-    statusHandlerLambda.function.addToRolePolicy(new iam.PolicyStatement({
-      actions: ["batch:DescribeJobs"],
-      resources: ["*"],
     }));
 
     // ---------------------------------------------------------------------------
@@ -255,6 +261,8 @@ export class BacktestStack extends cdk.Stack {
     const runResource = backtestsResource.addResource("{runId}");
     runResource.addMethod("GET", new apigateway.LambdaIntegration(getLambda.function), cognitoOpts);
     runResource.addMethod("DELETE", new apigateway.LambdaIntegration(cancelLambda.function), cognitoOpts);
+    runResource.addResource("jobs").addResource("{index}").addResource("logs")
+      .addMethod("GET", new apigateway.LambdaIntegration(logsLambda.function), cognitoOpts);
 
     // ---------------------------------------------------------------------------
     // GitHub Actions OIDC — allows CI to push images to ECR without long-lived keys
