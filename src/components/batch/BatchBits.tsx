@@ -43,7 +43,7 @@ export function InfoRow({ label, children }: { label: string; children: ReactNod
   return (
     <Group gap="xs" wrap="nowrap" align="flex-start">
       <Text size="sm" c="dimmed" w={110} style={{ flexShrink: 0 }}>{label}</Text>
-      <Text size="sm" component="div" style={{ minWidth: 0 }}>{children}</Text>
+      <Text size="sm" component="div" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{children}</Text>
     </Group>
   );
 }

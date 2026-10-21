@@ -42,6 +42,9 @@ const FILTERS: { value: TaskFilter; label: string }[] = [
   { value: 'succeeded', label: 'Succeeded' },
 ];
 
+// The table's loading skeleton rows set every column id (including 'args') to null.
+const argLine = (t: ResearchTask) => (t.args ?? []).join(' ');
+
 function ResearchJobDetail() {
   const { runId } = useParams<{ runId: string }>();
   const navigate = useNavigate();
@@ -86,9 +89,9 @@ function ResearchJobDetail() {
     {
       id: 'args',
       header: 'Args',
-      accessorFn: t => t.args.join(' '),
+      accessorFn: t => argLine(t),
       Cell: ({ row }: { row: MRT_Row<ResearchTask> }) => (
-        <Text ff="monospace" size="xs">{row.original.args.join(' ')}</Text>
+        <Text ff="monospace" size="xs">{argLine(row.original)}</Text>
       ),
     },
     {
@@ -144,7 +147,7 @@ function ResearchJobDetail() {
       onClick: () => row.toggleExpanded(),
       style: {
         cursor: 'pointer',
-        outline: row.original.arrayIndex === selected ? '1px solid var(--mantine-color-blue-6)' : undefined,
+        outline: selected !== null && row.original.arrayIndex === selected ? '1px solid var(--mantine-color-blue-6)' : undefined,
       },
     }),
     initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 50 } },
@@ -243,7 +246,7 @@ function ResearchJobDetail() {
         <Card withBorder mb="md" p="sm">
           <Text size="xs" c="dimmed" mb={6}>Tasks — click one for its logs</Text>
           <TaskGrid
-            tasks={tasks.map(t => ({ index: t.arrayIndex, status: t.status, label: t.args.join(' ') }))}
+            tasks={tasks.map(t => ({ index: t.arrayIndex, status: t.status, label: argLine(t) }))}
             selected={selected}
             onSelect={openLogs}
           />
@@ -261,7 +264,7 @@ function ResearchJobDetail() {
 
       <RunLogsDrawer
         opened={logsTask !== null}
-        title={logsTask ? `Task ${logsTask.arrayIndex} · ${logsTask.args.join(' ')}` : ''}
+        title={logsTask ? `Task ${logsTask.arrayIndex} · ${argLine(logsTask)}` : ''}
         active={logsTask ? !isTaskFinished(logsTask.status) : false}
         load={loadLogs}
         consoleUrl={logsTask?.logUrl}

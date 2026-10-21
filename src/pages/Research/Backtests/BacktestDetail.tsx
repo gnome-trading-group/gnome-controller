@@ -291,7 +291,7 @@ function BacktestDetail() {
       onClick: () => row.toggleExpanded(),
       style: {
         cursor: 'pointer',
-        outline: row.original.arrayIndex === selected ? '1px solid var(--mantine-color-blue-6)' : undefined,
+        outline: selected !== null && row.original.arrayIndex === selected ? '1px solid var(--mantine-color-blue-6)' : undefined,
       },
     }),
     initialState: { sorting: [{ id: 'summary_finalPnl', desc: true }], density: 'xs' },
