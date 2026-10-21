@@ -19,11 +19,12 @@ export interface ResearchJobsStackProps extends cdk.StackProps {
   cognitoAuthorizer: apigateway.CognitoUserPoolsAuthorizer;
   researchBucket: s3.IBucket;
   githubEcrRole: iam.IRole;
+  maxVcpus: number;
 }
 
 // The research datasets and artifact index (gnome-pipelines DataStack owns the table bucket).
 const RESEARCH_TABLE_BUCKET = "gnome-research-tables";
-// Per task unless a submit overrides them: NUTS runs 4 chains, and 13 such tasks fit under the 64-vCPU cap at once.
+// Per task unless a submit overrides them: NUTS runs 4 chains, and 13 such tasks fit under prod's 128-vCPU cap at once.
 const DEFAULT_CPU = 4;
 const DEFAULT_MEMORY_GIB = 14;
 const TABLE_READ_ACTIONS = [
@@ -150,7 +151,7 @@ export class ResearchJobsStack extends cdk.Stack {
       instanceTypes,
       useOptimalInstanceClasses: false,
       allocationStrategy: batch.AllocationStrategy.SPOT_PRICE_CAPACITY_OPTIMIZED,
-      maxvCpus: 64,
+      maxvCpus: props.maxVcpus,
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
     });

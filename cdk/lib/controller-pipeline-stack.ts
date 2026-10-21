@@ -42,6 +42,7 @@ class AppStage extends cdk.Stage {
 
     new ResearchJobsStack(this, "ControllerResearchJobsStack", {
       stage: config.account.stage,
+      maxVcpus: config.researchJobMaxVcpus,
       apiGateway: backendStack.apiGateway,
       cognitoAuthorizer: backendStack.cognitoAuthorizer,
       researchBucket: backtestStack.researchBucket,
