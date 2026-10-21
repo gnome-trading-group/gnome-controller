@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Button, Group, JsonInput, Modal, Stack, Switch, Text } from '@mantine/core';
-import { SchemaFormFields } from '../../components/SchemaFormFields';
-import { Pipeline } from '../../types/pipeline';
-import { controllerApi } from '../../utils/api';
-import { errorMessage } from '../../utils/kill-switch';
+import { SchemaFormFields } from '../../../components/SchemaFormFields';
+import { Pipeline } from '../../../types/pipeline';
+import { controllerApi } from '../../../utils/api';
+import { errorMessage } from '../../../utils/kill-switch';
 
 // Fields left empty take the pipeline's defaults; the API checks the rest against its schema before starting a task.
 function RunPipelineModal({ pipeline, opened, onClose, onStarted }: {

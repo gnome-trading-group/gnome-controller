@@ -1,4 +1,4 @@
-import { IconGauge, IconHeartbeat, IconLockSquareRounded, IconNotes, IconTool, IconChartLine, IconTestPipe, IconFlask, IconScale, IconRocket } from "@tabler/icons-react";
+import { IconGauge, IconHeartbeat, IconLockSquareRounded, IconNotes, IconTool, IconChartLine, IconFlask, IconDatabase, IconScale, IconRocket } from "@tabler/icons-react";
 import { AppShell, Box, Paper, Group, ScrollArea, Code, Title, Tooltip, UnstyledButton } from '@mantine/core';
 import { useOpenAlerts, useSystemHealth } from '../../query/hooks';
 import { AlarmsSection } from '../../types';
@@ -48,15 +48,22 @@ const routes = [
     ],
   },
   { icon: IconRocket, label: 'Launcher', link: '/launcher' },
-  { icon: IconTestPipe, label: 'Backtests', link: '/backtests' },
   {
     label: 'Research',
     icon: IconFlask,
     links: [
       { label: 'Sessions', link: '/research/sessions' },
-      { label: 'Artifacts', link: '/research/artifacts' },
-      { label: 'Datasets', link: '/research/datasets' },
-      { label: 'Pipelines', link: '/research/pipelines' },
+      { label: 'Backtests', link: '/research/backtests' },
+      { label: 'Jobs', link: '/research/jobs' },
+    ],
+  },
+  {
+    label: 'Data',
+    icon: IconDatabase,
+    links: [
+      { label: 'Datasets', link: '/data/datasets' },
+      { label: 'Artifacts', link: '/data/artifacts' },
+      { label: 'Pipelines', link: '/data/pipelines' },
     ],
   },
   { icon: IconHeartbeat, label: 'System', link: '/system' },

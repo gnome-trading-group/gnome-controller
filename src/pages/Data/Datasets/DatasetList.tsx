@@ -4,9 +4,9 @@ import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { Link } from 'react-router-dom';
-import { Dataset } from '../../types/data';
-import { controllerApi } from '../../utils/api';
-import { errorMessage } from '../../utils/kill-switch';
+import { Dataset } from '../../../types/data';
+import { controllerApi } from '../../../utils/api';
+import { errorMessage } from '../../../utils/kill-switch';
 import { RunLink } from '../Pipelines/RunBits';
 
 // Append-only Iceberg tables written by gnome-pipelines; research reads them through gnomepy.data.
@@ -36,7 +36,7 @@ function DatasetList() {
       header: 'Dataset',
       size: 240,
       Cell: ({ row }) => (
-        <Anchor component={Link} to={`/research/datasets/${row.original.name}`} size="sm" ff="monospace">
+        <Anchor component={Link} to={`/data/datasets/${row.original.name}`} size="sm" ff="monospace">
           {row.original.name}
         </Anchor>
       ),

@@ -3,9 +3,9 @@ import { ActionIcon, Alert, Badge, Card, Code, Container, Group, ScrollArea, Sim
 import { IconArrowLeft } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate, useParams } from 'react-router-dom';
-import { DatasetDetail as Detail } from '../../types/data';
-import { controllerApi } from '../../utils/api';
-import { errorMessage } from '../../utils/kill-switch';
+import { DatasetDetail as Detail } from '../../../types/data';
+import { controllerApi } from '../../../utils/api';
+import { errorMessage } from '../../../utils/kill-switch';
 import { CodeVersion, RunLink } from '../Pipelines/RunBits';
 
 function cellText(value: unknown): string {
@@ -58,7 +58,7 @@ function DatasetDetail() {
   return (
     <Container size="xl" py="xl">
       <Group mb="md">
-        <ActionIcon variant="subtle" onClick={() => navigate('/research/datasets')}><IconArrowLeft size={18} /></ActionIcon>
+        <ActionIcon variant="subtle" onClick={() => navigate('/data/datasets')}><IconArrowLeft size={18} /></ActionIcon>
         <Title order={2} ff="monospace" style={{ flex: 1 }}>{name}</Title>
       </Group>
       {error && <Alert color="red" mb="md">{error}</Alert>}

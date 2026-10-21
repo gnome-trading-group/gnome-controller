@@ -20,12 +20,12 @@ import { IconArrowLeft, IconFileText, IconPlayerPlay, IconPlayerStop, IconRefres
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Pipeline, PipelineRun, PipelineSchedule } from '../../types/pipeline';
-import { JsonSchemaProperty } from '../../types/jsonSchema';
-import { controllerApi } from '../../utils/api';
-import { errorMessage } from '../../utils/kill-switch';
-import { useLatestRequest } from '../../hooks/useLatestRequest';
-import { LastUpdated } from '../../components/LastUpdated';
+import { Pipeline, PipelineRun, PipelineSchedule } from '../../../types/pipeline';
+import { JsonSchemaProperty } from '../../../types/jsonSchema';
+import { controllerApi } from '../../../utils/api';
+import { errorMessage } from '../../../utils/kill-switch';
+import { useLatestRequest } from '../../../hooks/useLatestRequest';
+import { LastUpdated } from '../../../components/LastUpdated';
 import RunPipelineModal from './RunPipelineModal';
 import RunLogsDrawer from './RunLogsDrawer';
 import ScheduleConfirmModal from './ScheduleConfirmModal';
@@ -214,7 +214,7 @@ function PipelineDetail() {
   return (
     <Container size="xl" py="xl">
       <Group mb="md">
-        <ActionIcon variant="subtle" onClick={() => navigate('/research/pipelines')}>
+        <ActionIcon variant="subtle" onClick={() => navigate('/data/pipelines')}>
           <IconArrowLeft size={18} />
         </ActionIcon>
         <Title order={2} style={{ flex: 1 }}>{pipelineName}</Title>
@@ -317,7 +317,7 @@ function PipelineDetail() {
       )}
 
       <RunPipelineModal pipeline={pipeline} opened={runModal} onClose={() => setRunModal(false)}
-                        onStarted={runId => { navigate(`/research/pipelines/${pipelineName}?run=${runId}`); refresh(); }} />
+                        onStarted={runId => { navigate(`/data/pipelines/${pipelineName}?run=${runId}`); refresh(); }} />
       <RunLogsDrawer run={logsRun} onClose={() => setLogsFor(null)} />
       <ScheduleConfirmModal pipelineName={pipelineName ?? ''} schedule={confirmingSchedule}
                             onClose={() => setConfirmingSchedule(null)} onConfirm={switchSchedule} />

@@ -11,6 +11,7 @@ import { FrontendStack } from "./stacks/frontend-stack";
 import { BackendStack } from "./stacks/backend-stack";
 import { BacktestStack } from "./stacks/backtest-stack";
 import { ResearchStack } from "./stacks/research-stack";
+import { ResearchJobsStack } from "./stacks/research-jobs-stack";
 import { ServiceConfigStack } from "./stacks/service-config-stack";
 import { MonitoringStack } from "./stacks/monitoring-stack";
 import { LatencyProbeStack, PROBE_REGIONS } from "./stacks/latency-probe-stack";
@@ -33,10 +34,18 @@ class AppStage extends cdk.Stage {
       userPool: frontendStack.userPool,
     });
 
-    new BacktestStack(this, "ControllerBacktestStack", {
+    const backtestStack = new BacktestStack(this, "ControllerBacktestStack", {
       stage: config.account.stage,
       apiGateway: backendStack.apiGateway,
       cognitoAuthorizer: backendStack.cognitoAuthorizer,
+    });
+
+    new ResearchJobsStack(this, "ControllerResearchJobsStack", {
+      stage: config.account.stage,
+      apiGateway: backendStack.apiGateway,
+      cognitoAuthorizer: backendStack.cognitoAuthorizer,
+      researchBucket: backtestStack.researchBucket,
+      githubEcrRole: backtestStack.githubEcrRole,
     });
 
     new ResearchStack(this, "ControllerResearchStack", {

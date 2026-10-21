@@ -1,4 +1,4 @@
-import { PipelineRun, PipelineSchedule } from '../../types/pipeline';
+import { PipelineRun, PipelineSchedule } from '../../../types/pipeline';
 
 export function isActive(run: PipelineRun): boolean {
   return run.status === 'PENDING' || run.status === 'RUNNING';

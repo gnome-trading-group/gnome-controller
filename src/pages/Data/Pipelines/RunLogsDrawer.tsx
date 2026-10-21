@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Code, Drawer, Group, Loader, ScrollArea, Stack, Text } from '@mantine/core';
-import { PipelineRun, RunLogLine } from '../../types/pipeline';
-import { controllerApi } from '../../utils/api';
-import { errorMessage } from '../../utils/kill-switch';
+import { PipelineRun, RunLogLine } from '../../../types/pipeline';
+import { controllerApi } from '../../../utils/api';
+import { errorMessage } from '../../../utils/kill-switch';
 import { isActive } from './runs';
 
 const POLL_MS = 5000;

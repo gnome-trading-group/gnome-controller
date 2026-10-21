@@ -36,14 +36,16 @@ const Treasury = lazy(() => import('./pages/Treasury/Treasury'));
 const CollectorDetail = lazy(() => import('./pages/CollectorDetail/CollectorDetail'));
 const QualityIssues = lazy(() => import('./pages/MarketData/QualityIssues/QualityIssues'));
 const MinuteInvestigation = lazy(() => import('./pages/MarketData/QualityIssues/MinuteInvestigation'));
-const BacktestList = lazy(() => import('./pages/Backtests/BacktestList'));
-const BacktestDetail = lazy(() => import('./pages/Backtests/BacktestDetail'));
-const ResearchList = lazy(() => import('./pages/Research/ResearchList'));
-const ResearchDetail = lazy(() => import('./pages/Research/ResearchDetail'));
-const ArtifactList = lazy(() => import('./pages/Research/ArtifactList'));
-const DatasetList = lazy(() => import('./pages/Research/DatasetList'));
-const DatasetDetail = lazy(() => import('./pages/Research/DatasetDetail'));
-const ArtifactDetail = lazy(() => import('./pages/Research/ArtifactDetail'));
+const BacktestList = lazy(() => import('./pages/Research/Backtests/BacktestList'));
+const BacktestDetail = lazy(() => import('./pages/Research/Backtests/BacktestDetail'));
+const ResearchList = lazy(() => import('./pages/Research/Sessions/ResearchList'));
+const ResearchDetail = lazy(() => import('./pages/Research/Sessions/ResearchDetail'));
+const ArtifactList = lazy(() => import('./pages/Data/Artifacts/ArtifactList'));
+const DatasetList = lazy(() => import('./pages/Data/Datasets/DatasetList'));
+const DatasetDetail = lazy(() => import('./pages/Data/Datasets/DatasetDetail'));
+const ArtifactDetail = lazy(() => import('./pages/Data/Artifacts/ArtifactDetail'));
+const ResearchJobList = lazy(() => import('./pages/Research/Jobs/ResearchJobList'));
+const ResearchJobDetail = lazy(() => import('./pages/Research/Jobs/ResearchJobDetail'));
 const EventsList = lazy(() => import('./pages/Predictions/EventsList'));
 const EventDetail = lazy(() => import('./pages/Predictions/EventDetail'));
 const ContractRelationships = lazy(() => import('./pages/Predictions/ContractRelationships'));
@@ -55,8 +57,8 @@ const ServiceConfig = lazy(() => import('./pages/Tools/ServiceConfig'));
 const Launcher = lazy(() => import('./pages/Launcher/Launcher'));
 const RuleDetail = lazy(() => import('./pages/Launcher/RuleDetail'));
 const LaunchDetail = lazy(() => import('./pages/Launcher/LaunchDetail'));
-const PipelineList = lazy(() => import('./pages/Pipelines/PipelineList'));
-const PipelineDetail = lazy(() => import('./pages/Pipelines/PipelineDetail'));
+const PipelineList = lazy(() => import('./pages/Data/Pipelines/PipelineList'));
+const PipelineDetail = lazy(() => import('./pages/Data/Pipelines/PipelineDetail'));
 
 function LoginScreen() {
   const handleLogin = () => {
@@ -204,17 +206,20 @@ function AppContent() {
                   <Route path="/system/alerts" element={<Alerts />} />
                   <Route path="/risk/policies" element={<RiskPolicies />} />
                   <Route path="/treasury" element={<Treasury />} />
-                  <Route path="/backtests" element={<BacktestList />} />
-                  <Route path="/backtests/:runId" element={<BacktestDetail />} />
                   <Route path="/research" element={<Navigate to="/research/sessions" replace />} />
                   <Route path="/research/sessions" element={<ResearchList />} />
                   <Route path="/research/sessions/:sessionName" element={<ResearchDetail />} />
-                  <Route path="/research/artifacts" element={<ArtifactList />} />
-                  <Route path="/research/artifacts/:artifactType/:name" element={<ArtifactDetail />} />
-                  <Route path="/research/datasets" element={<DatasetList />} />
-                  <Route path="/research/datasets/:name" element={<DatasetDetail />} />
-                  <Route path="/research/pipelines" element={<PipelineList />} />
-                  <Route path="/research/pipelines/:pipelineName" element={<PipelineDetail />} />
+                  <Route path="/research/backtests" element={<BacktestList />} />
+                  <Route path="/research/backtests/:runId" element={<BacktestDetail />} />
+                  <Route path="/research/jobs" element={<ResearchJobList />} />
+                  <Route path="/research/jobs/:runId" element={<ResearchJobDetail />} />
+                  <Route path="/data" element={<Navigate to="/data/datasets" replace />} />
+                  <Route path="/data/artifacts" element={<ArtifactList />} />
+                  <Route path="/data/artifacts/:artifactType/:name" element={<ArtifactDetail />} />
+                  <Route path="/data/datasets" element={<DatasetList />} />
+                  <Route path="/data/datasets/:name" element={<DatasetDetail />} />
+                  <Route path="/data/pipelines" element={<PipelineList />} />
+                  <Route path="/data/pipelines/:pipelineName" element={<PipelineDetail />} />
                   <Route path="/predictions/events" element={<EventsList />} />
                   <Route path="/predictions/events/:eventId" element={<EventDetail />} />
                   <Route path="/predictions/relationships" element={<ContractRelationships />} />

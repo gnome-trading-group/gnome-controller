@@ -32,9 +32,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ResearchIteration, ResearchNote, ResearchSession, SessionStatus } from '../../types/research';
-import { controllerApi } from '../../utils/api';
-import { errorMessage } from '../../utils/kill-switch';
+import { ResearchIteration, ResearchNote, ResearchSession, SessionStatus } from '../../../types/research';
+import { controllerApi } from '../../../utils/api';
+import { errorMessage } from '../../../utils/kill-switch';
 
 const STATUS_COLORS: Record<SessionStatus, string> = {
   running: 'blue',

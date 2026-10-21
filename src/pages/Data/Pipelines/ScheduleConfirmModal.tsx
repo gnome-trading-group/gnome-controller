@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Code, Group, Modal, Stack, Text } from '@mantine/core';
-import { PipelineSchedule } from '../../types/pipeline';
-import { errorMessage } from '../../utils/kill-switch';
+import { PipelineSchedule } from '../../../types/pipeline';
+import { errorMessage } from '../../../utils/kill-switch';
 
 // Switching a schedule on starts unattended runs (in prod, writing prod data), so it's confirmed with what it will do.
 function ScheduleConfirmModal({ pipelineName, schedule, onClose, onConfirm }: {

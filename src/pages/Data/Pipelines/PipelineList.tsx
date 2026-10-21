@@ -4,9 +4,9 @@ import { IconRefresh, IconPlayerPlay } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { Link, useNavigate } from 'react-router-dom';
-import { Pipeline } from '../../types/pipeline';
-import { controllerApi } from '../../utils/api';
-import { errorMessage } from '../../utils/kill-switch';
+import { Pipeline } from '../../../types/pipeline';
+import { controllerApi } from '../../../utils/api';
+import { errorMessage } from '../../../utils/kill-switch';
 import RunPipelineModal from './RunPipelineModal';
 import { RunStatusBadge } from './RunBits';
 import { nextScheduled, utcTime } from './runs';
@@ -40,7 +40,7 @@ function PipelineList() {
       header: 'Name',
       size: 200,
       Cell: ({ row }) => (
-        <Anchor component={Link} to={`/research/pipelines/${row.original.name}`} size="sm" ff="monospace">
+        <Anchor component={Link} to={`/data/pipelines/${row.original.name}`} size="sm" ff="monospace">
           {row.original.name}
         </Anchor>
       ),
@@ -135,7 +135,7 @@ function PipelineList() {
         pipeline={running}
         opened={running !== null}
         onClose={() => setRunning(null)}
-        onStarted={runId => navigate(`/research/pipelines/${running?.name}?run=${runId}`)}
+        onStarted={runId => navigate(`/data/pipelines/${running?.name}?run=${runId}`)}
       />
     </Container>
   );

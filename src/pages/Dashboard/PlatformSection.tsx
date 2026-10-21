@@ -121,13 +121,13 @@ export function PlatformSection() {
           )}
         </PlatformCard>
 
-        <PlatformCard title="Recent backtests" href="/backtests">
+        <PlatformCard title="Recent backtests" href="/research/backtests">
           {recentBacktests.length === 0 ? <Empty loading={backtests.isLoading}>No recent backtests</Empty> : (
             <Stack gap={8}>
               {recentBacktests.map(run => (
                 <Row
                   key={run.runId}
-                  onClick={() => navigate(`/backtests/${run.runId}`)}
+                  onClick={() => navigate(`/research/backtests/${run.runId}`)}
                   label={<>{run.strategy} <Text span size="xs" c="dimmed">{run.completedCount}/{run.jobCount}</Text></>}
                   badge={<Badge size="xs" variant="light" color={BACKTEST_STATUS_COLORS[run.status] ?? 'gray'}>{run.status.toLowerCase().replace(/_/g, ' ')}</Badge>}
                   when={run.submittedAt}

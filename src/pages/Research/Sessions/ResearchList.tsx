@@ -4,9 +4,9 @@ import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
-import { navigateRowProps } from '../../utils/navigation';
-import { ResearchSession, SessionStatus } from '../../types/research';
-import { controllerApi } from '../../utils/api';
+import { navigateRowProps } from '../../../utils/navigation';
+import { ResearchSession, SessionStatus } from '../../../types/research';
+import { controllerApi } from '../../../utils/api';
 
 const STATUS_COLORS: Record<SessionStatus, string> = {
   running: 'blue',

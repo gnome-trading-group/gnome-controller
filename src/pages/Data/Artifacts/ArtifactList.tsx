@@ -4,9 +4,9 @@ import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { Link } from 'react-router-dom';
-import { ArtifactSummary } from '../../types/data';
-import { controllerApi } from '../../utils/api';
-import { errorMessage } from '../../utils/kill-switch';
+import { ArtifactSummary } from '../../../types/data';
+import { controllerApi } from '../../../utils/api';
+import { errorMessage } from '../../../utils/kill-switch';
 
 // Versioned files (models and the like) indexed in Iceberg; strategies reference them as artifact://type/name.
 function ArtifactList() {
@@ -36,7 +36,7 @@ function ArtifactList() {
       header: 'Name',
       size: 240,
       Cell: ({ row }) => (
-        <Anchor component={Link} to={`/research/artifacts/${row.original.artifactType}/${row.original.name}`} size="sm" ff="monospace">
+        <Anchor component={Link} to={`/data/artifacts/${row.original.artifactType}/${row.original.name}`} size="sm" ff="monospace">
           {row.original.name}
         </Anchor>
       ),

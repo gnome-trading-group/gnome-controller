@@ -35,11 +35,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { BacktestJob, BacktestRun, BacktestStatus, JobStatus } from '../../types/backtests';
-import { controllerApi } from '../../utils/api';
-import { errorMessage } from '../../utils/kill-switch';
-import { useLatestRequest } from '../../hooks/useLatestRequest';
-import { LastUpdated } from '../../components/LastUpdated';
+import { BacktestJob, BacktestRun, BacktestStatus, JobStatus } from '../../../types/backtests';
+import { controllerApi } from '../../../utils/api';
+import { errorMessage } from '../../../utils/kill-switch';
+import { useLatestRequest } from '../../../hooks/useLatestRequest';
+import { LastUpdated } from '../../../components/LastUpdated';
 
 const RUN_STATUS_COLORS: Record<BacktestStatus, string> = {
   SUBMITTED: 'blue',
@@ -377,7 +377,7 @@ function BacktestDetail() {
     <Container size="xl" py="xl">
       <Group mb="md">
         <Tooltip label="Back to list" position="right" withArrow openDelay={500}>
-          <ActionIcon variant="subtle" onClick={() => navigate('/backtests')}>
+          <ActionIcon variant="subtle" onClick={() => navigate('/research/backtests')}>
             <IconArrowLeft size={18} />
           </ActionIcon>
         </Tooltip>

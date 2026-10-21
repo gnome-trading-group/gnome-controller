@@ -20,6 +20,9 @@ export interface BacktestStackProps extends cdk.StackProps {
 }
 
 export class BacktestStack extends cdk.Stack {
+  public readonly researchBucket: s3.Bucket;
+  public readonly githubEcrRole: iam.Role;
+
   constructor(scope: Construct, id: string, props: BacktestStackProps) {
     super(scope, id, props);
 
@@ -35,7 +38,10 @@ export class BacktestStack extends cdk.Stack {
       encryption: s3.BucketEncryption.S3_MANAGED,
       versioned: false,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+      // Research job inputs are kept: they are what makes an old run reproducible.
+      lifecycleRules: [{ prefix: "research-jobs/runs/", expiration: cdk.Duration.days(90) }],
     });
+    this.researchBucket = researchBucket;
 
     // ---------------------------------------------------------------------------
     // ECR repository
@@ -280,6 +286,7 @@ export class BacktestStack extends cdk.Stack {
     });
 
     ecrRepo.grantPush(githubEcrRole);
+    this.githubEcrRole = githubEcrRole;
 
     // ---------------------------------------------------------------------------
     // Outputs

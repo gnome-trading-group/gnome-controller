@@ -5,6 +5,7 @@ import {
 } from '../types/launcher';
 import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
+import { ResearchJob } from '../types/research-jobs';
 import { ArtifactDetail, ArtifactSummary, Dataset, DatasetDetail } from '../types/data';
 import { PipelineDetailResponse, PipelineListResponse, PipelineRun, RunLogsResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
@@ -1072,6 +1073,29 @@ export const controllerApi = {
     }),
   cancelBacktest: (runId: string) =>
     sendApiRequest<{ runId: string; status: string }>(`/backtests/${runId}`, 'DELETE', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+    }),
+  listResearchJobs: (params?: { status?: string; limit?: number }) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params?.status) queryParams.status = params.status;
+    if (params?.limit) queryParams.limit = params.limit;
+    return sendApiRequest<{ runs: ResearchJob[]; count: number }>('/research-jobs', 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+      preserveKeys: new Set(['inputs']),
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+    });
+  },
+  // Input names are user-chosen and shown verbatim.
+  getResearchJob: (runId: string) =>
+    sendApiRequest<ResearchJob>(`/research-jobs/${runId}`, 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      convertToCamelCase: true,
+      preserveKeys: new Set(['inputs']),
+    }),
+  cancelResearchJob: (runId: string) =>
+    sendApiRequest<{ runId: string; status: string }>(`/research-jobs/${runId}`, 'DELETE', {
       apiUrl: CONTROLLER_API_URL,
       convertToCamelCase: true,
     }),

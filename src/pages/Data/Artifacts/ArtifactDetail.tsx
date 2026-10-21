@@ -4,9 +4,9 @@ import { IconArrowLeft, IconDownload } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArtifactDetail as Detail, ArtifactVersion } from '../../types/data';
-import { controllerApi } from '../../utils/api';
-import { errorMessage } from '../../utils/kill-switch';
+import { ArtifactDetail as Detail, ArtifactVersion } from '../../../types/data';
+import { controllerApi } from '../../../utils/api';
+import { errorMessage } from '../../../utils/kill-switch';
 import { RunLink } from '../Pipelines/RunBits';
 
 function size(bytes: number | null): string {
@@ -123,7 +123,7 @@ function ArtifactDetail() {
             <Table.Tbody>
               {inputs.map(i => (
                 <Table.Tr key={i.dataset}>
-                  <Table.Td><Anchor component={Link} to={`/research/datasets/${i.dataset}`} size="xs">{i.dataset}</Anchor></Table.Td>
+                  <Table.Td><Anchor component={Link} to={`/data/datasets/${i.dataset}`} size="xs">{i.dataset}</Anchor></Table.Td>
                   <Table.Td>{new Date(i.asOf).toLocaleString()}</Table.Td>
                   <Table.Td>{i.rowCount.toLocaleString()}</Table.Td>
                   <Table.Td ff="monospace">{i.rowsHash.slice(0, 12)}</Table.Td>
@@ -140,7 +140,7 @@ function ArtifactDetail() {
   return (
     <Container size="xl" py="xl">
       <Group mb="md">
-        <ActionIcon variant="subtle" onClick={() => navigate('/research/artifacts')}><IconArrowLeft size={18} /></ActionIcon>
+        <ActionIcon variant="subtle" onClick={() => navigate('/data/artifacts')}><IconArrowLeft size={18} /></ActionIcon>
         <Title order={2} style={{ flex: 1 }}>
           <Text span c="dimmed" inherit>{artifactType}/</Text><Text span ff="monospace" inherit>{name}</Text>
         </Title>

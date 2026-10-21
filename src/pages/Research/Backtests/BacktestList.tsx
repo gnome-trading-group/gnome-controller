@@ -4,9 +4,9 @@ import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { useNavigate } from 'react-router-dom';
-import { navigateRowProps } from '../../utils/navigation';
-import { BacktestRun, BacktestStatus } from '../../types/backtests';
-import { controllerApi } from '../../utils/api';
+import { navigateRowProps } from '../../../utils/navigation';
+import { BacktestRun, BacktestStatus } from '../../../types/backtests';
+import { controllerApi } from '../../../utils/api';
 
 const STATUS_COLORS: Record<BacktestStatus, string> = {
   SUBMITTED: 'blue',
@@ -123,7 +123,7 @@ function BacktestList() {
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     initialState: { sorting: [{ id: 'submittedAt', desc: true }], density: 'xs' },
     mantineTableBodyRowProps: ({ row }: { row: MRT_Row<BacktestRun> }) => (
-      navigateRowProps(navigate, `/backtests/${row.original.runId}`)
+      navigateRowProps(navigate, `/research/backtests/${row.original.runId}`)
     ),
   });
 

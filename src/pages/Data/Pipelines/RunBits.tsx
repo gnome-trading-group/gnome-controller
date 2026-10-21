@@ -1,6 +1,6 @@
 import { Anchor, Badge } from '@mantine/core';
 import { Link } from 'react-router-dom';
-import { RunStatus } from '../../types/pipeline';
+import { RunStatus } from '../../../types/pipeline';
 
 const STATUS_COLORS: Record<RunStatus, string> = {
   SUCCEEDED: 'green',
@@ -22,7 +22,7 @@ export function RunLink({ runId }: { runId: string | null | undefined }) {
     return <span style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{runId}</span>;
   }
   return (
-    <Anchor component={Link} to={`/research/pipelines/${pipeline}?run=${run}`} size="xs" ff="monospace">
+    <Anchor component={Link} to={`/data/pipelines/${pipeline}?run=${run}`} size="xs" ff="monospace">
       {runId}
     </Anchor>
   );
