@@ -194,6 +194,7 @@ export interface EventPositions {
     title: string;
     expiry: string | null;
     resolved: boolean;
+    resolvedAt: string | null;
     markets: {
       key: string;
       kind: 'BINARY' | 'MULTI_OUTCOME';

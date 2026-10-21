@@ -71,13 +71,21 @@ function eventMatches(event: Event, query: string) {
     matches(query, o.outcome, o.symbol, o.held?.symbol)));
 }
 
-// Open events by what closes next; settled ones most recent first. Events with no expiry go last either way.
-function byExpiry(descending: boolean) {
+// Expiry is only the venue's expected resolution time, so once an event has resolved, when it actually did is the
+// better date. Events resolved before resolved_at was recorded fall back to their expiry.
+function resolvedTime(event: Event) {
+  return event.resolvedAt ?? event.expiry;
+}
+
+// Open events by what closes next; settled ones most recently resolved first. Undated events go last either way.
+function byTime(time: (event: Event) => string | null, descending: boolean) {
   return (a: Event, b: Event) => {
-    if (a.expiry === b.expiry) return a.eventId - b.eventId;
-    if (a.expiry === null) return 1;
-    if (b.expiry === null) return -1;
-    return (Date.parse(a.expiry) - Date.parse(b.expiry)) * (descending ? -1 : 1);
+    const at = time(a);
+    const bt = time(b);
+    if (at === bt) return a.eventId - b.eventId;
+    if (at === null) return 1;
+    if (bt === null) return -1;
+    return (Date.parse(at) - Date.parse(bt)) * (descending ? -1 : 1);
   };
 }
 
@@ -215,7 +223,7 @@ function SettledTable({ events, strategyId, mode, basis }: {
           <Table.Tr>
             <Table.Th w={32} />
             <Table.Th>Event</Table.Th>
-            <Table.Th>Closed</Table.Th>
+            <Table.Th>Resolved</Table.Th>
             <Table.Th>Held</Table.Th>
             <Table.Th ta="right">Realized</Table.Th>
           </Table.Tr>
@@ -233,7 +241,9 @@ function SettledTable({ events, strategyId, mode, basis }: {
                 </Table.Td>
                 <Table.Td><Text size="sm" lineClamp={1}>{event.title}</Text></Table.Td>
                 <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                  {event.expiry ? <Time value={event.expiry} precision="minute" size="sm" /> : <Text span size="sm" c="dimmed">—</Text>}
+                  {resolvedTime(event)
+                    ? <Time value={resolvedTime(event) as string} precision="minute" size="sm" />
+                    : <Text span size="sm" c="dimmed">—</Text>}
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm" lineClamp={1}>
@@ -317,7 +327,7 @@ export function EventPositions({ data, strategyId, mode, loading, basis }: {
   const grouped = useMemo(() => {
     const groups: Record<Status, Event[]> = { awaiting: [], open: [], exited: [], settled: [] };
     for (const event of data?.events ?? []) groups[statusOf(event)].push(event);
-    for (const status of STATUSES) groups[status].sort(byExpiry(status === 'settled'));
+    for (const status of STATUSES) groups[status].sort(status === 'settled' ? byTime(resolvedTime, true) : byTime(e => e.expiry, false));
     return groups;
   }, [data]);
 
