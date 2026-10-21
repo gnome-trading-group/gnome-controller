@@ -135,15 +135,21 @@ export class ResearchJobsStack extends cdk.Stack {
       ],
     });
 
-    const instanceTypes = [ec2.InstanceClass.C5, ec2.InstanceClass.C6I, ec2.InstanceClass.M5, ec2.InstanceClass.M6I]
-      .flatMap((cls) => [ec2.InstanceSize.XLARGE, ec2.InstanceSize.XLARGE2, ec2.InstanceSize.XLARGE4]
-        .map((size) => ec2.InstanceType.of(cls, size)));
+    // Research jobs are CPU-bound numeric work (NUTS samples one chain per thread). c7a/m7a give one physical core
+    // per vCPU; c7i/m7i are the fastest Intel; 6th-generation types stay as fallbacks so spot capacity never runs
+    // dry. c5/m5 ran a monthly fit about 2.5x slower than a laptop, so they are not offered.
+    const instanceTypes = [
+      ec2.InstanceClass.C7A, ec2.InstanceClass.M7A, ec2.InstanceClass.C7I, ec2.InstanceClass.M7I,
+      ec2.InstanceClass.C6I, ec2.InstanceClass.M6I,
+    ].flatMap((cls) => [ec2.InstanceSize.XLARGE, ec2.InstanceSize.XLARGE2, ec2.InstanceSize.XLARGE4]
+      .map((size) => ec2.InstanceType.of(cls, size)));
 
     const computeEnvironment = new batch.ManagedEc2EcsComputeEnvironment(this, "ResearchJobComputeEnv", {
       computeEnvironmentName: "gnome-research-spot",
       spot: true,
       instanceTypes,
       useOptimalInstanceClasses: false,
+      allocationStrategy: batch.AllocationStrategy.SPOT_PRICE_CAPACITY_OPTIMIZED,
       maxvCpus: 64,
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },

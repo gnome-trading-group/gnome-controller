@@ -1,4 +1,5 @@
-"""Record Batch state changes of research job tasks, and finalize a run once every task has finished."""
+"""Record Batch state changes of research job tasks, keep the run's task counts current, and finalize a run once
+every task has finished."""
 from __future__ import annotations
 
 import os
@@ -83,17 +84,12 @@ def _update_task(run_id: str, index: int, detail: dict) -> None:
         pass
 
 
-def _set_run_status(run_id: str, status: str, allowed_from: tuple[str, ...], counts: dict | None = None) -> None:
-    expr = "SET #st = :s"
+def _set_run_status(run_id: str, status: str, allowed_from: tuple[str, ...]) -> None:
     values: dict = {":s": status, **{f":from{i}": s for i, s in enumerate(allowed_from)}}
-    if counts:
-        expr += ", succeeded_count = :sc, failed_count = :fc"
-        values[":sc"] = counts["succeeded"]
-        values[":fc"] = counts["failed"]
     try:
         _table.update_item(
             Key={"run_id": run_id, "sk": "META"},
-            UpdateExpression=expr,
+            UpdateExpression="SET #st = :s",
             ConditionExpression=f"#st IN ({', '.join(f':from{i}' for i in range(len(allowed_from)))})",
             ExpressionAttributeNames={"#st": "status"},
             ExpressionAttributeValues=values,
@@ -102,7 +98,16 @@ def _set_run_status(run_id: str, status: str, allowed_from: tuple[str, ...], cou
         pass
 
 
-def _finalize(run_id: str) -> None:
+def _set_counts(run_id: str, succeeded: int, failed: int) -> None:
+    _table.update_item(
+        Key={"run_id": run_id, "sk": "META"},
+        UpdateExpression="SET succeeded_count = :sc, failed_count = :fc",
+        ExpressionAttributeValues={":sc": succeeded, ":fc": failed},
+    )
+
+
+def _on_task_finished(run_id: str) -> None:
+    """Recount the run's finished tasks, so a run in progress shows them, and finalize it once all have."""
     kwargs = {"KeyConditionExpression": Key("run_id").eq(run_id), "ConsistentRead": True}
     rows = []
     while True:
@@ -115,10 +120,10 @@ def _finalize(run_id: str) -> None:
     if meta is None:
         return
     statuses = [r["status"] for r in rows if r["sk"].startswith("TASK#")]
+    _set_counts(run_id, statuses.count("SUCCEEDED"), statuses.count("FAILED"))
     final = run_status(statuses, int(meta["task_count"]))
     if final:
-        _set_run_status(run_id, final, ("SUBMITTED", "RUNNING"),
-                        {"succeeded": statuses.count("SUCCEEDED"), "failed": statuses.count("FAILED")})
+        _set_run_status(run_id, final, ("SUBMITTED", "RUNNING"))
 
 
 def handler(event: dict, context) -> None:
@@ -132,4 +137,4 @@ def handler(event: dict, context) -> None:
     if status == "RUNNING":
         _set_run_status(run_id, "RUNNING", ("SUBMITTED",))
     elif status in TERMINAL:
-        _finalize(run_id)
+        _on_task_finished(run_id)

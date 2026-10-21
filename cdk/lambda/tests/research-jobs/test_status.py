@@ -60,7 +60,9 @@ def test_a_run_goes_running_then_completes_as_its_tasks_finish(table):
     assert t.items[("r1", "TASK#0000")]["log_stream_name"] == "gnome-research-job/default/abc"
 
     status.handler(batch_event("SUCCEEDED", 0, container={"exitCode": 0}), None)
-    assert t.items[("r1", "META")]["status"] == "RUNNING"
+    meta = t.items[("r1", "META")]
+    assert (meta["status"], meta["succeeded_count"], meta["failed_count"]) == ("RUNNING", 1, 0), \
+        "a run in progress counts the tasks that have finished"
     status.handler(batch_event("FAILED", 1, container={"exitCode": 1}, statusReason="Essential container exited"), None)
     meta = t.items[("r1", "META")]
     assert (meta["status"], meta["succeeded_count"], meta["failed_count"]) == ("PARTIALLY_FAILED", 1, 1)
