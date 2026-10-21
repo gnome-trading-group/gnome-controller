@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Badge, Card, Group, SimpleGrid, Stack, Table, Text, ThemeIcon, UnstyledButton } from '@mantine/core';
+import { Anchor, Badge, Card, Group, SimpleGrid, Stack, Table, Text, ThemeIcon, UnstyledButton } from '@mantine/core';
 import { IconAlertOctagon, IconCircleCheck, IconQuestionMark } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { AlarmsSection, AlarmState } from '../../types';
 import { useSystemHealth } from '../../query/hooks';
+import { alarmConsoleUrl } from '../../utils/system';
 import { SectionCard } from './SectionCard';
 
 const STATE_COLORS: Record<AlarmState, string> = { ALARM: 'red', INSUFFICIENT_DATA: 'gray', OK: 'teal' };
@@ -65,7 +66,7 @@ export function ServiceStatus() {
               <Table.Tr key={`${a.region}/${a.name}`}>
                 <Table.Td>
                   <Stack gap={0}>
-                    <Text size="sm">{a.name}</Text>
+                    <Anchor href={alarmConsoleUrl(a.region, a.name)} target="_blank" size="sm">{a.name}</Anchor>
                     {a.state !== 'OK' && a.reason && <Text size="xs" c="dimmed" lineClamp={2}>{a.reason}</Text>}
                   </Stack>
                 </Table.Td>

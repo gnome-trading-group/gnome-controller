@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { FleetSection } from '../../types';
 import { useSystemHealth } from '../../query/hooks';
+import { instanceConsoleUrl } from '../../utils/system';
 import { SectionCard } from './SectionCard';
 
 // Machine images older than this are worth rebuilding (OS patches).
@@ -40,7 +41,7 @@ export function FleetHealth() {
             {rows.map(i => (
               <Table.Tr key={i.instanceId}>
                 <Table.Td>
-                  <Text size="sm" ff="monospace">{i.instanceId}</Text>
+                  <Anchor href={instanceConsoleUrl(i.region, i.instanceId)} target="_blank" size="sm" ff="monospace" display="block">{i.instanceId}</Anchor>
                   <Text size="xs" c="dimmed">{i.type} · {i.region} · {i.purpose}</Text>
                 </Table.Td>
                 <Table.Td>

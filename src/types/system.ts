@@ -57,6 +57,7 @@ export interface JobsSection extends Section {
 
 export interface QueueRow {
   name: string;
+  url: string;
   region: string;
   deadLetter: boolean;
   visible: number;

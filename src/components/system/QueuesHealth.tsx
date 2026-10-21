@@ -1,7 +1,7 @@
-import { Badge, Table, Text } from '@mantine/core';
+import { Anchor, Badge, Table, Text } from '@mantine/core';
 import { QueuesSection } from '../../types';
 import { useSystemHealth } from '../../query/hooks';
-import { formatSeconds } from '../../utils/system';
+import { formatSeconds, queueConsoleUrl } from '../../utils/system';
 import { SectionCard } from './SectionCard';
 
 // Every SQS queue; a dead-letter queue holding messages is work that failed and is waiting on someone.
@@ -37,7 +37,7 @@ export function QueuesHealth() {
               return (
                 <Table.Tr key={`${q.region}/${q.name}`}>
                   <Table.Td>
-                    <Text span size="sm" ff="monospace" c={failing ? 'red' : undefined}>{q.name}</Text>{' '}
+                    <Anchor href={queueConsoleUrl(q.region, q.url)} target="_blank" size="sm" ff="monospace" c={failing ? 'red' : undefined}>{q.name}</Anchor>{' '}
                     {q.deadLetter && <Badge size="xs" variant={failing ? 'filled' : 'outline'} color={failing ? 'red' : 'gray'}>dead-letter</Badge>}
                     <Text span size="xs" c="dimmed"> {q.region}</Text>
                   </Table.Td>

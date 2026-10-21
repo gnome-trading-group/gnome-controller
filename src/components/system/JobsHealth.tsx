@@ -1,8 +1,8 @@
-import { Badge, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { Anchor, Badge, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
 import ReactTimeAgo from 'react-time-ago';
 import { JobsSection } from '../../types';
 import { useSystemHealth } from '../../query/hooks';
-import { describeSchedule } from '../../utils/system';
+import { describeSchedule, ruleConsoleUrl } from '../../utils/system';
 import { SectionCard } from './SectionCard';
 
 // Every scheduled EventBridge rule: when it last fired, and whether it or its Lambda targets have been failing.
@@ -40,7 +40,7 @@ export function JobsHealth() {
                   <Stack gap={0}>
                     <Group gap={6} wrap="nowrap">
                       <Tooltip label={j.name} withArrow openDelay={300}>
-                        <Text size="sm" truncate maw={380}>{j.description || j.targets.map(t => t.name).join(', ') || j.name}</Text>
+                        <Anchor href={ruleConsoleUrl(j.region, j.name)} target="_blank" size="sm" truncate maw={380}>{j.description || j.targets.map(t => t.name).join(', ') || j.name}</Anchor>
                       </Tooltip>
                       {j.overdue && <Badge size="xs" color="red">overdue</Badge>}
                       {!j.enabled && <Badge size="xs" color="gray" variant="outline">disabled</Badge>}

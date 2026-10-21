@@ -36,3 +36,22 @@ export function describeSchedule(expression: string | null, intervalSeconds: num
   if (intervalSeconds) return `${expression} (≈ every ${formatSeconds(intervalSeconds)})`;
   return expression;
 }
+
+const consoleHome = (region: string, service: string) =>
+  `https://${region}.console.aws.amazon.com/${service}/home?region=${region}`;
+
+export const alarmConsoleUrl = (region: string, name: string) =>
+  `${consoleHome(region, 'cloudwatch')}#alarmsV2:alarm/${encodeURIComponent(name)}`;
+
+// Scheduled jobs are rules on the default event bus.
+export const ruleConsoleUrl = (region: string, name: string) =>
+  `${consoleHome(region, 'events')}#/eventbus/default/rules/${encodeURIComponent(name)}`;
+
+export const queueConsoleUrl = (region: string, url: string) =>
+  `https://${region}.console.aws.amazon.com/sqs/v3/home?region=${region}#/queues/${encodeURIComponent(url)}`;
+
+export const instanceConsoleUrl = (region: string, instanceId: string) =>
+  `${consoleHome(region, 'ec2')}#InstanceDetails:instanceId=${instanceId}`;
+
+export const pipelineConsoleUrl = (region: string, name: string) =>
+  `https://${region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${encodeURIComponent(name)}/view?region=${region}`;

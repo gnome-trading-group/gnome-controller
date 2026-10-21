@@ -5,7 +5,7 @@ import { PipelinesSection, PipelineRow, WaitingApproval } from '../../types';
 import { ApprovalDialog, ApprovalTarget } from './ApprovalDialog';
 import { PipelineFlow } from './PipelineFlow';
 import { useSystemHealth } from '../../query/hooks';
-import { formatSeconds } from '../../utils/system';
+import { formatSeconds, pipelineConsoleUrl } from '../../utils/system';
 import { SectionCard } from './SectionCard';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -73,7 +73,7 @@ export function DeploysHealth() {
             {rows.map(p => (
               <Table.Tr key={`${p.region}/${p.name}`}>
                 <Table.Td>
-                  <Text size="sm">{p.name}</Text>
+                  <Anchor href={pipelineConsoleUrl(p.region, p.name)} target="_blank" size="sm" display="block">{p.name}</Anchor>
                   {p.waitingApprovals.map(w => (
                     <Waiting key={`${w.stage}/${w.action}`} pipeline={p} approval={w}
                       canApprove={!!pipelines.data?.canApprove} onDecide={setTarget} />

@@ -174,6 +174,7 @@ def queue_rows(queues: list[dict]) -> list[dict]:
         arn = attributes.get("QueueArn", "")
         rows.append({
             "name": arn.rsplit(":", 1)[-1] or queue["url"].rsplit("/", 1)[-1],
+            "url": queue["url"],
             "region": queue["region"],
             "deadLetter": arn in dead,
             "visible": int(attributes.get("ApproximateNumberOfMessages", 0)),
