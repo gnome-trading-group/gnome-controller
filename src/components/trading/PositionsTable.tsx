@@ -5,9 +5,11 @@ import { MantineReactTable, MRT_ColumnDef, useMantineReactTable } from 'mantine-
 import { Link, useNavigate } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
 import { AfterSession, SessionListingPnl, StrategyListingPnl } from '../../types';
-import { formatDuration, formatMoney } from '../../utils/format';
+import { formatDuration, formatMoney, isPredictionMarket } from '../../utils/format';
 import { ListingLabel, Money, Price, Qty } from './values';
 import { useCents } from '../../hooks/useCents';
+import { useGlobalState } from '../../context/GlobalStateContext';
+import { capital, exposure } from '../../utils/exposure';
 
 type Row = SessionListingPnl | StrategyListingPnl;
 
@@ -50,6 +52,51 @@ function Outcomes({ row }: { row: Row }) {
     <Text span size="sm" style={{ whiteSpace: 'nowrap' }}>
       <Money value={range.worst} size="sm" /> <Text span c="dimmed">to</Text> <Money value={range.best} size="sm" />
     </Text>
+  );
+}
+
+function CostCell({ row, part }: { row: Row; part: 'cost' | 'notional' }) {
+  const held = exposure(row.netQuantity, row.avgEntryPrice, row.markPrice);
+  const value = held ? held[part] : null;
+  if (value === null) return <Text span c="dimmed">—</Text>;
+  return <Money value={value} pnl={false} size="sm" />;
+}
+
+function CapitalCell({ row }: { row: Row }) {
+  const binary = useCents(row.exchangeId);
+  const value = capital(row.netQuantity, row.avgEntryPrice, row.fees, binary);
+  if (value === null) return <Text span c="dimmed">—</Text>;
+  return <Money value={value} pnl={false} size="sm" />;
+}
+
+// Over the open positions, whatever the filter shows: what's in the market right now.
+function ExposureTotals({ rows }: { rows: Row[] }) {
+  const { exchanges } = useGlobalState();
+  const totals = useMemo(() => {
+    let cost = 0n, notional = 0n, tied = 0n, unrealized = 0n, unpriced = 0;
+    for (const row of rows) {
+      const held = exposure(row.netQuantity, row.avgEntryPrice, row.markPrice);
+      if (!held) continue;
+      const binary = isPredictionMarket(exchanges.find(e => e.exchangeId === row.exchangeId)?.exchangeCode);
+      cost += held.cost;
+      if (held.notional === null) unpriced += 1;
+      else notional += held.notional;
+      tied += capital(row.netQuantity, row.avgEntryPrice, row.fees, binary) ?? 0n;
+      unrealized += BigInt(row.unrealized);
+    }
+    return { cost, notional, tied, unrealized, unpriced };
+  }, [rows, exchanges]);
+  return (
+    <Group gap="md" wrap="nowrap">
+      <Text size="sm" component="div">Cost <Money value={totals.cost} pnl={false} size="sm" fw={600} /></Text>
+      <Tooltip label={`${totals.unpriced} position(s) have no price yet and aren't in it`} disabled={totals.unpriced === 0} withArrow>
+        <Text size="sm" component="div" c={totals.unpriced ? 'orange' : undefined}>
+          Notional <Money value={totals.notional} pnl={false} size="sm" fw={600} />
+        </Text>
+      </Tooltip>
+      <Text size="sm" component="div">Capital <Money value={totals.tied} pnl={false} size="sm" fw={600} /></Text>
+      <Text size="sm" component="div">Unrealized <Money value={totals.unrealized} size="sm" fw={600} /></Text>
+    </Group>
   );
 }
 
@@ -161,6 +208,26 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
         mantineTableHeadCellProps: { align: 'right' }, mantineTableBodyCellProps: { align: 'right' },
         Cell: ({ row }) => <MarkCell row={row.original} />,
       },
+      {
+        id: 'cost', header: 'Cost', size: 90,
+        mantineTableHeadCellProps: { align: 'right' }, mantineTableBodyCellProps: { align: 'right' },
+        Cell: ({ row }) => <CostCell row={row.original} part="cost" />,
+      },
+      {
+        id: 'notional', header: 'Notional', size: 90,
+        mantineTableHeadCellProps: { align: 'right' }, mantineTableBodyCellProps: { align: 'right' },
+        Cell: ({ row }) => <CostCell row={row.original} part="notional" />,
+      },
+      {
+        id: 'capital', header: 'Capital', size: 90,
+        mantineTableHeadCellProps: { align: 'right' }, mantineTableBodyCellProps: { align: 'right' },
+        Header: () => (
+          <Tooltip label="Money tied up: a long's cost, a binary short's collateral ($1 a contract less what it sold for), plus fees" multiline w={260} withArrow>
+            <span>Capital</span>
+          </Tooltip>
+        ),
+        Cell: ({ row }) => <CapitalCell row={row.original} />,
+      },
       money('unrealized', 'Unrealized'),
       money('realized', 'Realized'),
       money('fees', 'Fees', false),
@@ -211,16 +278,19 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
     enableRowActions: !!onAdjust,
     positionActionsColumn: 'last',
     renderTopToolbarCustomActions: () => (
-      <SegmentedControl
-        size="xs"
-        value={filter}
-        onChange={v => setFilter(v as typeof filter)}
-        data={[
-          { value: 'all', label: `All (${rows.length})` },
-          { value: 'open', label: `Open (${openCount})` },
-          { value: 'flat', label: `Flat (${rows.length - openCount})` },
-        ]}
-      />
+      <Group gap="lg" wrap="wrap">
+        <SegmentedControl
+          size="xs"
+          value={filter}
+          onChange={v => setFilter(v as typeof filter)}
+          data={[
+            { value: 'all', label: `All (${rows.length})` },
+            { value: 'open', label: `Open (${openCount})` },
+            { value: 'flat', label: `Flat (${rows.length - openCount})` },
+          ]}
+        />
+        {openCount > 0 && <ExposureTotals rows={rows} />}
+      </Group>
     ),
     renderRowActions: ({ row }) => (
       <Tooltip label="Adjust position" withArrow openDelay={400}>

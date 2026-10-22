@@ -1,7 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import { Construct } from 'constructs';
-import { MonitoringFacade, noopAction } from "cdk-monitoring-constructs";
+import { DefaultDashboardFactory, MonitoringFacade, noopAction } from "cdk-monitoring-constructs";
 
 export interface MonitoringStackProps extends cdk.StackProps {
   apiGateway: apigateway.RestApi;
@@ -15,6 +15,11 @@ export class MonitoringStack extends cdk.Stack {
     super(scope, id, props);
 
     const monitoring = new MonitoringFacade(this, 'ControllerDashboard', {
+      // Only the alarms are used; each dashboard is billed monthly and nobody reads them.
+      dashboardFactory: new DefaultDashboardFactory(this, 'ControllerDashboardFactory', {
+        dashboardNamePrefix: 'ControllerDashboard',
+        createDashboard: false,
+      }),
       alarmFactoryDefaults: {
         actionsEnabled: true,
         alarmNamePrefix: 'Controller-',
@@ -24,7 +29,6 @@ export class MonitoringStack extends cdk.Stack {
     });
 
     monitoring
-      .addLargeHeader('Gnome Controller')
       .monitorApiGateway({
         api: props.apiGateway,
         humanReadableName: 'Controller API Gateway',

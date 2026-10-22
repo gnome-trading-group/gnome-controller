@@ -7,6 +7,7 @@ import { SkeletonRows } from '../SkeletonRows';
 import { Link, useSearchParams } from 'react-router-dom';
 import { EventPositions as Events, HeldPosition, Mode } from '../../types';
 import { formatQty } from '../../utils/format';
+import { exposure } from '../../utils/exposure';
 import { Money, Price, Qty, Time } from './values';
 
 type Event = Events['events'][number];
@@ -29,13 +30,17 @@ function positionHref(strategyId: number, mode: Mode, listingId: number) {
 }
 
 function HeldCells({ held }: { held: HeldPosition | null }) {
-  if (!held) return <Table.Td colSpan={4}><Text size="sm" c="dimmed">not held</Text></Table.Td>;
+  if (!held) return <Table.Td colSpan={6}><Text size="sm" c="dimmed">not held</Text></Table.Td>;
   const price = { exchangeId: held.exchangeId, tickSize: held.tickSize, derived: true, size: 'sm' as const };
+  const money = exposure(held.netQuantity, held.avgEntryPrice, held.markPrice);
+  const dash = <Text span size="sm" c="dimmed">—</Text>;
   return (
     <>
       <Table.Td ta="right"><Qty value={held.netQuantity} lotSize={held.lotSize} signed size="sm" /></Table.Td>
       <Table.Td ta="right"><Price value={held.avgEntryPrice} {...price} /></Table.Td>
       <Table.Td ta="right"><Price value={held.markPrice} {...price} /></Table.Td>
+      <Table.Td ta="right">{money ? <Money value={money.cost} pnl={false} size="sm" /> : dash}</Table.Td>
+      <Table.Td ta="right">{money?.notional != null ? <Money value={money.notional} pnl={false} size="sm" /> : dash}</Table.Td>
       <Table.Td ta="right"><Money value={held.unrealized} size="sm" /></Table.Td>
     </>
   );
@@ -145,6 +150,8 @@ function OpenMarket({ market, strategyId, mode }: { market: Market; strategyId: 
             <Table.Th ta="right">Position</Table.Th>
             <Table.Th ta="right">Avg entry</Table.Th>
             <Table.Th ta="right">Mark</Table.Th>
+            <Table.Th ta="right">Cost</Table.Th>
+            <Table.Th ta="right">Notional</Table.Th>
             <Table.Th ta="right">Unrealized</Table.Th>
           </Table.Tr>
         </Table.Thead>
@@ -289,6 +296,8 @@ function OtherCard({ rows, strategyId, mode, basis }: {
             <Table.Th ta="right">Position</Table.Th>
             <Table.Th ta="right">Avg entry</Table.Th>
             <Table.Th ta="right">Mark</Table.Th>
+            <Table.Th ta="right">Cost</Table.Th>
+            <Table.Th ta="right">Notional</Table.Th>
             <Table.Th ta="right">Unrealized</Table.Th>
             <Table.Th ta="right">{basis === 'lifetime' ? 'Lifetime PnL' : 'Session PnL'}</Table.Th>
           </Table.Tr>
@@ -335,15 +344,23 @@ export function EventPositions({ data, strategyId, mode, loading, basis }: {
   const summary = useMemo(() => {
     let unrealized = 0n;
     let worst = 0n;
+    let cost = 0n;
+    let notional = 0n;
+    const add = (held: HeldPosition) => {
+      unrealized += BigInt(held.unrealized);
+      const money = exposure(held.netQuantity, held.avgEntryPrice, held.markPrice);
+      cost += money?.cost ?? 0n;
+      notional += money?.notional ?? 0n;
+    };
     for (const event of [...grouped.awaiting, ...grouped.open]) {
       for (const market of event.markets) {
         if (isSettled(event.resolved, market)) continue;
-        for (const o of market.outcomes) if (o.held) unrealized += BigInt(o.held.unrealized);
+        for (const o of market.outcomes) if (o.held) add(o.held);
         if (market.worst !== null) worst += BigInt(market.worst);
       }
     }
-    for (const p of data?.other ?? []) if (!isFlat(p)) unrealized += BigInt(p.unrealized);
-    return { unrealized, worst };
+    for (const p of data?.other ?? []) if (!isFlat(p)) add(p);
+    return { unrealized, worst, cost, notional };
   }, [grouped, data]);
 
   if (loading && !data) return <EventPositionsSkeleton />;
@@ -385,6 +402,8 @@ export function EventPositions({ data, strategyId, mode, loading, basis }: {
           />
         </Group>
         <Group gap="md" wrap="nowrap">
+          <Text size="sm" component="div">Cost <Money value={summary.cost} pnl={false} size="sm" fw={600} /></Text>
+          <Text size="sm" component="div">Notional <Money value={summary.notional} pnl={false} size="sm" fw={600} /></Text>
           <Text size="sm" component="div">Unrealized <Money value={summary.unrealized.toString()} size="sm" fw={600} /></Text>
           <Text size="sm" component="div">Worst case <Money value={summary.worst.toString()} size="sm" fw={600} /></Text>
         </Group>
