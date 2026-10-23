@@ -69,8 +69,11 @@ function PositionDetail() {
   const [range, setRange] = useState('1d');
   const [start, setStart] = useState(() => rangeStart('1d'));
   const scope = { strategyId, mode };
-  const prices = useMarks(listingId, start, live);
-  const series = usePnlSeries(scope, start, live, listingId);
+  // A position still open once its sessions have stopped is priced every minute by the registry's mark poller, so its
+  // charts keep moving; its fills and orders don't.
+  const priced = live || (row !== null && BigInt(row.netQuantity) !== 0n);
+  const prices = useMarks(listingId, start, priced);
+  const series = usePnlSeries(scope, start, priced, listingId);
   const chartFills = useListingFills(scope, listingId, start, live);
   const [tab, setTab] = useState<string | null>('fills');
   const fills = useFills(scope, { live, enabled: tab === 'fills' }, { listingId });
@@ -114,7 +117,7 @@ function PositionDetail() {
           row?.accountLabel && (
             <>account <Anchor component={Link} to={treasuryLink(row.accountId)} size="sm" ff="monospace">{row.accountLabel}</Anchor></>
           ),
-          live ? 'trading now' : 'no session trading it',
+          live ? 'trading now' : priced ? 'no session trading it · priced every minute' : 'no session trading it',
         ]}
       />
       <ModeBand mode={mode} />
