@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Divider, Group, HoverCard, Stack, Text } from '@mantine/core';
+import { Box, Divider, Group, HoverCard, ScrollArea, Stack, Text } from '@mantine/core';
 import { isActiveSession, SessionHealth, StrategySession } from '../../types';
 import { formatDuration } from '../../utils/format';
 import { formatPermille, healthProblems, HealthProblem } from '../../utils/health';
@@ -71,54 +71,70 @@ function HealthDetail({ health, problems }: { health: SessionHealth | null; prob
   return (
     <Stack gap={4}>
       <Text size="xs" fw={600}>Up {formatDuration(health.uptimeMs)}</Text>
-      <Divider label="Agents" labelPosition="left" />
-      {health.agents.map(agent => (
-        <Row
-          key={agent.name}
-          name={`${agent.name}${agent.hotPath ? ' (hot path)' : ''}`}
-          value={agent.exited ? 'exited' : agent.stalledMs < 2_000 ? 'running' : `idle ${formatDuration(agent.stalledMs)}`}
-          warn={flagged.has(agent.name)}
-        />
-      ))}
-      {health.gateways.length > 0 && <Divider label="Gateways" labelPosition="left" />}
-      {health.gateways.map(gateway => (
-        <Row key={gateway.name} name={gateway.name} value={gateway.reconnecting ? 'reconnecting' : 'connected'} warn={gateway.reconnecting} />
-      ))}
-      {health.ledger && (
-        <>
-          <Divider label="Ledger" labelPosition="left" />
-          <Row
-            name="Last stored write"
-            value={health.ledger.lastAcceptedAgoMs === null ? 'none yet' : `${formatDuration(health.ledger.lastAcceptedAgoMs)} ago`}
-          />
-          {health.ledger.consecutiveFailures > 0 && (
-            <Row name="Failed writes" value={String(health.ledger.consecutiveFailures)} warn />
-          )}
-          {health.ledger.fenced && <Row name="Fenced" value="writes refused" warn />}
-        </>
-      )}
-      {health.host && <HostDetail host={health.host} flagged={flagged} />}
-      {health.journal !== undefined && (
-        <>
-          <Divider label="Journal" labelPosition="left" />
-          {health.journal === null ? (
-            <Row name="Journal" value="off" />
-          ) : (
+      <ScrollArea.Autosize mah="min(60vh, 480px)" type="auto" offsetScrollbars>
+        <Stack gap={4}>
+          <Divider label="Agents" labelPosition="left" />
+          {health.agents.map(agent => (
             <Row
-              name="Waiting to ship"
-              value={health.journal.pendingSegments === 0
-                ? 'none'
-                : `${health.journal.pendingSegments}, oldest ${formatDuration(health.journal.oldestPendingMs)}`}
-              warn={flagged.has('Journal')}
+              key={agent.name}
+              name={`${agent.name}${agent.hotPath ? ' (hot path)' : ''}`}
+              value={agent.exited ? 'exited' : agent.stalledMs < 2_000 ? 'running' : `idle ${formatDuration(agent.stalledMs)}`}
+              warn={flagged.has(agent.name)}
             />
+          ))}
+          {health.gateways.length > 0 && <Divider label="Gateways" labelPosition="left" />}
+          {health.gateways.map(gateway => (
+            <Row key={gateway.name} name={gateway.name} value={gateway.reconnecting ? 'reconnecting' : 'connected'} warn={gateway.reconnecting} />
+          ))}
+          {health.ledger && (
+            <>
+              <Divider label="Ledger" labelPosition="left" />
+              <Row
+                name="Last stored write"
+                value={health.ledger.lastAcceptedAgoMs === null ? 'none yet' : `${formatDuration(health.ledger.lastAcceptedAgoMs)} ago`}
+              />
+              {health.ledger.consecutiveFailures > 0 && (
+                <Row name="Failed writes" value={String(health.ledger.consecutiveFailures)} warn />
+              )}
+              {health.ledger.fenced && <Row name="Fenced" value="writes refused" warn />}
+            </>
           )}
-        </>
-      )}
-      <Divider label="Prices (quiet is normal)" labelPosition="left" />
-      {health.listings.map(listing => (
-        <Row key={listing.listingId} name={`Listing ${listing.listingId}`} value={`unchanged ${formatDuration(listing.priceUnchangedMs)}`} />
-      ))}
+          {health.host && <HostDetail host={health.host} flagged={flagged} />}
+          {health.journal !== undefined && (
+            <>
+              <Divider label="Journal" labelPosition="left" />
+              {health.journal === null ? (
+                <Row name="Journal" value="off" />
+              ) : (
+                <Row
+                  name="Waiting to ship"
+                  value={health.journal.pendingSegments === 0
+                    ? 'none'
+                    : `${health.journal.pendingSegments}, oldest ${formatDuration(health.journal.oldestPendingMs)}`}
+                  warn={flagged.has('Journal')}
+                />
+              )}
+            </>
+          )}
+          <PricesSummary listings={health.listings} />
+        </Stack>
+      </ScrollArea.Autosize>
     </Stack>
+  );
+}
+
+// One row, not one per listing: a quiet price is normal, so per-listing rows only made the card long.
+function PricesSummary({ listings }: { listings: SessionHealth['listings'] }) {
+  if (listings.length === 0) return null;
+  const quietest = listings.reduce((a, b) => (b.priceUnchangedMs > a.priceUnchangedMs ? b : a));
+  return (
+    <>
+      <Divider label="Prices (quiet is normal)" labelPosition="left" />
+      <Row
+        name={`${listings.length} listing${listings.length > 1 ? 's' : ''}`}
+        value={`longest unchanged ${formatDuration(quietest.priceUnchangedMs)} (${quietest.listingId})`}
+      />
+    </>
   );
 }
 
