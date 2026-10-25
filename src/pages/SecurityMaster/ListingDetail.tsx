@@ -19,7 +19,7 @@ import {
 import ReactTimeAgo from 'react-time-ago';
 import { IconAlertTriangle, IconHistory, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react';
 import { useGlobalState } from '../../context/GlobalStateContext';
-import { DenormalizedListing, Event, EventContract, FeeTimelineEntry, Listing, ListingSpec, RiskPolicy, Security, SecurityType } from '../../types';
+import { DenormalizedListing, Event, EventContract, FeeTimelineEntry, Listing, ListingSpec, RiskPolicy, Security, SecurityType, Stream } from '../../types';
 import { registryApi } from '../../utils/api';
 import {
   formatAssetClass,
@@ -165,6 +165,7 @@ function ListingDetail() {
   const [specsError, setSpecsError] = useState<string | null>(null);
   const [fees, setFees] = useState<FeeTimelineEntry[] | null>(null);
   const [feesError, setFeesError] = useState<string | null>(null);
+  const [stream, setStream] = useState<Stream | null>(null);
   const [eventContract, setEventContract] = useState<EventContract | null>(null);
   const [event, setEvent] = useState<Event | null>(null);
   const [eventError, setEventError] = useState<string | null>(null);
@@ -269,6 +270,16 @@ function ListingDetail() {
     return () => { cancelled = true; };
   }, [id]);
 
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setStream(null);
+    registryApi.getStreamForListing(id)
+      .then(s => { if (!cancelled) setStream(s); })
+      .catch(() => { if (!cancelled) setStream(null); });
+    return () => { cancelled = true; };
+  }, [id]);
+
   usePageTitleLabels([{ segment: listingId, label: listing && `${listing.securitySymbol} @ ${listing.exchangeName}` }]);
 
   if (loading) {
@@ -354,6 +365,7 @@ function ListingDetail() {
               <InfoRow label="Listing ID" value={listing.listingId} />
               <InfoRow label="Exchange Security ID" value={listing.exchangeSecurityId} />
               <InfoRow label="Exchange Symbol" value={listing.exchangeSecuritySymbol} />
+              <InfoRow label="Market-data Stream" value={stream ? `${stream.streamId} (${stream.family}, ${stream.resolvedRegion})` : '—'} />
               <InfoRow label="Fee Group" value={listing.feeGroup ?? '—'} />
               <InfoRow label="Fee Event" value={listing.feeEvent ?? '—'} />
               <InfoRow label="Created" value={<ReactTimeAgo date={new Date(listing.dateCreated)} timeStyle="round" />} />

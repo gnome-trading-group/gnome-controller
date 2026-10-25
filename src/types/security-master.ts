@@ -63,6 +63,43 @@ export interface Exchange {
   dateModified: string;
 }
 
+// Where market data comes from: a trading venue (one per exchange, created with it) or a data vendor.
+export type SourceKind = 'VENUE' | 'VENDOR';
+
+export interface Source {
+  sourceId: number;
+  code: string;
+  kind: SourceKind;
+  exchangeId: number | null;
+  // Vendors only; a venue collects in its exchange's region.
+  homeRegion: string | null;
+  adapter: string;
+  families: string[];
+  active: boolean;
+  dateCreated: string;
+  dateModified: string;
+}
+
+// One thing collected from a source: a listing's book (subjectKind LISTING) or a vendor subject such as a match.
+export interface Stream {
+  streamId: number;
+  sourceId: number;
+  sourceCode: string;
+  sourceKind: SourceKind;
+  subjectKind: string;
+  listingId: number | null;
+  nativeSubjectId: string;
+  family: string;
+  region: string | null;
+  // Where the stream is collected: its own override, else the venue's exchange region, else the vendor's home region.
+  resolvedRegion: string;
+  eventId: number | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  active: boolean;
+  dateCreated: string;
+}
+
 export interface Listing {
   listingId: number;
   exchangeId: number;

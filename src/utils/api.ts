@@ -3,7 +3,7 @@ import {
   DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
   RuleType, TriggerEvaluation,
 } from '../types/launcher';
-import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Strategy } from '../types';
+import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
 import { BacktestRun } from '../types/backtests';
@@ -119,6 +119,16 @@ function endSession() {
   const currentPath = window.location.pathname + window.location.search + window.location.hash;
   if (currentPath !== '/') sessionStorage.setItem('postLoginRedirect', currentPath);
   signOut().catch(() => { signingOut = false; });
+}
+
+// The streams API filters by its own fields and sorts by snake_case columns; it has no free-text search.
+function streamQueryParams(params: PaginationParams): Record<string, string | number | boolean> {
+  const queryParams: Record<string, string | number | boolean> = {};
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || k === 'search') return;
+    queryParams[k] = k === 'sortBy' ? String(v).replace(/[A-Z]/g, c => `_${c.toLowerCase()}`) : v as string | number | boolean;
+  });
+  return queryParams;
 }
 
 export async function sendApiRequest<T>(
@@ -557,6 +567,42 @@ export const registryApi = {
       queryParams,
     }).then(r => r.count);
   },
+  listSources: () =>
+    sendApiRequest<Source[]>('/sources', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: { sortBy: 'code' },
+    }),
+  createVendorSource: (source: { code: string; homeRegion: string; adapter: string; families: string[] }) =>
+    sendApiRequest<Source>('/sources', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      body: source,
+    }),
+  updateSource: (sourceId: number, source: { homeRegion?: string; adapter?: string; families?: string[]; active?: boolean }) =>
+    sendApiRequest<Source>('/sources', 'PATCH', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      body: source,
+      queryParams: { sourceId },
+    }),
+  listStreamsPaginated: (params: PaginationParams) =>
+    sendApiRequest<Stream[]>('/streams', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: streamQueryParams(params),
+    }),
+  countStreams: (params?: PaginationParams) =>
+    sendApiRequest<{ count: number }>('/streams', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: { ...streamQueryParams(params ?? {}), count: true },
+    }).then(r => r.count),
+  getStreamForListing: (listingId: number) =>
+    sendApiRequest<Stream[]>('/streams', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: { listingId },
+    }).then(rows => rows[0] ?? null),
   listCurrenciesPaginated: (params: PaginationParams) => {
     const queryParams: Record<string, string | number | boolean> = {};
     if (params.limit !== undefined) queryParams.limit = params.limit;

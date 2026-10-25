@@ -41,7 +41,7 @@ export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
     controllerIdentityProviderUrl: "https://portal.sso.us-east-1.amazonaws.com/saml/metadata/NzQ2NjY5MTk2MzE2X2lucy02OTNjMzFlYTA0YjJjMmRi",
     domainName: "controller.gnometrading.group",
     approvesPipelines: true,
-    researchJobMaxVcpus: 128,
+    researchJobMaxVcpus: 256,
     certificateArn: "arn:aws:acm:us-east-1:241533121172:certificate/10d470fd-e43a-4145-9a7b-4dc7a48ee42a",
   },
 }
