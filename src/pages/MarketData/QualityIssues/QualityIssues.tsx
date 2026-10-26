@@ -265,15 +265,14 @@ function QualityIssues() {
   };
 
   const handleBackfillSubmit = async () => {
-    if (!backfillExchangeId || !backfillSecurityId || !backfillStartDate || !backfillEndDate) return;
+    if (!backfillListing || !backfillStartDate || !backfillEndDate) return;
     setBackfillSubmitting(true);
     setBackfillError(null);
     setBackfillSuccess(null);
 
     try {
       const response = await marketDataApi.triggerQualityBackfill({
-        exchangeId: parseInt(backfillExchangeId),
-        securityId: parseInt(backfillSecurityId),
+        listingId: backfillListing.listingId,
         startDate: formatDate(backfillStartDate),
         endDate: formatDate(backfillEndDate),
         mode: backfillMode,
@@ -581,7 +580,7 @@ function QualityIssues() {
             <Button
               onClick={handleBackfillSubmit}
               loading={backfillSubmitting}
-              disabled={!backfillExchangeId || !backfillSecurityId || !backfillStartDate || !backfillEndDate}
+              disabled={!backfillListing || !backfillStartDate || !backfillEndDate}
             >
               Submit Backfill
             </Button>

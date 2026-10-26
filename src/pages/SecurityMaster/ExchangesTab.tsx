@@ -15,7 +15,7 @@ import { IconEdit, IconPlus, IconTrash } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row, type MRT_TableInstance } from 'mantine-react-table';
 import { useGlobalState } from '../../context/GlobalStateContext';
-import { AWS_REGIONS, Exchange, SchemaType } from '../../types';
+import { AWS_REGIONS, Exchange } from '../../types';
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 
@@ -34,7 +34,6 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
     exchangeCode: '',
     exchangeName: '',
     region: '',
-    schemaType: '',
   });
 
   const handleCreateExchange = async () => {
@@ -44,7 +43,7 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
       await registryApi.createExchange(newExchangeForm);
       await refreshExchanges();
       setCreateExchangeOpen(false);
-      setNewExchangeForm({ exchangeCode: '', exchangeName: '', region: '', schemaType: '' });
+      setNewExchangeForm({ exchangeCode: '', exchangeName: '', region: '' });
     } catch (err) {
       setCreateError(errorMessage(err, 'Failed to create exchange'));
     } finally {
@@ -100,21 +99,6 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
           data={AWS_REGIONS}
           onChange={(value) => {
             row.original.region = value || '';
-          }}
-        />
-      ),
-    },
-    {
-      accessorKey: 'schemaType',
-      header: 'Schema Type',
-      enableSorting: true,
-      enableEditing: true,
-      Edit: ({ cell, row }) => (
-        <Select
-          defaultValue={cell.getValue<string>()}
-          data={Object.values(SchemaType)}
-          onChange={(value) => {
-            row.original.schemaType = value || '';
           }}
         />
       ),
@@ -234,13 +218,6 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
             value={newExchangeForm.region || null}
             onChange={(value) => setNewExchangeForm(prev => ({ ...prev, region: value || '' }))}
             searchable
-            required
-          />
-          <Select
-            label="Schema Type"
-            data={Object.values(SchemaType)}
-            value={newExchangeForm.schemaType || null}
-            onChange={(value) => setNewExchangeForm(prev => ({ ...prev, schemaType: value || '' }))}
             required
           />
           {createError && <Text c="red" size="sm">{createError}</Text>}

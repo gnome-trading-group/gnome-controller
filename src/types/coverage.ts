@@ -1,91 +1,43 @@
-// Coverage Summary Response
+// Coverage of the stored market data, by stream (a listing's book, or a vendor feed), from the daily inventory.
 export interface CoverageSummaryResponse {
   totalFiles: number;
   totalSizeBytes: number;
   totalMinutes: number;
-  securityExchangeCount: number;
+  streamCount: number;
   earliestDate?: string;
   latestDate?: string;
-  securities: Record<string, SecurityExchangeCoverageSummary>;
-  schemaTypes: Record<string, SchemaTypeStats>;
+  streams: Record<string, StreamCoverageSummary>;
+  recordTypes: Record<string, RecordTypeStats>;
   lastInventoryDate?: number;
   error?: string;
 }
 
-export interface SecurityExchangeCoverageSummary {
-  securityId: number;
-  exchangeId: number;
+export interface StreamCoverageSummary {
+  streamId: number;
   fileCount: number;
-  minuteCount: number;
-  sizeBytes: number;
-  earliestDate?: string;
-  latestDate?: string;
-  schemaTypes: string[];
-}
-
-export interface SchemaTypeStats {
-  fileCount: number;
-  minuteCount: number;
-  sizeBytes: number;
-}
-
-// Security Coverage Response (all exchanges for a security)
-export interface SecurityCoverageResponse {
-  securityId: number;
-  exchanges: Record<string, ExchangeCoverage>;
-  coverage: Record<string, SecurityDayCoverage>;
-  summary: {
-    totalExchanges: number;
-    totalDays: number;
-    totalMinutes: number;
-    earliestDate: string;
-    latestDate: string;
-    totalSizeBytes: number;
-    schemaTypes: string[];
-  };
-  error?: string;
-}
-
-export interface ExchangeCoverage {
-  exchangeId: number;
-  totalDays: number;
   totalMinutes: number;
   totalSizeBytes: number;
-  earliestDate: string;
-  latestDate: string;
-  schemaTypes: string[];
+  earliestDate?: string;
+  latestDate?: string;
+  recordTypes: string[];
 }
 
-export interface SecurityDayCoverage {
-  hasCoverage: boolean;
-  totalMinutes: number;
-  schemaTypes: Record<string, SchemaTypeDayCoverage>;
-  exchanges: Record<string, ExchangeDayCoverage>;
-}
-
-export interface ExchangeDayCoverage {
-  minutes: number;
-  schemaTypes: Record<string, { minutes: number; sizeBytes: number }>;
-}
-
-export interface SchemaTypeDayCoverage {
-  hasCoverage: boolean;
-  minutes: number;
+export interface RecordTypeStats {
+  fileCount: number;
+  minuteCount: number;
   sizeBytes: number;
 }
 
-// Security+Exchange Coverage Response (detailed day-by-day)
-export interface SecurityExchangeCoverageResponse {
-  securityId: number;
-  exchangeId: number;
+export interface StreamCoverageResponse {
+  streamId: number;
   coverage: Record<string, DayCoverage>;
   summary: {
     totalDays: number;
     totalMinutes: number;
-    earliestDate: string;
-    latestDate: string;
+    earliestDate?: string;
+    latestDate?: string;
     totalSizeBytes: number;
-    schemaTypes: string[];
+    recordTypes: string[];
   };
   error?: string;
 }
@@ -93,6 +45,11 @@ export interface SecurityExchangeCoverageResponse {
 export interface DayCoverage {
   hasCoverage: boolean;
   totalMinutes: number;
-  schemaTypes: Record<string, SchemaTypeDayCoverage>;
+  recordTypes: Record<string, RecordTypeDayCoverage>;
 }
 
+export interface RecordTypeDayCoverage {
+  hasCoverage: boolean;
+  minutes: number;
+  sizeBytes: number;
+}

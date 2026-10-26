@@ -1,4 +1,4 @@
-import { SchemaType } from "./schema";
+import { RecordType } from "./record-type";
 
 export type TransformJobStatus = 'PENDING' | 'COMPLETE' | 'FAILED';
 
@@ -6,7 +6,9 @@ export interface TransformJob {
   jobId: string;
   timestamp: number;
   listingId: number;
-  schemaType: SchemaType;
+  schemaType: RecordType;
+  // The collected record type the job converts from.
+  sourceRecordType?: RecordType;
   status: TransformJobStatus;
   createdAt: number;
   processedAt: number | null;
@@ -34,7 +36,7 @@ export interface TransformJobsListParams {
 
 export interface TransformJobsSearchParams {
   listingId: number;
-  schemaType?: SchemaType;
+  schemaType?: RecordType;
   limit?: number;
   lastEvaluatedKey?: string;
 }

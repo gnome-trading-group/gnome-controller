@@ -16,9 +16,9 @@ import {
 import { IconRefresh, IconDatabase, IconClock, IconFiles, IconServer } from '@tabler/icons-react';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { marketDataApi, registryApi } from '../../../utils/api';
-import { useGlobalState } from '../../../context/GlobalStateContext';
 import { StatValue } from '../../../components/StatValue';
-import { CoverageSummaryResponse, SecurityExchangeCoverageSummary } from '../../../types/coverage';
+import { CoverageSummaryResponse, StreamCoverageSummary } from '../../../types/coverage';
+import { DenormalizedListing, Stream } from '../../../types';
 
 // Helper function to format bytes to human-readable string
 function formatBytes(bytes: number): string {
@@ -36,20 +36,29 @@ function formatMinutes(minutes: number): string {
   return `${(minutes / 1440).toFixed(1)} days`;
 }
 
-interface TableRow extends SecurityExchangeCoverageSummary {
-  key: string;
+interface TableRow extends StreamCoverageSummary {
+  listingId: number | null;
   securitySymbol: string;
-  exchangeName: string;
+  sourceName: string;
+}
+
+// The registry's /streams and /listings filters take id lists; batched to keep URLs short.
+const ID_BATCH = 200;
+
+function batches(ids: number[]): number[][] {
+  const out: number[][] = [];
+  for (let i = 0; i < ids.length; i += ID_BATCH) out.push(ids.slice(i, i + ID_BATCH));
+  return out;
 }
 
 function CoverageSummary() {
   const navigate = useNavigate();
-  const { exchanges } = useGlobalState();
   const [data, setData] = useState<CoverageSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [securityMap, setSecurityMap] = useState<Record<number, string>>({});
-  const fetchedSecurityIds = useRef<string>('');
+  const [streams, setStreams] = useState<Record<number, Stream>>({});
+  const [listings, setListings] = useState<Record<number, DenormalizedListing>>({});
+  const fetchedStreamIds = useRef<string>('');
 
   const loadData = async () => {
     try {
@@ -68,38 +77,49 @@ function CoverageSummary() {
     loadData();
   }, []);
 
+  // Each stream's registry row, then the listings the book streams carry, for names.
   useEffect(() => {
-    if (!data?.securities) return;
-    const uniqueIds = [...new Set(Object.values(data.securities).map(c => c.securityId))];
-    const key = [...uniqueIds].sort().join(',');
-    if (key === fetchedSecurityIds.current) return;
-    fetchedSecurityIds.current = key;
-    // One request for every security on the page instead of one each; batched to keep URLs short.
-    const batches: number[][] = [];
-    for (let i = 0; i < uniqueIds.length; i += 200) batches.push(uniqueIds.slice(i, i + 200));
-    Promise.allSettled(batches.map(ids => registryApi.listSecuritiesByIds(ids))).then(results => {
-      const map: Record<number, string> = {};
-      results.forEach(r => { if (r.status === 'fulfilled') r.value.forEach(sec => { map[sec.securityId] = sec.symbol; }); });
-      setSecurityMap(map);
+    if (!data?.streams) return;
+    const streamIds = Object.values(data.streams).map(c => c.streamId);
+    const key = [...streamIds].sort((a, b) => a - b).join(',');
+    if (key === fetchedStreamIds.current) return;
+    fetchedStreamIds.current = key;
+    Promise.allSettled(batches(streamIds).map(ids => registryApi.listStreamsByIds(ids))).then(async results => {
+      const byStream: Record<number, Stream> = {};
+      results.forEach(r => { if (r.status === 'fulfilled') r.value.forEach(s => { byStream[s.streamId] = s; }); });
+      setStreams(byStream);
+      const listingIds = Object.values(byStream).flatMap(s => (s.listingId === null ? [] : [s.listingId]));
+      const listingResults = await Promise.allSettled(batches(listingIds).map(ids => registryApi.listListingsByIds(ids)));
+      const byListing: Record<number, DenormalizedListing> = {};
+      listingResults.forEach(r => { if (r.status === 'fulfilled') r.value.forEach(l => { byListing[l.listingId] = l; }); });
+      setListings(byListing);
     });
   }, [data]);
 
   const tableData = useMemo((): TableRow[] => {
-    if (!data?.securities) return [];
-    return Object.entries(data.securities).map(([key, coverage]) => {
-      const exchange = exchanges.find(e => e.exchangeId === coverage.exchangeId);
+    if (!data?.streams) return [];
+    return Object.values(data.streams).map(coverage => {
+      const stream = streams[coverage.streamId];
+      const listing = stream?.listingId != null ? listings[stream.listingId] : undefined;
       return {
         ...coverage,
-        key,
-        securitySymbol: securityMap[coverage.securityId] || `Security ${coverage.securityId}`,
-        exchangeName: exchange?.exchangeName || `Exchange ${coverage.exchangeId}`,
+        listingId: stream?.listingId ?? null,
+        securitySymbol: listing?.securitySymbol ?? stream?.nativeSubjectId ?? `Stream ${coverage.streamId}`,
+        sourceName: listing?.exchangeName ?? stream?.sourceCode ?? '',
       };
     });
-  }, [data, securityMap, exchanges]);
+  }, [data, streams, listings]);
 
   const columns = useMemo<MRT_ColumnDef<TableRow>[]>(() => [
-    { accessorKey: 'securitySymbol', header: 'Security', size: 120 },
-    { accessorKey: 'exchangeName', header: 'Exchange', size: 150 },
+    { accessorKey: 'streamId', header: 'Stream', size: 90 },
+    { accessorKey: 'securitySymbol', header: 'Subject', size: 160 },
+    { accessorKey: 'sourceName', header: 'Source', size: 150 },
+    {
+      accessorKey: 'recordTypes',
+      header: 'Record Types',
+      size: 160,
+      Cell: ({ cell }) => cell.getValue<string[]>().join(', '),
+    },
     {
       accessorKey: 'fileCount',
       header: 'Files',
@@ -107,13 +127,13 @@ function CoverageSummary() {
       Cell: ({ cell }) => cell.getValue<number>().toLocaleString(),
     },
     {
-      accessorKey: 'minuteCount',
+      accessorKey: 'totalMinutes',
       header: 'Coverage',
       size: 100,
       Cell: ({ cell }) => formatMinutes(cell.getValue<number>()),
     },
     {
-      accessorKey: 'sizeBytes',
+      accessorKey: 'totalSizeBytes',
       header: 'Size',
       size: 100,
       Cell: ({ cell }) => formatBytes(cell.getValue<number>()),
@@ -130,11 +150,11 @@ function CoverageSummary() {
     enableTopToolbar: true,
     initialState: {
       density: 'xs',
-      sorting: [{ id: 'sizeBytes', desc: true }],
+      sorting: [{ id: 'totalSizeBytes', desc: true }],
     },
     state: { isLoading: loading },
     mantineTableBodyRowProps: ({ row }) => (
-      navigateRowProps(navigate, `/market-data/coverage/${row.original.securityId}`)
+      navigateRowProps(navigate, `/market-data/coverage/${row.original.streamId}`)
     ),
   });
 
@@ -193,8 +213,8 @@ function CoverageSummary() {
           <Paper withBorder p="md" radius="md">
             <Group justify="space-between">
               <div>
-                <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Security/Exchange Pairs</Text>
-                <StatValue value={data && data.securityExchangeCount} />
+                <Text size="xs" c="dimmed" tt="uppercase" fw={700}>Streams</Text>
+                <StatValue value={data && data.streamCount} />
               </div>
               <IconServer size={32} stroke={1.5} color="var(--mantine-color-violet-6)" />
             </Group>
@@ -203,7 +223,7 @@ function CoverageSummary() {
       )}
 
       <Card withBorder>
-        <Title order={4} mb="md">Coverage by Security & Exchange</Title>
+        <Title order={4} mb="md">Coverage by Stream</Title>
         <MantineReactTable table={table} />
       </Card>
     </Container>

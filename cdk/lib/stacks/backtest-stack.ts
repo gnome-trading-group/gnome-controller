@@ -10,13 +10,13 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import { Construct } from "constructs";
-import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
+import { CallerKind, GnomeApiAuthorizer, Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 
 export interface BacktestStackProps extends cdk.StackProps {
   stage: Stage;
   apiGateway: apigateway.RestApi;
-  cognitoAuthorizer: apigateway.CognitoUserPoolsAuthorizer;
+  auth: GnomeApiAuthorizer;
 }
 
 export class BacktestStack extends cdk.Stack {
@@ -246,23 +246,23 @@ export class BacktestStack extends cdk.Stack {
     });
 
     // ---------------------------------------------------------------------------
-    // API Gateway routes — Cognito auth (shared authorizer from BackendStack)
+    // API Gateway routes — people only (shared authorizer from BackendStack)
     // ---------------------------------------------------------------------------
 
-    const cognitoOpts: apigateway.MethodOptions = {
-      authorizationType: apigateway.AuthorizationType.COGNITO,
-      authorizer: props.cognitoAuthorizer,
+    const personOpts: apigateway.MethodOptions = {
+      authorizationType: apigateway.AuthorizationType.CUSTOM,
+      authorizer: props.auth.authorizerFor([CallerKind.PERSON]),
     };
 
     const backtestsResource = props.apiGateway.root.addResource("backtests");
-    backtestsResource.addMethod("GET", new apigateway.LambdaIntegration(listLambda.function), cognitoOpts);
-    backtestsResource.addMethod("POST", new apigateway.LambdaIntegration(submitLambda.function), cognitoOpts);
+    backtestsResource.addMethod("GET", new apigateway.LambdaIntegration(listLambda.function), personOpts);
+    backtestsResource.addMethod("POST", new apigateway.LambdaIntegration(submitLambda.function), personOpts);
 
     const runResource = backtestsResource.addResource("{runId}");
-    runResource.addMethod("GET", new apigateway.LambdaIntegration(getLambda.function), cognitoOpts);
-    runResource.addMethod("DELETE", new apigateway.LambdaIntegration(cancelLambda.function), cognitoOpts);
+    runResource.addMethod("GET", new apigateway.LambdaIntegration(getLambda.function), personOpts);
+    runResource.addMethod("DELETE", new apigateway.LambdaIntegration(cancelLambda.function), personOpts);
     runResource.addResource("jobs").addResource("{index}").addResource("logs")
-      .addMethod("GET", new apigateway.LambdaIntegration(logsLambda.function), cognitoOpts);
+      .addMethod("GET", new apigateway.LambdaIntegration(logsLambda.function), personOpts);
 
     // ---------------------------------------------------------------------------
     // GitHub Actions OIDC — allows CI to push images to ECR without long-lived keys

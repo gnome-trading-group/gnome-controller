@@ -149,8 +149,7 @@ def _input_exists(digest: str) -> bool:
 
 def _submitted_by(event: dict) -> str:
     try:
-        claims = event["requestContext"]["authorizer"]["claims"]
-        return claims.get("email") or claims.get("cognito:username", "cli")
+        return event["requestContext"]["authorizer"]["actor"]
     except (KeyError, TypeError):
         return "cli"
 

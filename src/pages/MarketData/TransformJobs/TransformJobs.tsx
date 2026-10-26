@@ -22,7 +22,7 @@ import ReactTimeAgo from 'react-time-ago';
 import { marketDataApi, registryApi } from '../../../utils/api';
 import { useListingSearch, useListingLabels } from '../../../hooks/useAsyncSearch';
 import { TransformJob, TransformJobStatus } from '../../../types/transform-jobs';
-import { SchemaType } from '../../../types/schema';
+import { RecordType } from '../../../types/record-type';
 import { useLatestRequest } from '../../../hooks/useLatestRequest';
 
 const STATUS_CONFIG: Record<TransformJobStatus, { color: string; icon: React.ReactNode; label: string }> = {
@@ -32,7 +32,7 @@ const STATUS_CONFIG: Record<TransformJobStatus, { color: string; icon: React.Rea
 };
 
 const ALL_STATUSES: TransformJobStatus[] = ['PENDING', 'COMPLETE', 'FAILED'];
-const ALL_SCHEMA_TYPES: SchemaType[] = Object.values(SchemaType);
+const ALL_SCHEMA_TYPES: RecordType[] = Object.values(RecordType);
 
 interface TableRow extends TransformJob {
   listingLabel: string;
@@ -97,7 +97,7 @@ function TransformJobs() {
       if (selectedListingId) {
         response = await marketDataApi.searchTransformJobs({
           listingId: Number(selectedListingId),
-          schemaType: selectedSchemaType as SchemaType | undefined,
+          schemaType: selectedSchemaType as RecordType | undefined,
           limit: 100,
           lastEvaluatedKey: append ? lastEvaluatedKey || undefined : undefined,
         });

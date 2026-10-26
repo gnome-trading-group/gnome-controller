@@ -24,10 +24,9 @@ import { IconRefresh, IconDatabase, IconClock, IconCalendar, IconArrowLeft, Icon
 import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { marketDataApi, registryApi } from '../../../utils/api';
-import { useGlobalState } from '../../../context/GlobalStateContext';
 import { StatValue } from '../../../components/StatValue';
-import { Security, DenormalizedListing } from '../../../types';
-import { SecurityExchangeCoverageResponse, DayCoverage } from '../../../types/coverage';
+import { DenormalizedListing, Stream } from '../../../types';
+import { StreamCoverageResponse, DayCoverage } from '../../../types/coverage';
 import { ListingStatisticsHistoryPoint, QualityIssue, formatRuleType, getRuleTypeColor, QualityRuleType } from '../../../types/quality-issues';
 import { usePageTitleLabels } from '../../../context/PageTitleContext';
 
@@ -49,7 +48,7 @@ function formatMinutes(minutes: number): string {
 
 interface TableRow extends DayCoverage {
   date: string;
-  schemaTypesList: string[];
+  recordTypesList: string[];
   totalSizeBytes: number;
 }
 
@@ -95,11 +94,10 @@ function groupByMonth(dates: string[]): Map<string, string[]> {
   return groups;
 }
 
-function SecurityExchangeCoverage() {
-  const { securityId, exchangeId } = useParams<{ securityId: string; exchangeId: string }>();
+function StreamCoverage() {
+  const { streamId } = useParams<{ streamId: string }>();
   const navigate = useNavigate();
-  const { exchanges } = useGlobalState();
-  const [data, setData] = useState<SecurityExchangeCoverageResponse | null>(null);
+  const [data, setData] = useState<StreamCoverageResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<string | null>('calendar');
@@ -107,24 +105,21 @@ function SecurityExchangeCoverage() {
   const [qualityIssueSummary, setQualityIssueSummary] = useState<QualityIssue[]>([]);
   const [qualityIssuesTruncated, setQualityIssuesTruncated] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
-  const [security, setSecurity] = useState<Security | null>(null);
+  const [stream, setStream] = useState<Stream | null>(null);
   const [listing, setListing] = useState<DenormalizedListing | null>(null);
 
-  const exchange = exchanges.find(e => e.exchangeId === Number(exchangeId));
-  usePageTitleLabels([
-    { segment: securityId, label: security?.symbol },
-    { segment: exchangeId, label: exchange?.exchangeName },
-  ]);
+  // A listing's book is named by its listing; any other stream by its source and subject.
+  const title = listing
+    ? `${listing.securitySymbol} - ${listing.exchangeName}`
+    : stream ? `${stream.sourceCode} ${stream.nativeSubjectId}` : `Stream ${streamId}`;
+  usePageTitleLabels([{ segment: streamId, label: title }]);
 
   const loadData = async () => {
-    if (!securityId || !exchangeId) return;
+    if (!streamId) return;
     try {
       setLoading(true);
       setError(null);
-      const response = await marketDataApi.getSecurityExchangeCoverage(
-        Number(securityId),
-        Number(exchangeId)
-      );
+      const response = await marketDataApi.getStreamCoverage(Number(streamId));
       setData(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load coverage data');
@@ -135,21 +130,26 @@ function SecurityExchangeCoverage() {
 
   useEffect(() => {
     loadData();
-  }, [securityId, exchangeId]);
+  }, [streamId]);
 
   useEffect(() => {
-    if (!securityId) return;
-    registryApi.listSecuritiesPaginated({ securityId: Number(securityId), limit: 1 })
-      .then(rows => setSecurity(rows[0] ?? null))
-      .catch(() => {});
-  }, [securityId]);
-
-  useEffect(() => {
-    if (!securityId || !exchangeId) return;
-    registryApi.listListingsPaginated({ securityId: Number(securityId), exchangeId: parseInt(exchangeId), limit: 1 })
-      .then(rows => setListing(rows[0] ?? null))
-      .catch(() => setListing(null));
-  }, [securityId, exchangeId]);
+    if (!streamId) return;
+    let cancelled = false;
+    registryApi.listStreamsByIds([Number(streamId)])
+      .then(async rows => {
+        const found = rows[0] ?? null;
+        if (cancelled) return;
+        setStream(found);
+        if (found?.listingId == null) {
+          setListing(null);
+          return;
+        }
+        const listings = await registryApi.listListingsByIds([found.listingId]);
+        if (!cancelled) setListing(listings[0] ?? null);
+      })
+      .catch(() => { if (!cancelled) { setStream(null); setListing(null); } });
+    return () => { cancelled = true; };
+  }, [streamId]);
 
   useEffect(() => {
     if (!listing) return;
@@ -172,13 +172,12 @@ function SecurityExchangeCoverage() {
     if (!data?.coverage) return [];
     return Object.entries(data.coverage)
       .map(([date, coverage]) => {
-        // Calculate total size from schema types
-        const totalSizeBytes = Object.values(coverage.schemaTypes || {})
-          .reduce((sum, schema) => sum + (schema.sizeBytes || 0), 0);
+        const totalSizeBytes = Object.values(coverage.recordTypes || {})
+          .reduce((sum, record) => sum + (record.sizeBytes || 0), 0);
         return {
           ...coverage,
           date,
-          schemaTypesList: Object.keys(coverage.schemaTypes || {}),
+          recordTypesList: Object.keys(coverage.recordTypes || {}),
           totalSizeBytes,
         };
       })
@@ -248,13 +247,13 @@ function SecurityExchangeCoverage() {
       Cell: ({ cell }) => formatBytes(cell.getValue<number>() || 0),
     },
     {
-      accessorKey: 'schemaTypesList',
-      header: 'Schema Types',
+      accessorKey: 'recordTypesList',
+      header: 'Record Types',
       size: 200,
       Cell: ({ cell }) => (
         <Group gap={4}>
-          {cell.getValue<string[]>().map(schema => (
-            <Badge key={schema} size="xs" variant="light">{schema}</Badge>
+          {cell.getValue<string[]>().map(record => (
+            <Badge key={record} size="xs" variant="light">{record}</Badge>
           ))}
         </Group>
       ),
@@ -325,8 +324,7 @@ function SecurityExchangeCoverage() {
 
   const breadcrumbItems = [
     { title: 'Coverage', href: '/market-data/coverage' },
-    { title: security?.symbol || `Security ${securityId}`, href: `/market-data/coverage/${securityId}` },
-    { title: exchange?.exchangeName || `Exchange ${exchangeId}`, href: '#' },
+    { title, href: '#' },
   ];
 
   return (
@@ -348,12 +346,11 @@ function SecurityExchangeCoverage() {
 
       <Group justify="space-between" mb="md">
         <Group>
-          <ActionIcon variant="subtle" onClick={() => navigate(`/market-data/coverage/${securityId}`)}>
+          <ActionIcon variant="subtle" onClick={() => navigate('/market-data/coverage')}>
             <IconArrowLeft size={20} />
           </ActionIcon>
-          <Title order={2}>
-            {security?.symbol || `Security ${securityId}`} - {exchange?.exchangeName || `Exchange ${exchangeId}`}
-          </Title>
+          <Title order={2}>{title}</Title>
+          <Badge variant="light">Stream {streamId}</Badge>
         </Group>
         <Tooltip label="Refresh" position="bottom" withArrow openDelay={500}>
           <ActionIcon size="lg" variant="filled" color="green" onClick={loadData} loading={loading}>
@@ -425,12 +422,12 @@ function SecurityExchangeCoverage() {
         </SimpleGrid>
       )}
 
-      {data?.summary?.schemaTypes && data.summary.schemaTypes.length > 0 && (
+      {data?.summary?.recordTypes && data.summary.recordTypes.length > 0 && (
         <Card withBorder mb="lg">
-          <Text size="sm" fw={600} mb="xs">Available Schema Types</Text>
+          <Text size="sm" fw={600} mb="xs">Available Record Types</Text>
           <Group gap="xs">
-            {data.summary.schemaTypes.map(schema => (
-              <Badge key={schema} size="md" variant="light">{schema}</Badge>
+            {data.summary.recordTypes.map(record => (
+              <Badge key={record} size="md" variant="light">{record}</Badge>
             ))}
           </Group>
         </Card>
@@ -680,4 +677,4 @@ function SecurityExchangeCoverage() {
   );
 }
 
-export default SecurityExchangeCoverage;
+export default StreamCoverage;

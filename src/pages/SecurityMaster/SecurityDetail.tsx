@@ -15,7 +15,6 @@ import {
   Title,
 } from '@mantine/core';
 import ReactTimeAgo from 'react-time-ago';
-import { useGlobalState } from '../../context/GlobalStateContext';
 import { DenormalizedListing, Event, EventContract, Security, SecurityType } from '../../types';
 import { registryApi } from '../../utils/api';
 import { SettlementBadge } from '../../components/trading/SettlementBadge';
@@ -92,7 +91,6 @@ function SecurityDetailSkeleton({ onBack }: { onBack: () => void }) {
 function SecurityDetail() {
   const { securityId } = useParams<{ securityId: string }>();
   const navigate = useNavigate();
-  const { exchanges } = useGlobalState();
 
   const id = parseInt(securityId ?? '0');
 
@@ -220,13 +218,11 @@ function SecurityDetail() {
                   <Table.Tr>
                     <Table.Th>Exchange</Table.Th>
                     <Table.Th>Exchange Symbol</Table.Th>
-                    <Table.Th>Schema Type</Table.Th>
                     <Table.Th>Created</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
                   {listings.map(l => {
-                    const ex = exchanges.find(e => e.exchangeId === l.exchangeId);
                     return (
                       <Table.Tr
                         key={l.listingId}
@@ -235,7 +231,6 @@ function SecurityDetail() {
                       >
                         <Table.Td>{l.exchangeName}</Table.Td>
                         <Table.Td>{l.exchangeSecuritySymbol}</Table.Td>
-                        <Table.Td>{ex?.schemaType ?? '-'}</Table.Td>
                         <Table.Td>
                           <ReactTimeAgo date={new Date(l.dateCreated)} timeStyle="round" />
                         </Table.Td>

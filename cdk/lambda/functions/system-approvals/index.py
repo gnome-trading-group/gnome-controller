@@ -1,11 +1,11 @@
-"""Approves or rejects a waiting deploy-pipeline approval from the controller's System page (Cognito-authenticated).
+"""Approves or rejects a waiting deploy-pipeline approval from the controller's System page (people only).
 
 Only the prod controller has this function. The decision is made through a role in the pipelines account that can
 do nothing else, and the approval's comment records who decided and why, so it shows in CodePipeline and in the
 pipeline's Slack notifications.
 
 TODO: restrict approving to a Cognito group (e.g. devops-admins). Today anyone who can sign into the prod controller
-can approve; check event["requestContext"]["authorizer"]["claims"]["cognito:groups"] here once the group exists.
+can approve; the shared API authorizer would have to pass the token's cognito:groups in its context for this check.
 """
 from __future__ import annotations
 
@@ -44,8 +44,7 @@ def parse(event: dict) -> tuple[dict, str]:
     reason = body.get("reason")
     if not isinstance(reason, str) or not reason.strip() or len(reason) > MAX_REASON:
         raise ValueError(f"a reason of up to {MAX_REASON} characters is required")
-    claims = (event.get("requestContext") or {}).get("authorizer", {}).get("claims", {})
-    who = claims.get("email") or claims.get("cognito:username")
+    who = ((event.get("requestContext") or {}).get("authorizer") or {}).get("email")
     if not who:
         raise ValueError("couldn't tell who is signed in")
     return body, who

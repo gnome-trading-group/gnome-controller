@@ -2,11 +2,12 @@ import * as cdk from "aws-cdk-lib";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
+import { CallerKind, GnomeApiAuthorizer } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 
 export interface SystemHealthStackProps extends cdk.StackProps {
   apiGateway: apigateway.RestApi;
-  cognitoAuthorizer: apigateway.CognitoUserPoolsAuthorizer;
+  auth: GnomeApiAuthorizer;
   // Deploy pipelines live in another account; this role there (created by gnome-shared-infra) lets the page read them.
   pipelinesRoleArn: string;
   pipelinesRegion: string;
@@ -53,9 +54,9 @@ export class SystemHealthStack extends cdk.Stack {
       resources: ["*"],
     }));
 
-    const cognito = { authorizationType: apigateway.AuthorizationType.COGNITO, authorizer: props.cognitoAuthorizer };
-    props.apiGateway.root.resourceForPath("system/health")
-      .addMethod("GET", new apigateway.LambdaIntegration(healthLambda.function), cognito);
+    // gnome-bot reads health to answer "is anything broken"; approving a deploy stays a person's.
+    props.auth.addRoute(props.apiGateway.root, "system/health", new apigateway.LambdaIntegration(healthLambda.function),
+      { GET: [CallerKind.PERSON, CallerKind.BOT] });
 
     if (props.approvalsRoleArn) {
       // A separate function, so the page's account-wide reads never hold the right to approve.
@@ -73,8 +74,8 @@ export class SystemHealthStack extends cdk.Stack {
         actions: ["sts:AssumeRole"],
         resources: [props.approvalsRoleArn],
       }));
-      props.apiGateway.root.resourceForPath("system/approvals")
-        .addMethod("POST", new apigateway.LambdaIntegration(approvalsLambda.function), cognito);
+      props.auth.addRoute(props.apiGateway.root, "system/approvals", new apigateway.LambdaIntegration(approvalsLambda.function),
+        { POST: [CallerKind.PERSON] });
     }
   }
 }

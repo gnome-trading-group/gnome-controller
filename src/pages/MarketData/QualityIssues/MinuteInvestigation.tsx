@@ -346,7 +346,7 @@ function MinuteInvestigation() {
               </SimpleGrid>
             ) : (
               <Center py="xl">
-                <Text c="dimmed">No data found for schema type <strong>{data.schemaType}</strong> in this time window.</Text>
+                <Text c="dimmed">No data found for record type <strong>{data.recordType}</strong> in this time window.</Text>
               </Center>
             )}
           </>

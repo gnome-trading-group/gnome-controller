@@ -58,7 +58,6 @@ export interface Exchange {
   exchangeCode: string;
   exchangeName: string;
   region: string;
-  schemaType: string;
   dateCreated: string;
   dateModified: string;
 }

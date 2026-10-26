@@ -10,13 +10,13 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import { Construct } from "constructs";
-import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
+import { CallerKind, GnomeApiAuthorizer, Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 
 export interface ResearchJobsStackProps extends cdk.StackProps {
   stage: Stage;
   apiGateway: apigateway.RestApi;
-  cognitoAuthorizer: apigateway.CognitoUserPoolsAuthorizer;
+  auth: GnomeApiAuthorizer;
   researchBucket: s3.IBucket;
   githubEcrRole: iam.IRole;
   maxVcpus: number;
@@ -303,26 +303,26 @@ export class ResearchJobsStack extends cdk.Stack {
     });
 
     // ---------------------------------------------------------------------------
-    // API Gateway routes — Cognito auth (shared authorizer from BackendStack)
+    // API Gateway routes — people only (shared authorizer from BackendStack)
     // ---------------------------------------------------------------------------
 
-    const cognitoOpts: apigateway.MethodOptions = {
-      authorizationType: apigateway.AuthorizationType.COGNITO,
-      authorizer: props.cognitoAuthorizer,
+    const personOpts: apigateway.MethodOptions = {
+      authorizationType: apigateway.AuthorizationType.CUSTOM,
+      authorizer: props.auth.authorizerFor([CallerKind.PERSON]),
     };
 
     const jobsResource = props.apiGateway.root.addResource("research-jobs");
-    jobsResource.addMethod("GET", new apigateway.LambdaIntegration(listLambda.function), cognitoOpts);
-    jobsResource.addMethod("POST", new apigateway.LambdaIntegration(submitLambda.function), cognitoOpts);
+    jobsResource.addMethod("GET", new apigateway.LambdaIntegration(listLambda.function), personOpts);
+    jobsResource.addMethod("POST", new apigateway.LambdaIntegration(submitLambda.function), personOpts);
 
     jobsResource.addResource("inputs")
-      .addMethod("POST", new apigateway.LambdaIntegration(inputsLambda.function), cognitoOpts);
+      .addMethod("POST", new apigateway.LambdaIntegration(inputsLambda.function), personOpts);
 
     const runResource = jobsResource.addResource("{runId}");
-    runResource.addMethod("GET", new apigateway.LambdaIntegration(getLambda.function), cognitoOpts);
-    runResource.addMethod("DELETE", new apigateway.LambdaIntegration(cancelLambda.function), cognitoOpts);
+    runResource.addMethod("GET", new apigateway.LambdaIntegration(getLambda.function), personOpts);
+    runResource.addMethod("DELETE", new apigateway.LambdaIntegration(cancelLambda.function), personOpts);
     runResource.addResource("tasks").addResource("{index}").addResource("logs")
-      .addMethod("GET", new apigateway.LambdaIntegration(logsLambda.function), cognitoOpts);
+      .addMethod("GET", new apigateway.LambdaIntegration(logsLambda.function), personOpts);
 
     new cdk.CfnOutput(this, "EcrRepositoryUri", {
       value: ecrRepo.repositoryUri,

@@ -6,8 +6,8 @@ import index as approvals
 
 
 def event(body, email="mason@gnometrading.group"):
-    claims = {"email": email} if email else {}
-    return {"body": json.dumps(body), "requestContext": {"authorizer": {"claims": claims}}}
+    authorizer = {"kind": "person", "actor": email, "email": email} if email else {}
+    return {"body": json.dumps(body), "requestContext": {"authorizer": authorizer}}
 
 
 GOOD = {"pipeline": "RegistryPipeline", "stage": "Prod", "action": "ApproveProd", "token": "t-1",

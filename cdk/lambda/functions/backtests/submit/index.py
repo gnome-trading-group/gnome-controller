@@ -151,9 +151,8 @@ def handler(event: dict, context) -> dict:
 
 
 def _submitted_by(event: dict) -> str:
-    """Extract user identity from Cognito claims or fallback."""
+    """The caller the API authorizer resolved (a person's email), or a fallback."""
     try:
-        claims = event["requestContext"]["authorizer"]["claims"]
-        return claims.get("email") or claims.get("cognito:username", "cli")
+        return event["requestContext"]["authorizer"]["actor"]
     except (KeyError, TypeError):
         return "cli"

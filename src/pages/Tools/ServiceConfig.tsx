@@ -84,6 +84,7 @@ function ConfigDiffTable({ changes, beforeLabel, afterLabel }: { changes: Config
 
 const SERVICES = [
   { value: 'classifier', label: 'gnome-classifier' },
+  { value: 'bot', label: 'gnome-bot' },
 ];
 
 interface ConfigState {

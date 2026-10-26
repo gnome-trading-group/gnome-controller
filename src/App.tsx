@@ -16,8 +16,7 @@ import { PageTitleProvider } from './context/PageTitleContext';
 // Each page is its own chunk, so the first load only downloads the shell and the page being opened.
 const Collectors = lazy(() => import('./pages/MarketData/Collectors/Collectors'));
 const CoverageSummary = lazy(() => import('./pages/MarketData/Coverage/CoverageSummary'));
-const SecurityCoverage = lazy(() => import('./pages/MarketData/Coverage/SecurityCoverage'));
-const SecurityExchangeCoverage = lazy(() => import('./pages/MarketData/Coverage/SecurityExchangeCoverage'));
+const StreamCoverage = lazy(() => import('./pages/MarketData/Coverage/StreamCoverage'));
 const TransformJobs = lazy(() => import('./pages/MarketData/TransformJobs/TransformJobs'));
 const Gaps = lazy(() => import('./pages/MarketData/Gaps/Gaps'));
 const MarketDataCredentials = lazy(() => import('./pages/MarketData/Credentials/Credentials'));
@@ -189,8 +188,7 @@ function AppContent() {
                   <Route path="/market-data/collectors" element={<Collectors />} />
                   <Route path="/market-data/collectors/:listingId" element={<CollectorDetail />} />
                   <Route path="/market-data/coverage" element={<CoverageSummary />} />
-                  <Route path="/market-data/coverage/:securityId" element={<SecurityCoverage />} />
-                  <Route path="/market-data/coverage/:securityId/:exchangeId" element={<SecurityExchangeCoverage />} />
+                  <Route path="/market-data/coverage/:streamId" element={<StreamCoverage />} />
                   <Route path="/market-data/transform-jobs" element={<TransformJobs />} />
                   <Route path="/market-data/gaps" element={<Gaps />} />
                   <Route path="/market-data/credentials" element={<MarketDataCredentials />} />

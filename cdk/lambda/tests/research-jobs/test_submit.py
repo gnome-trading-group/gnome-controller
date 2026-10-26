@@ -13,7 +13,7 @@ GOOD = {"module": "gnomepy_research.sessions.demo.job", "research_commit": SHA, 
 
 
 def event(body, email="mason@gnometrading.group"):
-    return {"body": json.dumps(body), "requestContext": {"authorizer": {"claims": {"email": email}}}}
+    return {"body": json.dumps(body), "requestContext": {"authorizer": {"kind": "person", "actor": email, "email": email}}}
 
 
 @pytest.fixture

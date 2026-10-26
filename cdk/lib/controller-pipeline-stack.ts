@@ -37,14 +37,14 @@ class AppStage extends cdk.Stage {
     const backtestStack = new BacktestStack(this, "ControllerBacktestStack", {
       stage: config.account.stage,
       apiGateway: backendStack.apiGateway,
-      cognitoAuthorizer: backendStack.cognitoAuthorizer,
+      auth: backendStack.auth,
     });
 
     new ResearchJobsStack(this, "ControllerResearchJobsStack", {
       stage: config.account.stage,
       maxVcpus: config.researchJobMaxVcpus,
       apiGateway: backendStack.apiGateway,
-      cognitoAuthorizer: backendStack.cognitoAuthorizer,
+      auth: backendStack.auth,
       researchBucket: backtestStack.researchBucket,
       githubEcrRole: backtestStack.githubEcrRole,
     });
@@ -52,23 +52,23 @@ class AppStage extends cdk.Stage {
     new ResearchStack(this, "ControllerResearchStack", {
       stage: config.account.stage,
       apiGateway: backendStack.apiGateway,
-      cognitoAuthorizer: backendStack.cognitoAuthorizer,
+      auth: backendStack.auth,
     });
 
     const pipelineStack = new PipelineStack(this, "ControllerPipelineStack", {
       apiGateway: backendStack.apiGateway,
-      cognitoAuthorizer: backendStack.cognitoAuthorizer,
+      auth: backendStack.auth,
     });
 
     new ServiceConfigStack(this, "ControllerServiceConfigStack", {
       apiGateway: backendStack.apiGateway,
-      cognitoAuthorizer: backendStack.cognitoAuthorizer,
+      auth: backendStack.auth,
     });
 
     const pipelinesAccount = GnomeAccount.InfraPipelines.environment;
     new SystemHealthStack(this, "ControllerSystemHealthStack", {
       apiGateway: backendStack.apiGateway,
-      cognitoAuthorizer: backendStack.cognitoAuthorizer,
+      auth: backendStack.auth,
       pipelinesRoleArn: `arn:aws:iam::${pipelinesAccount.account}:role/${SYSTEM_HEALTH_PIPELINES_ROLE}`,
       pipelinesRegion: pipelinesAccount.region!,
       approvalsRoleArn: config.approvesPipelines

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   Alert,
   Anchor,
@@ -365,7 +365,14 @@ function ListingDetail() {
               <InfoRow label="Listing ID" value={listing.listingId} />
               <InfoRow label="Exchange Security ID" value={listing.exchangeSecurityId} />
               <InfoRow label="Exchange Symbol" value={listing.exchangeSecuritySymbol} />
-              <InfoRow label="Market-data Stream" value={stream ? `${stream.streamId} (${stream.family}, ${stream.resolvedRegion})` : '—'} />
+              <InfoRow
+                label="Market-data Stream"
+                value={stream ? (
+                  <Link to={`/market-data/coverage/${stream.streamId}`}>
+                    {stream.streamId} ({stream.family}, {stream.resolvedRegion})
+                  </Link>
+                ) : '—'}
+              />
               <InfoRow label="Fee Group" value={listing.feeGroup ?? '—'} />
               <InfoRow label="Fee Event" value={listing.feeEvent ?? '—'} />
               <InfoRow label="Created" value={<ReactTimeAgo date={new Date(listing.dateCreated)} timeStyle="round" />} />
@@ -434,7 +441,6 @@ function ListingDetail() {
               <InfoRow label="Exchange ID" value={exchange?.exchangeId ?? listing.exchangeId} />
               <InfoRow label="Name" value={listing.exchangeName} />
               <InfoRow label="Region" value={exchange?.region ?? '-'} />
-              <InfoRow label="Schema Type" value={exchange?.schemaType ?? '-'} />
             </Stack>
           </Paper>
         </Grid.Col>

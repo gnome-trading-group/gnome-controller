@@ -2,13 +2,13 @@ import * as cdk from "aws-cdk-lib";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import { Construct } from "constructs";
-import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
+import { CallerKind, GnomeApiAuthorizer, Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 
 export interface ResearchStackProps extends cdk.StackProps {
   stage: Stage;
   apiGateway: apigateway.RestApi;
-  cognitoAuthorizer: apigateway.CognitoUserPoolsAuthorizer;
+  auth: GnomeApiAuthorizer;
 }
 
 export class ResearchStack extends cdk.Stack {
@@ -95,27 +95,27 @@ export class ResearchStack extends cdk.Stack {
     table.grantReadWriteData(addNoteLambda.function);
 
     // ---------------------------------------------------------------------------
-    // API Gateway routes — Cognito auth (shared authorizer from BackendStack)
+    // API Gateway routes — people only (shared authorizer from BackendStack)
     // ---------------------------------------------------------------------------
 
-    const cognitoOpts: apigateway.MethodOptions = {
-      authorizationType: apigateway.AuthorizationType.COGNITO,
-      authorizer: props.cognitoAuthorizer,
+    const personOpts: apigateway.MethodOptions = {
+      authorizationType: apigateway.AuthorizationType.CUSTOM,
+      authorizer: props.auth.authorizerFor([CallerKind.PERSON]),
     };
 
     const researchResource = props.apiGateway.root.addResource("research");
     const sessionsResource = researchResource.addResource("sessions");
-    sessionsResource.addMethod("GET", new apigateway.LambdaIntegration(listSessionsLambda.function), cognitoOpts);
-    sessionsResource.addMethod("POST", new apigateway.LambdaIntegration(createSessionLambda.function), cognitoOpts);
+    sessionsResource.addMethod("GET", new apigateway.LambdaIntegration(listSessionsLambda.function), personOpts);
+    sessionsResource.addMethod("POST", new apigateway.LambdaIntegration(createSessionLambda.function), personOpts);
 
     const sessionResource = sessionsResource.addResource("{sessionName}");
-    sessionResource.addMethod("GET", new apigateway.LambdaIntegration(getSessionLambda.function), cognitoOpts);
-    sessionResource.addMethod("PATCH", new apigateway.LambdaIntegration(updateSessionLambda.function), cognitoOpts);
+    sessionResource.addMethod("GET", new apigateway.LambdaIntegration(getSessionLambda.function), personOpts);
+    sessionResource.addMethod("PATCH", new apigateway.LambdaIntegration(updateSessionLambda.function), personOpts);
 
     const iterationsResource = sessionResource.addResource("iterations");
-    iterationsResource.addMethod("POST", new apigateway.LambdaIntegration(recordIterationLambda.function), cognitoOpts);
+    iterationsResource.addMethod("POST", new apigateway.LambdaIntegration(recordIterationLambda.function), personOpts);
 
     const notesResource = sessionResource.addResource("notes");
-    notesResource.addMethod("POST", new apigateway.LambdaIntegration(addNoteLambda.function), cognitoOpts);
+    notesResource.addMethod("POST", new apigateway.LambdaIntegration(addNoteLambda.function), personOpts);
   }
 }

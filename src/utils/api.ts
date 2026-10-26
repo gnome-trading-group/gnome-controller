@@ -11,7 +11,7 @@ import { ArtifactDetail, ArtifactSummary, Dataset, DatasetDetail } from '../type
 import { PipelineDetailResponse, PipelineListResponse, PipelineRun, RunLogsResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
-import { CoverageSummaryResponse, SecurityCoverageResponse, SecurityExchangeCoverageResponse } from '../types/coverage';
+import { CoverageSummaryResponse, StreamCoverageResponse } from '../types/coverage';
 import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsListParams, TransformJobsSearchParams } from '../types/transform-jobs';
 import { GapsListResponse, GapsListParams, GapsByListingParams, GapsUpdateRequest, GapsUpdateResponse } from '../types/gaps';
 import { QualityIssuesListResponse, QualityIssuesListParams, QualityIssuesByListingParams, QualityIssuesUpdateRequest, QualityIssuesUpdateResponse, QualityBackfillRequest, QualityBackfillResponse, ListingStatisticsResponse, ListingStatisticsHistoryResponse, MinuteInvestigationResponse } from '../types/quality-issues';
@@ -66,8 +66,8 @@ function definedParams(params: object): Record<string, string | number> {
 }
 
 const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
-// The registry serves people under /cognito and services (with an API key) at the root; the UI must never hold a key.
-const REGISTRY_API_URL = `${import.meta.env.VITE_REGISTRY_API_URL}/cognito`;
+// People and services call the same registry routes; the UI sends the operator's ID token and never holds a key.
+const REGISTRY_API_URL = import.meta.env.VITE_REGISTRY_API_URL;
 const MARKET_DATA_API_URL = import.meta.env.VITE_MARKET_DATA_API_URL;
 const LAUNCHER_API_URL = import.meta.env.VITE_LAUNCHER_API_URL;
 
@@ -227,12 +227,8 @@ export const marketDataApi = {
   getCoverageSummary: () => sendApiRequest<CoverageSummaryResponse>('/coverage/summary', 'GET', {
     apiUrl: MARKET_DATA_API_URL,
   }),
-  getSecurityCoverage: (securityId: number) =>
-    sendApiRequest<SecurityCoverageResponse>(`/coverage/security/${securityId}`, 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-    }),
-  getSecurityExchangeCoverage: (securityId: number, exchangeId: number) =>
-    sendApiRequest<SecurityExchangeCoverageResponse>(`/coverage/${securityId}/${exchangeId}`, 'GET', {
+  getStreamCoverage: (streamId: number) =>
+    sendApiRequest<StreamCoverageResponse>(`/coverage/stream/${streamId}`, 'GET', {
       apiUrl: MARKET_DATA_API_URL,
     }),
   // Transform Jobs endpoints
@@ -599,6 +595,12 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       queryParams: { ...streamQueryParams(params ?? {}), count: true },
     }).then(r => r.count),
+  listStreamsByIds: (streamIds: number[]) =>
+    sendApiRequest<Stream[]>('/streams', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: { streamIds: streamIds.join(','), limit: streamIds.length },
+    }),
   getStreamForListing: (listingId: number) =>
     sendApiRequest<Stream[]>('/streams', 'GET', {
       apiUrl: REGISTRY_API_URL,
@@ -1248,16 +1250,16 @@ export const controllerApi = {
       apiUrl: CONTROLLER_API_URL, convertToCamelCase: true,
     }),
   getServiceConfig: (service: string) =>
-    sendApiRequest<ServiceConfigResponse>(`/cognito/config/${service}`, 'GET', {
+    sendApiRequest<ServiceConfigResponse>(`/config/${service}`, 'GET', {
       apiUrl: CONTROLLER_API_URL,
     }),
   updateServiceConfig: (service: string, config: Record<string, unknown>, version: number) =>
-    sendApiRequest<ServiceConfigResponse>(`/cognito/config/${service}`, 'PUT', {
+    sendApiRequest<ServiceConfigResponse>(`/config/${service}`, 'PUT', {
       apiUrl: CONTROLLER_API_URL,
       body: { config, version },
     }),
   getServiceConfigHistory: (service: string) =>
-    sendApiRequest<ServiceConfigHistoryResponse>(`/cognito/config/${service}/history`, 'GET', {
+    sendApiRequest<ServiceConfigHistoryResponse>(`/config/${service}/history`, 'GET', {
       apiUrl: CONTROLLER_API_URL,
     }),
 }

@@ -2,11 +2,12 @@ import * as cdk from "aws-cdk-lib";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
+import { CallerKind, GnomeApiAuthorizer } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 
 export interface ServiceConfigStackProps extends cdk.StackProps {
   apiGateway: apigateway.RestApi;
-  cognitoAuthorizer: apigateway.CognitoUserPoolsAuthorizer;
+  auth: GnomeApiAuthorizer;
 }
 
 export class ServiceConfigStack extends cdk.Stack {
@@ -35,7 +36,7 @@ export class ServiceConfigStack extends cdk.Stack {
     const putLambda = new PythonLambdaFunction(this, "ServiceConfigPutLambda", {
       codePath: "lambda/functions/service-config/put",
       functionName: "gnome-service-config-put",
-      description: "Update service config (Cognito auth, UI only)",
+      description: "Update service config (people only, from the UI)",
       timeout: cdk.Duration.seconds(10),
       environment: commonEnv,
     });
@@ -44,27 +45,18 @@ export class ServiceConfigStack extends cdk.Stack {
     const historyLambda = new PythonLambdaFunction(this, "ServiceConfigHistoryLambda", {
       codePath: "lambda/functions/service-config/history",
       functionName: "gnome-service-config-history",
-      description: "List saved service config versions (Cognito auth, UI only)",
+      description: "List saved service config versions (people only, from the UI)",
       timeout: cdk.Duration.seconds(10),
       environment: commonEnv,
     });
     serviceConfigTable.grantReadData(historyLambda.function);
 
-    const getIntegration = new apigateway.LambdaIntegration(getLambda.function);
-    const cognitoOptions: apigateway.MethodOptions = {
-      authorizationType: apigateway.AuthorizationType.COGNITO,
-      authorizer: props.cognitoAuthorizer,
-    };
-
-    // Services (the classifier) read config with the API key; people read and write under /cognito so the key never
-    // has to ship in the controller UI bundle. A method takes one authorizer, so the two can't share a route.
-    props.apiGateway.root.resourceForPath("config/{service}")
-      .addMethod("GET", getIntegration, { apiKeyRequired: true });
-
-    const cognitoServiceResource = props.apiGateway.root.resourceForPath("cognito/config/{service}");
-    cognitoServiceResource.addMethod("GET", getIntegration, cognitoOptions);
-    cognitoServiceResource.addMethod("PUT", new apigateway.LambdaIntegration(putLambda.function), cognitoOptions);
-    cognitoServiceResource.addResource("history")
-      .addMethod("GET", new apigateway.LambdaIntegration(historyLambda.function), cognitoOptions);
+    // Services (the classifier) read their config with the API key and gnome-bot with its token; only people change
+    // it, from the UI.
+    const { PERSON, SERVICE, BOT } = CallerKind;
+    const root = props.apiGateway.root;
+    props.auth.addRoute(root, "config/{service}", new apigateway.LambdaIntegration(getLambda.function), { GET: [SERVICE, PERSON, BOT] });
+    props.auth.addRoute(root, "config/{service}", new apigateway.LambdaIntegration(putLambda.function), { PUT: [PERSON] });
+    props.auth.addRoute(root, "config/{service}/history", new apigateway.LambdaIntegration(historyLambda.function), { GET: [PERSON] });
   }
 }

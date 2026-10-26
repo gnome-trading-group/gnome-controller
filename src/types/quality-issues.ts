@@ -64,8 +64,7 @@ export interface QualityIssuesUpdateResponse {
 export type QualityBackfillMode = 'statistics' | 'issues' | 'all';
 
 export interface QualityBackfillRequest {
-  exchangeId: number;
-  securityId: number;
+  listingId: number;
   startDate: string;
   endDate: string;
   mode?: QualityBackfillMode;
@@ -118,7 +117,7 @@ export interface MinuteInvestigationIssue {
 
 export interface MinuteInvestigationResponse {
   listingId: number;
-  schemaType: string;
+  recordType: string;
   centerTimestamp: number;
   windowMinutes: number;
   minutes: MinuteMetrics[];

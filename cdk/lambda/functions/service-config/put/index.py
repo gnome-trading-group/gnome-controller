@@ -24,8 +24,7 @@ def _now_iso() -> str:
 
 def _caller(event: dict) -> str:
     try:
-        claims = event["requestContext"]["authorizer"]["claims"]
-        return claims.get("email") or claims.get("cognito:username", "unknown")
+        return event["requestContext"]["authorizer"]["actor"]
     except (KeyError, TypeError):
         return "unknown"
 

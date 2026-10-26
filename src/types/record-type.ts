@@ -1,4 +1,5 @@
-export enum SchemaType {
+// A stored record type's identifier, as S3 keys and the market-data API name it.
+export enum RecordType {
   MBO = "mbo",
   MBP_10 = "mbp-10",
   MBP_1 = "mbp-1",

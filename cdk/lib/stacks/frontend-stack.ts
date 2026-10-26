@@ -5,12 +5,13 @@ import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import { Construct } from "constructs";
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
-import { Stage } from "@gnome-trading-group/gnome-shared-cdk";
+import { BOT_READ_SCOPE, BOT_RESOURCE_SERVER, BOT_WRITE_SCOPE, Stage } from "@gnome-trading-group/gnome-shared-cdk";
 
 interface FrontendStackProps extends cdk.StackProps {
   stage: Stage;
@@ -134,6 +135,33 @@ export class FrontendStack extends cdk.Stack {
     cliPoolClient.supportedIdentityProviders = ["IdentityCenter"];
     this.cliClientId = cliClient.userPoolClientId;
 
+    // Machines (gnome-bot) sign in with client_credentials and get access tokens carrying these scopes. The shared
+    // API authorizer treats any client granted a gnome-api scope as a bot, so granting a scope here is the allowlist.
+    const botRead = new cognito.ResourceServerScope({ scopeName: BOT_READ_SCOPE, scopeDescription: "Read-only API access for bots" });
+    const botWrite = new cognito.ResourceServerScope({ scopeName: BOT_WRITE_SCOPE, scopeDescription: "Write API access for bots" });
+    const resourceServer = this.userPool.addResourceServer("GnomeApiResourceServer", {
+      identifier: BOT_RESOURCE_SERVER,
+      scopes: [botRead, botWrite],
+    });
+    const botClient = this.userPool.addClient("ControllerBotClient", {
+      generateSecret: true,
+      oAuth: {
+        flows: { clientCredentials: true },
+        scopes: [cognito.OAuthScope.resourceServer(resourceServer, botRead)],
+      },
+      authFlows: { adminUserPassword: false, custom: false, userPassword: false, userSrp: false },
+      accessTokenValidity: cdk.Duration.hours(1),
+    });
+    new secretsmanager.Secret(this, "BotClientSecret", {
+      secretName: "gnome-bot/cognito-client",
+      description: "gnome-bot's Cognito client_credentials login: client id, secret and token URL",
+      secretObjectValue: {
+        client_id: cdk.SecretValue.unsafePlainText(botClient.userPoolClientId),
+        client_secret: botClient.userPoolClientSecret,
+        token_url: cdk.SecretValue.unsafePlainText(`${domain.baseUrl()}/oauth2/token`),
+      },
+    });
+
     const identityProvider = new cognito.CfnUserPoolIdentityProvider(this, "IdentityCenterProvider", {
       userPoolId: this.userPool.userPoolId,
       providerName: "IdentityCenter",
@@ -203,11 +231,11 @@ export class FrontendStack extends cdk.Stack {
       description: "Controller UI custom domain URL",
     });
 
-    // gnome-registry's API authorizer lives in another repo and imports the pool by ARN from here.
+    // The registry and launcher APIs live in other repos and import the pool by ARN from here.
     new ssm.StringParameter(this, "UserPoolArnParameter", {
       parameterName: "/gnome/cognito/user-pool-arn",
       stringValue: this.userPool.userPoolArn,
-      description: "Controller Cognito user pool ARN, used by gnome-registry's Cognito authorizer",
+      description: "Controller Cognito user pool ARN, used by the shared API authorizer on the registry, controller and launcher APIs",
     });
 
     new cdk.CfnOutput(this, "UserPoolId", {

@@ -2,10 +2,11 @@ import * as cdk from "aws-cdk-lib";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
+import { CallerKind, GnomeApiAuthorizer } from "@gnome-trading-group/gnome-shared-cdk";
 
 export interface PipelineStackProps extends cdk.StackProps {
   apiGateway: apigateway.RestApi;
-  cognitoAuthorizer: apigateway.CognitoUserPoolsAuthorizer;
+  auth: GnomeApiAuthorizer;
 }
 
 // gnome-pipelines owns these functions and everything behind them (pipelines, runs, schedules, datasets,
@@ -21,9 +22,9 @@ export class PipelineStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: PipelineStackProps) {
     super(scope, id, props);
 
-    const cognitoOpts: apigateway.MethodOptions = {
-      authorizationType: apigateway.AuthorizationType.COGNITO,
-      authorizer: props.cognitoAuthorizer,
+    const personOpts: apigateway.MethodOptions = {
+      authorizationType: apigateway.AuthorizationType.CUSTOM,
+      authorizer: props.auth.authorizerFor([CallerKind.PERSON]),
     };
     const research = props.apiGateway.root.getResource("research") ?? props.apiGateway.root.addResource("research");
     const integrations = new Map<string, apigateway.LambdaIntegration>();
@@ -38,8 +39,8 @@ export class PipelineStack extends cdk.Stack {
       }
       const integration = integrations.get(functionName)!;
       const resource = research.addResource(area);
-      resource.addMethod("ANY", integration, cognitoOpts);
-      resource.addResource("{proxy+}").addMethod("ANY", integration, cognitoOpts);
+      resource.addMethod("ANY", integration, personOpts);
+      resource.addResource("{proxy+}").addMethod("ANY", integration, personOpts);
     }
   }
 }
