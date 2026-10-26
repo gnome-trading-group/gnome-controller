@@ -40,7 +40,7 @@ class AppStage extends cdk.Stage {
       auth: backendStack.auth,
     });
 
-    new ResearchJobsStack(this, "ControllerResearchJobsStack", {
+    const researchJobsStack = new ResearchJobsStack(this, "ControllerResearchJobsStack", {
       stage: config.account.stage,
       maxVcpus: config.researchJobMaxVcpus,
       apiGateway: backendStack.apiGateway,
@@ -78,6 +78,13 @@ class AppStage extends cdk.Stage {
 
     const monitoringStack = new MonitoringStack(this, "ControllerMonitoringStack", {
       apiGateway: backendStack.apiGateway,
+      eventHandlers: [
+        { name: "BacktestStatusHandler", humanReadableName: "Backtest Status Handler", fn: backtestStack.statusHandler },
+        {
+          name: "ResearchJobStatusHandler", humanReadableName: "Research Job Status Handler",
+          fn: researchJobsStack.statusHandler,
+        },
+      ],
     });
     // This stack used to hold the pipeline Lambdas that the backend and monitoring stacks imported; it can only delete
     // their exports once both have stopped importing them.

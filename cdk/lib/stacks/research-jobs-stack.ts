@@ -5,6 +5,7 @@ import * as batch from "aws-cdk-lib/aws-batch";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
@@ -42,6 +43,9 @@ const TABLE_READ_ACTIONS = [
  * Inputs and outputs live in the research bucket under research-jobs/ (inputs/<sha256>/, runs/<run_id>/).
  */
 export class ResearchJobsStack extends cdk.Stack {
+  // Driven by Batch events, not the API, so its failures need their own alarm (MonitoringStack).
+  public readonly statusHandler: lambda.IFunction;
+
   constructor(scope: Construct, id: string, props: ResearchJobsStackProps) {
     super(scope, id, props);
 
@@ -292,6 +296,7 @@ export class ResearchJobsStack extends cdk.Stack {
       environment: { ...commonEnv },
     });
     table.grantReadWriteData(statusHandlerLambda.function);
+    this.statusHandler = statusHandlerLambda.function;
 
     new events.Rule(this, "ResearchJobStateChangeRule", {
       eventPattern: {

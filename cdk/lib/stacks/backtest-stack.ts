@@ -5,6 +5,7 @@ import * as batch from "aws-cdk-lib/aws-batch";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
@@ -20,6 +21,8 @@ export interface BacktestStackProps extends cdk.StackProps {
 }
 
 export class BacktestStack extends cdk.Stack {
+  // Driven by Batch events, not the API, so its failures need their own alarm (MonitoringStack).
+  public readonly statusHandler: lambda.IFunction;
   public readonly researchBucket: s3.Bucket;
   public readonly githubEcrRole: iam.Role;
 
@@ -225,6 +228,7 @@ export class BacktestStack extends cdk.Stack {
       environment: { ...commonEnv },
     });
     table.grantReadWriteData(statusHandlerLambda.function);
+    this.statusHandler = statusHandlerLambda.function;
     statusHandlerLambda.function.addToRolePolicy(new iam.PolicyStatement({
       actions: ["s3:GetObject"],
       resources: [`${researchBucket.bucketArn}/backtests/*`],
