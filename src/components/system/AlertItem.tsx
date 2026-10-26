@@ -1,36 +1,30 @@
-import { ReactNode, useState } from 'react';
-import { ActionIcon, Anchor, Card, Group, Popover, Stack, Text, TextInput, ThemeIcon, Tooltip } from '@mantine/core';
-import { useQueryClient } from '@tanstack/react-query';
-import {
-  IconAlertOctagon, IconAlertTriangle, IconBook, IconCheck, IconCircleCheck, IconInfoCircle, IconUserCheck, IconX,
-} from '@tabler/icons-react';
+import { useState } from 'react';
+import { ActionIcon, Anchor, Button, Card, Group, Popover, Stack, Text, TextInput, ThemeIcon, Tooltip } from '@mantine/core';
+import { IconBook, IconCheck, IconCircleCheck, IconUserCheck, IconX } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
-import { Alert, AlertSeverity } from '../../types';
+import { Alert, alertContext, SEVERITY_LABEL } from '../../types';
+import { SEVERITY_STYLE } from './severityStyle';
+import { useAcknowledgeAlerts } from '../../query/hooks';
 import { errorMessage, formatActor } from '../../utils/kill-switch';
-import { registryApi } from '../../utils/api';
 import { DetailField, DetailTooltip } from './DetailTooltip';
 
-// Styled like the dashboard's Needs attention list, so an alert reads the same wherever it shows up.
-const STYLE: Record<AlertSeverity, { color: string; icon: ReactNode }> = {
-  CRITICAL: { color: 'red', icon: <IconAlertOctagon size={13} /> },
-  ERROR: { color: 'orange', icon: <IconAlertTriangle size={13} /> },
-  WARNING: { color: 'yellow', icon: <IconAlertTriangle size={13} /> },
-  INFO: { color: 'blue', icon: <IconInfoCircle size={13} /> },
-};
-const SEVERITY_LABEL: Record<AlertSeverity, string> = { CRITICAL: 'Critical', ERROR: 'Error', WARNING: 'Warning', INFO: 'Info' };
-
-const CONTEXT_LABELS = ['strategy', 'symbol', 'exchange', 'account', 'subject', 'alarmName', 'rule', 'pipeline'];
+// What taking these in hand does: a reported event has nothing left to wait for, so it closes.
+function actionFor(alerts: Alert[]): string {
+  if (alerts.every(a => a.source === 'ingest')) return 'Close';
+  if (alerts.every(a => a.source !== 'ingest')) return 'Acknowledge';
+  return 'Acknowledge / close';
+}
 
 // Two steps, so a stray tap can't stop a page: the icon opens a confirm, with room to say why.
-function AcknowledgeAction({ alert }: { alert: Alert }) {
-  const client = useQueryClient();
+export function AcknowledgeAction({ alerts, label }: { alerts: Alert[]; label?: string }) {
+  const acknowledge = useAcknowledgeAlerts();
   const [opened, setOpened] = useState(false);
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A reported event has nothing left to wait for, so taking it in hand closes it.
-  const action = alert.source === 'ingest' ? 'Close' : 'Acknowledge';
+  const action = actionFor(alerts);
+  const what = alerts.length === 1 ? 'this alert' : `these ${alerts.length} alerts`;
 
   const cancel = () => {
     setOpened(false);
@@ -40,9 +34,7 @@ function AcknowledgeAction({ alert }: { alert: Alert }) {
     setSaving(true);
     setError(null);
     try {
-      await registryApi.acknowledgeAlert(alert.alertId, reason);
-      await client.invalidateQueries({ queryKey: ['alerts'] });
-      await client.invalidateQueries({ queryKey: ['attention'] });
+      await acknowledge(alerts.map(a => a.alertId), reason);
       cancel();
     } catch (e) {
       setError(errorMessage(e, `${action} failed`));
@@ -51,19 +43,25 @@ function AcknowledgeAction({ alert }: { alert: Alert }) {
     }
   };
 
+  const open = () => { setError(null); setOpened(o => !o); };
   return (
     <Popover opened={opened} onChange={setOpened} position="bottom-end" withArrow shadow="md" trapFocus>
       <Popover.Target>
-        <Tooltip label={action} withArrow disabled={opened}>
-          <ActionIcon variant={opened ? 'light' : 'subtle'} color="gray" size="xs" aria-label={action}
-            onClick={() => { setError(null); setOpened(o => !o); }}>
-            <IconUserCheck size={13} />
-          </ActionIcon>
-        </Tooltip>
+        {label ? (
+          <Button variant="subtle" color="gray" size="compact-xs" leftSection={<IconUserCheck size={13} />} onClick={open}>
+            {label}
+          </Button>
+        ) : (
+          <Tooltip label={action} withArrow disabled={opened}>
+            <ActionIcon variant={opened ? 'light' : 'subtle'} color="gray" size="xs" aria-label={action} onClick={open}>
+              <IconUserCheck size={13} />
+            </ActionIcon>
+          </Tooltip>
+        )}
       </Popover.Target>
       <Popover.Dropdown p="xs" w={280}>
         <Stack gap={6}>
-          <Text size="xs" fw={600}>{action} this alert?</Text>
+          <Text size="xs" fw={600}>{action} {what}?</Text>
           <TextInput size="xs" placeholder="Reason (optional)" value={reason} maxLength={500} data-autofocus
             onChange={e => setReason(e.currentTarget.value)}
             onKeyDown={e => {
@@ -94,7 +92,7 @@ export function AlertItem({ alert, acknowledgeable, fit }: { alert: Alert; ackno
   const acknowledged = !resolved && !!alert.acknowledgedBy;
   const canAcknowledge = !!acknowledgeable && !resolved && !alert.acknowledgedBy;
   const actions = (alert.runbookUrl ? 1 : 0) + (canAcknowledge || (!resolved && alert.acknowledgedBy) ? 1 : 0);
-  const style = resolved ? { color: 'gray', icon: <IconCircleCheck size={13} /> } : STYLE[alert.severity];
+  const style = resolved ? { color: 'gray', icon: <IconCircleCheck size={13} /> } : SEVERITY_STYLE[alert.severity];
   const fields: DetailField[] = [
     ['Strategy', alert.labels.strategy], ['Listing', alert.labels.symbol], ['Exchange', alert.labels.exchange],
     ['Account', alert.labels.account], ['Part', alert.labels.subject], ['Rule', alert.labels.rule],
@@ -107,7 +105,7 @@ export function AlertItem({ alert, acknowledgeable, fit }: { alert: Alert; ackno
     ['Resolved', alert.resolvedAt && new Date(alert.resolvedAt).toLocaleString()],
   ];
   const context = [
-    ...CONTEXT_LABELS.map(k => alert.labels[k]).filter(Boolean),
+    ...alertContext(alert),
     alert.mode,
     alert.actor && `by ${formatActor(alert.actor)}`,
     alert.fireCount > 1 && `seen ${alert.fireCount}x`,
@@ -146,7 +144,7 @@ export function AlertItem({ alert, acknowledgeable, fit }: { alert: Alert; ackno
               </Anchor>
             </Tooltip>
           )}
-          {canAcknowledge && <AcknowledgeAction alert={alert} />}
+          {canAcknowledge && <AcknowledgeAction alerts={[alert]} />}
           {/* Who has it lives here and in the tooltip, not the context line, where a long name would widen the card. */}
           {!resolved && alert.acknowledgedBy && (
             <Tooltip label={<>Acknowledged by {formatActor(alert.acknowledgedBy)}

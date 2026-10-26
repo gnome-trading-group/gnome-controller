@@ -24,6 +24,7 @@ export const keys = {
   activeSessions: ['activeSessions'] as const,
   attention: (mode: Mode) => ['attention', mode] as const,
   alerts: (filters: AlertFilters) => ['alerts', filters] as const,
+  alertFacets: (filters: AlertFilters) => ['alertFacets', filters] as const,
   sparklines: (mode: Mode) => ['sparklines', mode] as const,
   session: (id: string) => ['session', id] as const,
   strategySessions: (strategyId: number) => ['strategySessions', strategyId] as const,
@@ -421,6 +422,30 @@ export function useAlerts(filters: AlertFilters) {
   });
 }
 
+// All of them, so the System page and the navbar count and group from the whole set.
 export function useOpenAlerts() {
-  return useAlerts({ status: ['FIRING'] });
+  return useAlerts({ status: ['FIRING'], limit: 500 });
+}
+
+export function useAlertFacets(filters: AlertFilters) {
+  return useQuery({
+    queryKey: keys.alertFacets(filters),
+    queryFn: () => registryApi.getAlertFacets(filters),
+    refetchInterval: POLL.alerts,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** @return acknowledges (or closes) each alert; throws naming how many failed, after the ones that worked are in */
+export function useAcknowledgeAlerts() {
+  const client = useQueryClient();
+  return useCallback(async (alertIds: number[], reason?: string) => {
+    const results = await Promise.allSettled(alertIds.map(id => registryApi.acknowledgeAlert(id, reason)));
+    await client.invalidateQueries({ queryKey: ['alerts'] });
+    await client.invalidateQueries({ queryKey: ['alertFacets'] });
+    await client.invalidateQueries({ queryKey: ['attention'] });
+    const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failed.length === 1 && alertIds.length === 1) throw failed[0].reason;
+    if (failed.length > 0) throw new Error(`${failed.length} of ${alertIds.length} failed`);
+  }, [client]);
 }

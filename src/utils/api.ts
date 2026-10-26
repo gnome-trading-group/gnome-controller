@@ -3,7 +3,7 @@ import {
   DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
   RuleType, TriggerEvaluation,
 } from '../types/launcher';
-import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream } from '../types';
+import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
 import { BacktestRun } from '../types/backtests';
@@ -59,6 +59,14 @@ export interface LedgerPageParams extends LedgerFilters {
   before?: string;
   after?: string;
   limit?: number;
+}
+
+function alertParams(filters: AlertFilters): Record<string, string | number> {
+  return definedParams({
+    status: filters.status?.join(','), severity: filters.severity?.join(','), type: filters.type?.join(','),
+    sessionId: filters.sessionId, strategyId: filters.strategyId, sinceId: filters.sinceId, limit: filters.limit,
+    offset: filters.offset,
+  });
 }
 
 function definedParams(params: object): Record<string, string | number> {
@@ -767,10 +775,12 @@ export const registryApi = {
   listAlerts: (filters: AlertFilters = {}) =>
     sendApiRequest<Alert[]>('/alerts', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      queryParams: definedParams({
-        status: filters.status?.join(','), severity: filters.severity?.join(','), type: filters.type,
-        sessionId: filters.sessionId, sinceId: filters.sinceId, limit: filters.limit, offset: filters.offset,
-      }),
+      queryParams: alertParams(filters),
+    }),
+  getAlertFacets: (filters: AlertFilters = {}) =>
+    sendApiRequest<AlertFacets>('/alerts', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: { ...alertParams(filters), facets: 'true' },
     }),
   acknowledgeAlert: (alertId: number, reason?: string) =>
     sendApiRequest<{ alertId: number; outcome: 'ACKNOWLEDGED' | 'CLOSED' }>('/alerts', 'PATCH', {

@@ -32,19 +32,48 @@ export interface Alert {
   acknowledgedReason: string | null;
 }
 
-// Open alerts nobody has taken first, newest first within each, so what still needs someone is on top.
-export function unacknowledgedFirst(alerts: Alert[]): Alert[] {
-  return [...alerts].sort((a, b) => Number(!!a.acknowledgedBy) - Number(!!b.acknowledgedBy) || b.alertId - a.alertId);
+export const SEVERITIES: AlertSeverity[] = ['CRITICAL', 'ERROR', 'WARNING', 'INFO'];
+export const SEVERITY_LABEL: Record<AlertSeverity, string> = { CRITICAL: 'Critical', ERROR: 'Error', WARNING: 'Warning', INFO: 'Info' };
+
+// Worst first, then what nobody has taken yet, then newest: what still needs someone is on top.
+export function triageOrder(alerts: Alert[]): Alert[] {
+  return [...alerts].sort((a, b) => SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity)
+    || Number(!!a.acknowledgedBy) - Number(!!b.acknowledgedBy) || b.alertId - a.alertId);
+}
+
+const CONTEXT_LABELS = ['strategy', 'symbol', 'exchange', 'account', 'subject', 'alarmName', 'rule', 'pipeline'];
+
+export function alertContext(alert: Alert): string[] {
+  return CONTEXT_LABELS.map(k => alert.labels[k]).filter(Boolean);
+}
+
+// Open alerts of one type together, each group in the order its alerts came.
+export function groupByType(alerts: Alert[]): Alert[][] {
+  const groups = new Map<string, Alert[]>();
+  for (const alert of alerts) groups.set(alert.type, [...(groups.get(alert.type) ?? []), alert]);
+  return [...groups.values()];
+}
+
+export function canAcknowledge(alert: Alert): boolean {
+  return alert.status !== 'RESOLVED' && !alert.acknowledgedBy;
 }
 
 export interface AlertFilters {
   status?: AlertStatus[];
   severity?: AlertSeverity[];
-  type?: string;
+  type?: string[];
   sessionId?: string;
+  strategyId?: number;
   sinceId?: number;
   limit?: number;
   offset?: number;
+}
+
+// How many alerts match at each severity and of each type; each count ignores its own filter, so it says what picking
+// that value would show.
+export interface AlertFacets {
+  severity: Partial<Record<AlertSeverity, number>>;
+  type: Record<string, number>;
 }
 
 export const SEVERITY_COLORS: Record<AlertSeverity, string> = {

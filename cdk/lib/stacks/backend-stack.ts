@@ -2,7 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import { Construct } from "constructs";
-import { CallerKind, GnomeApiAuthorizer } from "@gnome-trading-group/gnome-shared-cdk";
+import { API_KEY_SECRET_NAMES, ApiKeySecret, CallerKind, GnomeApiAuthorizer } from "@gnome-trading-group/gnome-shared-cdk";
 import { createProbeInvokePolicy, PROBE_LAMBDA_NAME } from "./latency-probe-stack";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 
@@ -44,6 +44,10 @@ export class BackendStack extends cdk.Stack {
     // on this key, which would be a cycle. Same scope and id as before, so the key and its value are kept.
     const serviceConfigApiKey = new apigateway.ApiKey(this.apiGateway, "ServiceConfigApiKey", {
       apiKeyName: "gnome-service-config-key",
+    });
+    new ApiKeySecret(this, "ServiceConfigApiKeySecret", {
+      apiKey: serviceConfigApiKey,
+      secretName: API_KEY_SECRET_NAMES.CONTROLLER_SERVICE_CONFIG,
     });
     // Every stack adding routes to this API goes through this one authorizer: services by key, people by Cognito ID
     // token, bots by gnome-api-scoped access token.

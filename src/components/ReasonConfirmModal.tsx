@@ -10,6 +10,7 @@ interface ReasonConfirmModalProps {
   confirmLabel: string;
   confirmColor?: string;
   loadingMessage?: string;
+  reasonDescription?: string;
   onConfirm: (reason: string | undefined) => Promise<void>;
 }
 
@@ -21,6 +22,7 @@ export function ReasonConfirmModal({
   confirmLabel,
   confirmColor = 'red',
   loadingMessage,
+  reasonDescription = 'Recorded in the risk policy audit log',
   onConfirm,
 }: ReasonConfirmModalProps) {
   const [reason, setReason] = useState('');
@@ -53,7 +55,7 @@ export function ReasonConfirmModal({
         {typeof message === 'string' ? <Text>{message}</Text> : message}
         <TextInput
           label="Reason (optional)"
-          description="Recorded in the risk policy audit log"
+          description={reasonDescription}
           value={reason}
           onChange={(e) => setReason(e.currentTarget.value)}
           disabled={submitting}
