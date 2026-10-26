@@ -41,11 +41,19 @@ export function drawdown(points: ChartPoint[]): ChartPoint[] {
 }
 
 // An event drawn on the series sits on the point at or before it.
-export function snapToPoint(points: ChartPoint[], time: number): number | null {
-  let snapped: number | null = null;
-  for (const p of points) {
-    if (p.time > time) break;
-    snapped = p.time;
+// The last point at or before a time, found by halving: a chart holds thousands of points per line and is read for
+// every line on every hover.
+export function pointAt(points: ChartPoint[], time: number): ChartPoint | undefined {
+  let lo = 0;
+  let hi = points.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid].time <= time) lo = mid + 1;
+    else hi = mid;
   }
-  return snapped ?? points[0]?.time ?? null;
+  return lo > 0 ? points[lo - 1] : undefined;
+}
+
+export function snapToPoint(points: ChartPoint[], time: number): number | null {
+  return (pointAt(points, time) ?? points[0])?.time ?? null;
 }

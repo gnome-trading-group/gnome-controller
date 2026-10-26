@@ -7,13 +7,19 @@ import {
 import { usePreferences } from '../../context/PreferencesContext';
 import { PnlSeries, SeriesEventKind } from '../../types';
 import { formatMoney, formatQty, formatTime, moneyToNumber, sizeToNumber } from '../../utils/format';
-import { chartPoints, ChartPoint, chartTime, drawdown, fromChartTime, snapToPoint } from './chart-data';
+import { chartPoints, ChartPoint, chartTime, drawdown, fromChartTime, pointAt, snapToPoint } from './chart-data';
 import { ChartTooltip, TooltipState } from './ChartTooltip';
 import { MarkerKind, MarkerToggles } from './MarkerToggles';
 
 export type ChartView = 'total' | 'listings' | 'position' | 'fees';
 
-const LISTING_COLORS = ['#4dabf7', '#ffa94d', '#da77f2', '#69db7c', '#ffd43b', '#f783ac', '#3bc9db', '#a9e34b'];
+// One per line the registry draws by listing (MAX_SERIES_LISTINGS), so none repeats; everything else is `other`.
+const LISTING_COLORS = [
+  '#4dabf7', '#ffa94d', '#da77f2', '#69db7c', '#ffd43b', '#f783ac', '#3bc9db', '#a9e34b', '#ff8787', '#9775fa',
+  '#38d9a9', '#748ffc', '#e599f7', '#1c7ed6', '#e8590c', '#ae3ec9', '#2f9e44', '#f08c00', '#d6336c', '#0c8599',
+  '#66a80f', '#e03131', '#7048e8', '#099268', '#4263eb',
+];
+const OTHER_COLOR = '#868e96';
 
 const EVENT_STYLE: Record<SeriesEventKind, { color: string; shape: MarkerKind['shape']; text: string }> = {
   SESSION_START: { color: '#40c057', shape: 'arrowUp', text: 'start' },
@@ -27,6 +33,7 @@ const EVENT_STYLE: Record<SeriesEventKind, { color: string; shape: MarkerKind['s
 };
 
 interface Line {
+  key: string;
   name: string;
   color: string;
   points: ChartPoint[];
@@ -36,6 +43,11 @@ interface Line {
 }
 
 const MONEY_STEP = 0.01;
+
+// Listings held or traded in the window that the registry left out of the per-listing lines.
+function hiddenListings(series: PnlSeries): number {
+  return Math.max(0, series.listingCount - series.listings.length);
+}
 
 function money(value: number): string {
   return formatMoney(BigInt(Math.round(value * 1e9))).text;
@@ -54,10 +66,11 @@ interface PnlChartProps {
   loading: boolean;
   // A session's chart has every view; a strategy's shows its total.
   views?: ChartView[];
+  onViewChange?: (view: ChartView) => void;
   height?: number;
 }
 
-export function PnlChart({ series, loading, views = ['total'], height = 280 }: PnlChartProps) {
+export function PnlChart({ series, loading, views = ['total'], onViewChange, height = 280 }: PnlChartProps) {
   const { timeZone, hiddenMarkers } = usePreferences();
   const scheme = useComputedColorScheme('dark');
   const [view, setView] = useState<ChartView>(views[0]);
@@ -74,19 +87,24 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
     switch (view) {
       case 'total':
         return [
-          { name: 'Total', color: '#4dabf7', points: pts(series.total, moneyToNumber), format: money, minMove: MONEY_STEP },
-          { name: 'Realized', color: '#adb5bd', points: pts(series.realized, moneyToNumber), format: money, minMove: MONEY_STEP },
+          { key: 'total', name: 'Total', color: '#4dabf7', points: pts(series.total, moneyToNumber), format: money, minMove: MONEY_STEP },
+          { key: 'realized', name: 'Realized', color: '#adb5bd', points: pts(series.realized, moneyToNumber), format: money, minMove: MONEY_STEP },
         ];
       case 'fees':
-        return [{ name: 'Fees', color: '#ffa94d', points: pts(series.fees, moneyToNumber), format: money, minMove: MONEY_STEP }];
-      case 'listings':
-        return series.listings.map((l, i) => ({
-          name: l.symbol ?? String(l.listingId), color: LISTING_COLORS[i % LISTING_COLORS.length],
+        return [{ key: 'fees', name: 'Fees', color: '#ffa94d', points: pts(series.fees, moneyToNumber), format: money, minMove: MONEY_STEP }];
+      case 'listings': {
+        const own: Line[] = series.listings.map((l, i) => ({
+          key: String(l.listingId), name: l.symbol ?? String(l.listingId), color: LISTING_COLORS[i % LISTING_COLORS.length],
           points: pts(l.total, moneyToNumber), format: money, minMove: MONEY_STEP,
         }));
+        const other = series.other && (hiddenListings(series) > 0 || series.other.some(v => v !== '0'))
+          ? [{ key: 'other', name: 'Other', color: OTHER_COLOR, points: pts(series.other, moneyToNumber), format: money, minMove: MONEY_STEP }]
+          : [];
+        return [...own, ...other];
+      }
       case 'position':
         return series.listings.map((l, i) => ({
-          name: l.symbol ?? String(l.listingId), color: LISTING_COLORS[i % LISTING_COLORS.length],
+          key: String(l.listingId), name: l.symbol ?? String(l.listingId), color: LISTING_COLORS[i % LISTING_COLORS.length],
           points: pts(l.netQuantity, sizeToNumber), ...quantity(l.lotSize),
         }));
     }
@@ -103,7 +121,7 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
 
   // Which series exist: a different view or a different set of listings draws new ones. Anything else (a poll's new
   // points) only updates their data, which keeps the viewer's zoom and lets the chart follow the newest point.
-  const structure = `${view}|${lines.map(l => l.name).join(',')}`;
+  const structure = `${view}|${lines.map(l => l.key).join(',')}`;
 
   useEffect(() => {
     if (!container.current) return;
@@ -203,10 +221,10 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
   }, [chart, lines, drawdownPoints, series, structure, timeZone, hiddenMarkers]);
 
   const legendTime = hover?.time ?? lines[0]?.points[lines[0].points.length - 1]?.time ?? null;
-  const valueAt = (line: Line, time: number) => [...line.points].reverse().find(p => p.time <= time);
+  const valueAt = (line: Line, time: number) => pointAt(line.points, time);
   // The Total view's lower pane: how far below its best the total sits at the hovered time.
   const drawdownLine: Line | null = view === 'total' && lines.length > 0
-    ? { name: 'Drawdown', color: 'rgba(250,82,82,0.8)', points: drawdownPoints, format: money, minMove: MONEY_STEP }
+    ? { key: 'drawdown', name: 'Drawdown', color: 'rgba(250,82,82,0.8)', points: drawdownPoints, format: money, minMove: MONEY_STEP }
     : null;
   const tooltip: TooltipState | null = hover && {
     x: hover.x,
@@ -224,7 +242,7 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
           {legendTime !== null && lines.map(line => {
             const point = valueAt(line, legendTime);
             return (
-              <Group key={line.name} gap={4} wrap="nowrap">
+              <Group key={line.key} gap={4} wrap="nowrap">
                 <Box w={10} h={3} style={{ background: line.color, borderRadius: 2 }} />
                 <Text size="xs" c="dimmed">{line.name}</Text>
                 <Text size="xs" fw={600} style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -236,12 +254,20 @@ export function PnlChart({ series, loading, views = ['total'], height = 280 }: P
           {legendTime !== null && series && (
             <Text size="xs" c="dimmed">at {formatTime(fromChartTime(legendTime, timeZone), timeZone)}</Text>
           )}
+          {(view === 'listings' || view === 'position') && series && hiddenListings(series) > 0 && (
+            <Text size="xs" c="dimmed">
+              top {series.listings.length} of {series.listingCount} listings held or traded{view === 'listings' ? '; the rest in Other' : ''}
+            </Text>
+          )}
         </Group>
         {views.length > 1 && (
           <SegmentedControl
             size="xs"
             value={view}
-            onChange={v => setView(v as ChartView)}
+            onChange={v => {
+              setView(v as ChartView);
+              onViewChange?.(v as ChartView);
+            }}
             data={views.map(v => ({ value: v, label: { total: 'Total', listings: 'By listing', position: 'Position', fees: 'Fees' }[v] }))}
           />
         )}

@@ -7,8 +7,9 @@ export function mergeSeries(previous: PnlSeries, tail: PnlSeries): PnlSeries {
   const keep = previous.t.findIndex(t => t >= tail.t[0]);
   const cut = keep === -1 ? previous.t.length : keep;
   const join = <T,>(a: T[], b: T[]) => [...a.slice(0, cut), ...b];
+  const shown = new Map(previous.listings.map(l => [l.listingId, l]));
   const listings = tail.listings.map(listing => {
-    const before = previous.listings.find(l => l.listingId === listing.listingId);
+    const before = shown.get(listing.listingId);
     // A listing first seen in this poll had nothing before it; pad so every array lines up with t.
     const pad = (values: string[] | undefined) => values ? values.slice(0, cut) : Array<string>(cut).fill('0');
     return {
@@ -27,6 +28,9 @@ export function mergeSeries(previous: PnlSeries, tail: PnlSeries): PnlSeries {
     unrealized: join(previous.unrealized, tail.unrealized),
     fees: join(previous.fees, tail.fees),
     listings,
+    // How many could have been drawn is the full window's, not the poll's.
+    listingCount: previous.listingCount,
+    other: previous.other && tail.other ? join(previous.other, tail.other) : null,
     events: [...previous.events, ...tail.events.filter(e => !seen.has(eventKey(e)))],
   };
 }

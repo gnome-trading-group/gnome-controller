@@ -114,6 +114,9 @@ export interface StrategySummary {
     };
   };
   openPositions: number;
+  // The rows left out of listings: flat and untraded since the day started, each one's PnL closed. Paged on demand.
+  history: { count: number; total: string; realized: string; fees: string };
+  // Rows held, needing review or traded today; with a listingId, that listing's rows instead.
   listings: StrategyListingPnl[];
 }
 
@@ -206,7 +209,12 @@ export interface EventPositions {
       best: string | null;
     }[];
   }[];
+  // Held listings that aren't event contracts; in history, the newest flat ones, on the first page only.
   other: HeldPosition[];
+  // Events still held, events with every contract flat, and flat listings that aren't event contracts.
+  counts: { active: number; history: number; flatOther: number };
+  // Set on a history page with more after it.
+  nextBefore: string | null;
 }
 
 export interface AttentionItem {
@@ -245,7 +253,11 @@ export interface PnlSeries {
   realized: string[];
   unrealized: string[];
   fees: string[];
+  // Each listing's own line, only when asked for (byListing, listingIds or a listingId): the ones that moved most, at
+  // most 25 of the listingCount held or traded in the window, with `other` summing the rest so the lines add up.
   listings: { listingId: number; symbol: string | null; lotSize: string | null; total: string[]; netQuantity: string[] }[];
+  listingCount: number;
+  other: string[] | null;
   events: {
     time: string;
     kind: SeriesEventKind;

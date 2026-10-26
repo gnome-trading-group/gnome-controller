@@ -47,7 +47,7 @@ function PositionDetail() {
   // Live while a session of the strategy is trading this listing.
   const live = (sessions.data ?? []).some(s => s.mode === mode && isActiveSession(s.status)
     && Array.isArray(s.config.listings) && (s.config.listings as unknown[]).map(Number).includes(listingId));
-  const summary = useStrategySummary(strategyId, mode, tz);
+  const summary = useStrategySummary(strategyId, mode, tz, listingId);
   // Live, the strategy may hold the listing on several venue accounts (one it was relaunched off, still draining):
   // the figures are one account's, picked in the URL, else the one with a position.
   const [search, setSearch] = useSearchParams();

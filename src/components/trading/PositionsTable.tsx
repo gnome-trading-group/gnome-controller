@@ -1,17 +1,21 @@
 import { useMemo, useState } from 'react';
-import { ActionIcon, Anchor, Badge, Group, SegmentedControl, Text, Tooltip } from '@mantine/core';
-import { IconAdjustments, IconAlertTriangle } from '@tabler/icons-react';
+import { ActionIcon, Anchor, Badge, Button, Group, SegmentedControl, Text, Tooltip } from '@mantine/core';
+import { IconAdjustments, IconAlertTriangle, IconRefresh } from '@tabler/icons-react';
 import { MantineReactTable, MRT_ColumnDef, useMantineReactTable } from 'mantine-react-table';
 import { Link, useNavigate } from 'react-router-dom';
 import { navigateRowProps } from '../../utils/navigation';
-import { AfterSession, SessionListingPnl, StrategyListingPnl } from '../../types';
+import { AfterSession, Mode, SessionListingPnl, StrategyListingPnl } from '../../types';
 import { formatDuration, formatMoney, isPredictionMarket } from '../../utils/format';
 import { ListingLabel, Money, Price, Qty } from './values';
 import { useCents } from '../../hooks/useCents';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { capital, exposure } from '../../utils/exposure';
+import { useFlatPositions } from '../../query/hooks';
 
 type Row = SessionListingPnl | StrategyListingPnl;
+
+// Past this many rows only the ones on screen are rendered.
+const VIRTUALIZE_ROWS = 100;
 
 const DOLLAR = 1_000_000_000n;
 const UNIT = 1_000_000n;
@@ -146,23 +150,39 @@ interface PositionsTableProps {
   onAdjust?: (row: StrategyListingPnl) => void;
   // Where clicking a row goes: the listing's position page.
   rowHref?: (row: Row) => string;
+  // A strategy's rows are the ones active today; its flat history, which may run to thousands, loads page by page.
+  history?: { strategyId: number; mode: Mode; tz: string; count: number };
 }
 
-export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTableProps) {
+export function PositionsTable({ rows, loading, onAdjust, rowHref, history }: PositionsTableProps) {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<'all' | 'open' | 'flat'>('all');
+  const [filter, setFilter] = useState<'all' | 'open' | 'flat'>(history ? 'open' : 'all');
+  const flatHistory = useFlatPositions(history ?? null, filter === 'flat');
+  const paged = !!history && filter === 'flat';
   const session = rows.length > 0 && isSessionRow(rows[0]);
   const ended = session && rows.some(r => isSessionRow(r) && r.afterSession !== null);
   // A strategy's live rows are one per listing and venue account; paper ones belong to no account.
-  const byAccount = rows.some(r => !isSessionRow(r) && r.accountLabel !== null);
+  const byAccount = [...rows, ...(flatHistory.data ?? [])].some(r => !isSessionRow(r) && r.accountLabel !== null);
   const isOpen = (r: Row) => BigInt(r.netQuantity) !== 0n || r.needsReview;
   // Open positions first, so showing flat ones too doesn't bury them.
   const shown = useMemo(() => {
+    if (paged) return flatHistory.data ?? [];
     const open = rows.filter(isOpen);
     const flat = rows.filter(r => !isOpen(r));
+    if (history) return [...open, ...flat];
     return filter === 'open' ? open : filter === 'flat' ? flat : [...open, ...flat];
-  }, [rows, filter]);
+  }, [rows, filter, history, paged, flatHistory.data]);
   const openCount = rows.filter(isOpen).length;
+  const filters = history
+    ? [
+      { value: 'open', label: `Held or traded today (${rows.length})` },
+      { value: 'flat', label: `Flat (${history.count})` },
+    ]
+    : [
+      { value: 'all', label: `All (${rows.length})` },
+      { value: 'open', label: `Open (${openCount})` },
+      { value: 'flat', label: `Flat (${rows.length - openCount})` },
+    ];
 
   const columns = useMemo<MRT_ColumnDef<Row>[]>(() => {
     const money = (key: keyof Row, header: string, pnl = true): MRT_ColumnDef<Row> => ({
@@ -269,12 +289,22 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
   const table = useMantineReactTable({
     columns,
     data: shown,
-    state: { isLoading: loading && rows.length === 0 },
+    state: { isLoading: paged ? flatHistory.isLoading : loading && rows.length === 0 },
     enableTopToolbar: true,
     enableColumnActions: false,
     enableColumnFilters: false,
     enablePagination: false,
-    enableBottomToolbar: false,
+    enableRowVirtualization: shown.length > VIRTUALIZE_ROWS,
+    mantineTableContainerProps: shown.length > VIRTUALIZE_ROWS ? { style: { maxHeight: 560 } } : undefined,
+    enableStickyHeader: shown.length > VIRTUALIZE_ROWS,
+    enableBottomToolbar: paged && !!flatHistory.hasNextPage,
+    renderBottomToolbar: () => (
+      <Group justify="center" p="xs">
+        <Button size="xs" variant="subtle" loading={flatHistory.isFetchingNextPage} onClick={() => flatHistory.fetchNextPage()}>
+          Load older
+        </Button>
+      </Group>
+    ),
     enableRowActions: !!onAdjust,
     positionActionsColumn: 'last',
     renderTopToolbarCustomActions: () => (
@@ -283,13 +313,16 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
           size="xs"
           value={filter}
           onChange={v => setFilter(v as typeof filter)}
-          data={[
-            { value: 'all', label: `All (${rows.length})` },
-            { value: 'open', label: `Open (${openCount})` },
-            { value: 'flat', label: `Flat (${rows.length - openCount})` },
-          ]}
+          data={filters}
         />
-        {openCount > 0 && <ExposureTotals rows={rows} />}
+        {paged && (
+          <Tooltip label="Flat positions don't change, so they aren't refreshed on their own" withArrow>
+            <ActionIcon variant="subtle" color="gray" loading={flatHistory.isFetching} onClick={() => flatHistory.refetch()}>
+              <IconRefresh size={16} />
+            </ActionIcon>
+          </Tooltip>
+        )}
+        {!paged && openCount > 0 && <ExposureTotals rows={rows} />}
       </Group>
     ),
     renderRowActions: ({ row }) => (
@@ -303,7 +336,10 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref }: PositionsTa
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     mantineTableBodyRowProps: ({ row }) => (rowHref ? navigateRowProps(navigate, rowHref(row.original)) : {}),
     renderEmptyRowsFallback: () => (
-      <Text c="dimmed" size="sm" p="md">{rows.length === 0 ? 'No positions in this mode.' : filter === 'open' ? 'Everything is flat.' : 'No listings match.'}</Text>
+      <Text c="dimmed" size="sm" p="md">
+        {paged ? 'No flat positions.' : rows.length === 0 && !history?.count ? 'No positions in this mode.'
+          : filter === 'open' ? 'Everything is flat.' : 'No listings match.'}
+      </Text>
     ),
   });
 

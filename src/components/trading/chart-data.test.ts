@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chartPoints, chartTime, drawdown, fromChartTime, snapToPoint } from './chart-data';
+import { chartPoints, chartTime, drawdown, fromChartTime, pointAt, snapToPoint } from './chart-data';
 
 describe('chart points', () => {
   it('keeps the newest value when two points fall in one second', () => {
@@ -15,6 +15,12 @@ describe('chart points', () => {
   it('places an event on the point at or before it', () => {
     const points = [10, 20, 30].map(time => ({ time, value: 0 }));
     expect([snapToPoint(points, 25), snapToPoint(points, 30), snapToPoint(points, 5)]).toEqual([20, 30, 10]);
+  });
+
+  it('reads a line at a time as its last point at or before it', () => {
+    const points = [10, 20, 30, 40].map(time => ({ time, value: time / 10 }));
+    expect([5, 10, 25, 40, 99].map(t => pointAt(points, t)?.value)).toEqual([undefined, 1, 2, 4, 4]);
+    expect(pointAt([], 10)).toBeUndefined();
   });
 });
 

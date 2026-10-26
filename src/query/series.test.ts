@@ -5,7 +5,8 @@ import { PnlSeries } from '../types';
 function series(t: number[], total: string[], extra: Partial<PnlSeries> = {}): PnlSeries {
   return {
     resolutionMs: 1000, t, total, realized: total, unrealized: total, fees: total.map(() => '0'),
-    listings: [{ listingId: 1, symbol: 'A', lotSize: null, total, netQuantity: total }], events: [], ...extra,
+    listings: [{ listingId: 1, symbol: 'A', lotSize: null, total, netQuantity: total }], listingCount: 1, other: null,
+    events: [], ...extra,
   };
 }
 
@@ -31,5 +32,13 @@ describe('appending polled points to a chart', () => {
   it('keeps the chart as it was when a poll brings nothing', () => {
     const previous = series([1000], ['1']);
     expect(mergeSeries(previous, series([], []))).toBe(previous);
+  });
+
+  it('appends the rest of the listings to other, and keeps the full window\'s listing count', () => {
+    const merged = mergeSeries(
+      series([1000, 2000], ['1', '2'], { listingCount: 40, other: ['5', '6'] }),
+      series([2000, 3000], ['3', '4'], { listingCount: 2, other: ['7', '8'] }));
+    expect(merged.other).toEqual(['5', '7', '8']);
+    expect(merged.listingCount).toBe(40);
   });
 });

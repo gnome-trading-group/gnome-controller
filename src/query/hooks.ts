@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { controllerApi, registryApi, LedgerFilters, LedgerScope } from '../utils/api';
+import { controllerApi, registryApi, EventScope, LedgerFilters, LedgerScope } from '../utils/api';
 import { ACTIVE_SESSION_STATUSES, AlertFilters, isActiveSession, LedgerFill, LedgerOrder, Mode, PnlSeries, StrategySession } from '../types';
 import { mergeSeries } from './series';
 
@@ -30,7 +30,9 @@ export const keys = {
   tradedSessions: (scope: TradedScope) => ['tradedSessions', scope] as const,
   policies: ['riskPolicies'] as const,
   sessionSummary: (id: string) => ['pnlSummary', 'session', id] as const,
-  strategySummary: (id: number, mode: Mode, tz: string) => ['pnlSummary', 'strategy', id, mode, tz] as const,
+  strategySummary: (id: number, mode: Mode, tz: string, listingId?: number) =>
+    ['pnlSummary', 'strategy', id, mode, tz, listingId ?? null] as const,
+  flatPositions: (id: number, mode: Mode, tz: string) => ['pnlSummary', 'flat', id, mode, tz] as const,
   firmSummary: (mode: Mode, tz: string) => ['pnlSummary', 'firm', mode, tz] as const,
   sessionsTotals: (ids: string[]) => ['pnlSummary', 'sessions', ids] as const,
   series: (scope: LedgerScope, start: string | undefined) => ['pnlSeries', scope, start] as const,
@@ -128,15 +130,31 @@ export function useRiskUsage(sessionId: string | undefined, live: boolean) {
   });
 }
 
-export function useEventPositions(
-  scope: { strategyId: number; mode: Mode } | { sessionId: string }, enabled: boolean, live: boolean,
-) {
+export function useEventPositions(scope: EventScope, enabled: boolean, live: boolean) {
   return useQuery({
     queryKey: ['eventPositions', scope],
     queryFn: () => registryApi.getEventPositions(scope),
     enabled,
     refetchInterval: live ? POLL.summary : false,
     placeholderData: keepPreviousData,
+  });
+}
+
+const EVENT_HISTORY_PAGE_SIZE = 50;
+
+// Events that are over for the scope don't change, so they aren't polled: they load when shown and refresh on request.
+export function useEventHistory(scope: EventScope, enabled: boolean) {
+  return useInfiniteQuery({
+    enabled,
+    queryKey: ['eventHistory', scope],
+    queryFn: ({ pageParam }) => registryApi.getEventPositions(scope, { before: pageParam, limit: EVENT_HISTORY_PAGE_SIZE }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: last => last.nextBefore ?? undefined,
+    select: data => ({
+      events: data.pages.flatMap(page => page.events),
+      other: data.pages[0]?.other ?? [],
+      flatOther: data.pages[0]?.counts.flatOther ?? 0,
+    }),
   });
 }
 
@@ -245,12 +263,27 @@ export function useSessionSummary(sessionId: string | undefined, live: boolean) 
   });
 }
 
-export function useStrategySummary(strategyId: number, mode: Mode, tz: string) {
+export function useStrategySummary(strategyId: number, mode: Mode, tz: string, listingId?: number) {
   return useQuery({
-    queryKey: keys.strategySummary(strategyId, mode, tz),
-    queryFn: () => registryApi.getStrategySummary(strategyId, mode, tz),
+    queryKey: keys.strategySummary(strategyId, mode, tz, listingId),
+    queryFn: () => registryApi.getStrategySummary(strategyId, mode, tz, listingId),
     refetchInterval: POLL.summary,
     placeholderData: keepPreviousData,
+  });
+}
+
+const FLAT_PAGE_SIZE = 100;
+
+// Closed positions don't move, so they aren't polled: they load once their tab opens, and refresh on request.
+export function useFlatPositions(scope: { strategyId: number; mode: Mode; tz: string } | null, enabled: boolean) {
+  const { strategyId = 0, mode = 'paper', tz = 'UTC' } = scope ?? {};
+  return useInfiniteQuery({
+    enabled: enabled && scope !== null,
+    queryKey: keys.flatPositions(strategyId, mode, tz),
+    queryFn: ({ pageParam }) => registryApi.listFlatPositions(strategyId, mode, tz, { before: pageParam, limit: FLAT_PAGE_SIZE }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: last => last.nextBefore ?? undefined,
+    select: data => data.pages.flatMap(page => page.rows),
   });
 }
 
@@ -273,19 +306,24 @@ export function useSessionsTotals(sessionIds: string[], live: boolean) {
 }
 
 // The first read loads the whole window; each poll after it asks only for points from the newest one on, and merges.
-export function usePnlSeries(scope: LedgerScope | null, start: string | undefined, live: boolean, listingId?: number) {
+// Each listing's own line comes only with byListing (or for one listingId): it is as long as the series per listing.
+export function usePnlSeries(
+  scope: LedgerScope | null, start: string | undefined, live: boolean, listingId?: number, byListing = false,
+) {
   const client = useQueryClient();
-  const key = [...keys.series(scope ?? { sessionId: '' }, start), listingId] as const;
+  const key = [...keys.series(scope ?? { sessionId: '' }, start), listingId, byListing] as const;
   return useQuery({
     queryKey: key,
     enabled: scope !== null,
     queryFn: async () => {
       const previous = client.getQueryData<PnlSeries>(key);
       if (!previous || previous.t.length === 0) {
-        return registryApi.getPnlSeries(scope as LedgerScope, { start, listingId });
+        return registryApi.getPnlSeries(scope as LedgerScope, { start, listingId, byListing });
       }
       const tail = await registryApi.getPnlSeries(scope as LedgerScope, {
-        start, listingId, resolution: previous.resolutionMs, since: previous.t[previous.t.length - 1],
+        start, listingId, byListing, resolution: previous.resolutionMs, since: previous.t[previous.t.length - 1],
+        // The lines already drawn, so a poll never swaps one listing for another mid-chart; a reload re-ranks them.
+        listingIds: byListing && previous.listings.length > 0 ? previous.listings.map(l => l.listingId) : undefined,
       });
       return mergeSeries(previous, tail);
     },

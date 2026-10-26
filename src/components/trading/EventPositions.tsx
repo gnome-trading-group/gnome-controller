@@ -1,22 +1,27 @@
 import { useMemo, useState } from 'react';
 import {
-  ActionIcon, Anchor, Badge, Card, Group, SegmentedControl, Skeleton, Stack, Table, Text, TextInput,
+  ActionIcon, Anchor, Badge, Button, Card, Group, SegmentedControl, Skeleton, Stack, Table, Text, TextInput, Tooltip,
 } from '@mantine/core';
-import { IconChevronDown, IconChevronRight, IconSearch } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronRight, IconRefresh, IconSearch } from '@tabler/icons-react';
 import { SkeletonRows } from '../SkeletonRows';
 import { Link, useSearchParams } from 'react-router-dom';
 import { EventPositions as Events, HeldPosition, Mode } from '../../types';
 import { formatQty } from '../../utils/format';
 import { exposure } from '../../utils/exposure';
+import { EventScope } from '../../utils/api';
+import { useEventHistory } from '../../query/hooks';
 import { Money, Price, Qty, Time } from './values';
 
 type Event = Events['events'][number];
 type Market = Event['markets'][number];
 
 // In the order they're shown: a resolved event still holding contracts is waiting on the settlement sweeper, which
-// is worth noticing before anything else.
-const STATUSES = ['awaiting', 'open', 'exited', 'settled'] as const;
-type Status = typeof STATUSES[number];
+// is worth noticing before anything else. Exited and settled events are history, loaded a page at a time.
+type Status = 'awaiting' | 'open' | 'exited' | 'settled';
+const ACTIVE: Status[] = ['awaiting', 'open'];
+const HISTORY: Status[] = ['exited', 'settled'];
+type Filter = 'all' | 'awaiting' | 'open' | 'history';
+const FILTERS: Filter[] = ['awaiting', 'open', 'history'];
 
 const STATUS_LABELS: Record<Status, string> = {
   awaiting: 'Awaiting settlement',
@@ -318,13 +323,40 @@ function OtherCard({ rows, strategyId, mode, basis }: {
   );
 }
 
+function StatusSection({ status, events, strategyId, mode, basis }: {
+  status: Status; events: Event[]; strategyId: number; mode: Mode; basis: 'lifetime' | 'session';
+}) {
+  return (
+    <Stack gap="xs">
+      <Group gap="xs">
+        <Text fw={600} size="sm">{STATUS_LABELS[status]} ({events.length})</Text>
+        {status === 'settled' && (
+          <Text size="sm" c="dimmed" component="div">
+            Realized <Money value={events.reduce((sum, e) => sum + realizedOf(e), 0n).toString()} size="sm" />
+          </Text>
+        )}
+      </Group>
+      {status === 'settled'
+        ? <SettledTable events={events} strategyId={strategyId} mode={mode} basis={basis} />
+        : events.map(event => <EventCard key={event.eventId} event={event} strategyId={strategyId} mode={mode} basis={basis} />)}
+    </Stack>
+  );
+}
+
+function group(events: Event[], statuses: Status[]) {
+  const groups = Object.fromEntries(statuses.map(s => [s, [] as Event[]])) as Record<Status, Event[]>;
+  for (const event of events) groups[statusOf(event)]?.push(event);
+  for (const status of statuses) groups[status].sort(status === 'settled' ? byTime(resolvedTime, true) : byTime(e => e.expiry, false));
+  return groups;
+}
+
 // Prediction-market positions grouped by event, with each market's outcome scenarios.
 // basis: the strategy's lifetime PnL, or one session's PnL (from $0 at its start).
-export function EventPositions({ data, strategyId, mode, loading, basis }: {
-  data: Events | undefined; strategyId: number; mode: Mode; loading: boolean; basis: 'lifetime' | 'session';
+export function EventPositions({ data, scope, strategyId, mode, loading, basis }: {
+  data: Events | undefined; scope: EventScope; strategyId: number; mode: Mode; loading: boolean; basis: 'lifetime' | 'session';
 }) {
   const [params, setParams] = useSearchParams();
-  const filter: Status | 'all' = STATUSES.includes(params.get('status') as Status) ? params.get('status') as Status : 'all';
+  const filter: Filter = FILTERS.includes(params.get('status') as Filter) ? params.get('status') as Filter : 'all';
   const search = params.get('q') ?? '';
   const setParam = (key: string, value: string | null) => setParams(current => {
     const updated = new URLSearchParams(current);
@@ -332,13 +364,12 @@ export function EventPositions({ data, strategyId, mode, loading, basis }: {
     else updated.delete(key);
     return updated;
   }, { replace: true });
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const showHistory = filter === 'history' || (filter === 'all' && historyOpen);
+  const history = useEventHistory(scope, showHistory);
 
-  const grouped = useMemo(() => {
-    const groups: Record<Status, Event[]> = { awaiting: [], open: [], exited: [], settled: [] };
-    for (const event of data?.events ?? []) groups[statusOf(event)].push(event);
-    for (const status of STATUSES) groups[status].sort(status === 'settled' ? byTime(resolvedTime, true) : byTime(e => e.expiry, false));
-    return groups;
-  }, [data]);
+  const grouped = useMemo(() => group(data?.events ?? [], ACTIVE), [data]);
+  const past = useMemo(() => group(history.data?.events ?? [], HISTORY), [history.data]);
 
   // Across every unsettled market, not just those shown, so it doesn't move with the search.
   const summary = useMemo(() => {
@@ -364,20 +395,23 @@ export function EventPositions({ data, strategyId, mode, loading, basis }: {
   }, [grouped, data]);
 
   if (loading && !data) return <EventPositionsSkeleton />;
-  if (!data || (data.events.length === 0 && data.other.length === 0)) {
+  const counts = data?.counts ?? { active: 0, history: 0, flatOther: 0 };
+  if (!data || (data.events.length === 0 && data.other.length === 0 && counts.history === 0 && counts.flatOther === 0)) {
     return <Text size="sm" c="dimmed">No positions in this mode.</Text>;
   }
 
   const query = search.trim().toLowerCase();
-  const shown = (status: Status) => (filter === 'all' || filter === status
-    ? grouped[status].filter(e => !query || eventMatches(e, query)) : []);
-  const other = data.other.filter(p => {
-    if (query && !matches(query, p.symbol, String(p.listingId))) return false;
-    if (filter === 'all') return true;
-    if (filter === 'open') return !isFlat(p);
-    return filter === 'exited' && isFlat(p);
-  });
-  const sections = STATUSES.map(status => ({ status, events: shown(status) })).filter(s => s.events.length > 0);
+  const found = (events: Event[]) => events.filter(e => !query || eventMatches(e, query));
+  const otherFound = (rows: HeldPosition[]) => rows.filter(p => !query || matches(query, p.symbol, String(p.listingId)));
+  const sections = ACTIVE
+    .filter(status => filter === 'all' || filter === status)
+    .map(status => ({ status, events: found(grouped[status]) }))
+    .filter(s => s.events.length > 0);
+  const other = filter === 'all' || filter === 'open' ? otherFound(data.other) : [];
+  const pastSections = HISTORY.map(status => ({ status, events: found(past[status]) })).filter(s => s.events.length > 0);
+  const pastOther = otherFound(history.data?.other ?? []);
+  const loaded = history.data?.events.length ?? 0;
+  const historyEmpty = !history.isLoading && pastSections.length === 0 && pastOther.length === 0;
 
   return (
     <Stack gap="md">
@@ -388,8 +422,9 @@ export function EventPositions({ data, strategyId, mode, loading, basis }: {
             value={filter}
             onChange={v => setParam('status', v === 'all' ? null : v)}
             data={[
-              { value: 'all', label: `All (${data.events.length})` },
-              ...STATUSES.map(s => ({ value: s, label: `${STATUS_LABELS[s]} (${grouped[s].length})` })),
+              { value: 'all', label: 'All' },
+              ...ACTIVE.map(s => ({ value: s, label: `${STATUS_LABELS[s]} (${grouped[s].length})` })),
+              { value: 'history', label: `Exited & settled (${counts.history})` },
             ]}
           />
           <TextInput
@@ -408,25 +443,63 @@ export function EventPositions({ data, strategyId, mode, loading, basis }: {
           <Text size="sm" component="div">Worst case <Money value={summary.worst.toString()} size="sm" fw={600} /></Text>
         </Group>
       </Group>
-      {sections.length === 0 && other.length === 0 && (
-        <Text size="sm" c="dimmed">No events match.</Text>
+      {filter !== 'history' && sections.length === 0 && other.length === 0 && (
+        <Text size="sm" c="dimmed">{query ? 'No events match.' : 'Nothing held.'}</Text>
       )}
       {sections.map(({ status, events }) => (
-        <Stack key={status} gap="xs">
-          <Group gap="xs">
-            <Text fw={600} size="sm">{STATUS_LABELS[status]} ({events.length})</Text>
-            {status === 'settled' && (
-              <Text size="sm" c="dimmed" component="div">
-                Realized <Money value={events.reduce((sum, e) => sum + realizedOf(e), 0n).toString()} size="sm" />
-              </Text>
-            )}
-          </Group>
-          {status === 'settled'
-            ? <SettledTable events={events} strategyId={strategyId} mode={mode} basis={basis} />
-            : events.map(event => <EventCard key={event.eventId} event={event} strategyId={strategyId} mode={mode} basis={basis} />)}
-        </Stack>
+        <StatusSection key={status} status={status} events={events} strategyId={strategyId} mode={mode} basis={basis} />
       ))}
       {other.length > 0 && <OtherCard rows={other} strategyId={strategyId} mode={mode} basis={basis} />}
+
+      {filter === 'all' && (counts.history > 0 || counts.flatOther > 0) && (
+        <Group gap="xs">
+          <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => setHistoryOpen(open => !open)}
+            aria-label={historyOpen ? 'Hide exited and settled' : 'Show exited and settled'}>
+            {historyOpen ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+          </ActionIcon>
+          <Text fw={600} size="sm" style={{ cursor: 'pointer' }} onClick={() => setHistoryOpen(open => !open)}>
+            Exited & settled ({counts.history})
+          </Text>
+        </Group>
+      )}
+      {showHistory && (
+        <Stack gap="md">
+          <Group gap="xs">
+            <Text size="xs" c="dimmed">
+              {loaded} of {counts.history} exited or settled events loaded, most recently resolved first
+              {history.hasNextPage && query ? '; search covers only those' : ''}. They don't change, so they aren't refreshed on their own.
+            </Text>
+            <Tooltip label="Reload exited and settled events" withArrow>
+              <ActionIcon variant="subtle" color="gray" size="sm" loading={history.isFetching} onClick={() => history.refetch()}>
+                <IconRefresh size={14} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+          {history.isLoading && <EventPositionsSkeleton />}
+          {historyEmpty && <Text size="sm" c="dimmed">{query ? 'No events match.' : 'No exited or settled events.'}</Text>}
+          {pastSections.map(({ status, events }) => (
+            <StatusSection key={status} status={status} events={events} strategyId={strategyId} mode={mode} basis={basis} />
+          ))}
+          {history.hasNextPage && (
+            <Group justify="center">
+              <Button size="xs" variant="subtle" loading={history.isFetchingNextPage} onClick={() => history.fetchNextPage()}>
+                Load older
+              </Button>
+            </Group>
+          )}
+          {pastOther.length > 0 && (
+            <Stack gap={4}>
+              <OtherCard rows={pastOther} strategyId={strategyId} mode={mode} basis={basis} />
+              {(history.data?.flatOther ?? 0) > pastOther.length && !query && (
+                <Text size="xs" c="dimmed">
+                  The {pastOther.length} most recently traded of {history.data?.flatOther} flat listings outside events; the
+                  By listing view has them all.
+                </Text>
+              )}
+            </Stack>
+          )}
+        </Stack>
+      )}
     </Stack>
   );
 }

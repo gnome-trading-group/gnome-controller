@@ -372,11 +372,12 @@ function StrategyDetail() {
             />
           </Group>
           {positionsView === 'events' ? (
-            <EventPositions data={eventPositions.data} strategyId={id} mode={mode} loading={eventPositions.isLoading} basis="lifetime" />
+            <EventPositions data={eventPositions.data} scope={{ strategyId: id, mode }} strategyId={id} mode={mode} loading={eventPositions.isLoading} basis="lifetime" />
           ) : (
           <PositionsTable
             rows={summary.data?.listings ?? []}
             loading={summary.isLoading}
+            history={{ strategyId: id, mode, tz, count: summary.data?.history?.count ?? 0 }}
             onAdjust={setAdjustTarget}
             rowHref={row => {
               const accountId = 'accountId' in row ? row.accountId : null;

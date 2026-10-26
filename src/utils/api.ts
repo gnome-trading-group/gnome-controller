@@ -3,7 +3,7 @@ import {
   DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
   RuleType, TriggerEvaluation,
 } from '../types/launcher';
-import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream } from '../types';
+import { Alert, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
 import { BacktestRun } from '../types/backtests';
@@ -52,6 +52,8 @@ export interface LedgerFilters {
   start?: string;
   end?: string;
 }
+
+export type EventScope = { strategyId: number; mode: Mode } | { sessionId: string };
 
 export interface LedgerPageParams extends LedgerFilters {
   before?: string;
@@ -726,10 +728,16 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       queryParams: { sessionId },
     }),
-  getStrategySummary: (strategyId: number, mode: Mode, tz: string) =>
+  getStrategySummary: (strategyId: number, mode: Mode, tz: string, listingId?: number) =>
     sendApiRequest<StrategySummary>('/pnl/summary', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      queryParams: { strategyId, mode, tz },
+      queryParams: definedParams({ strategyId, mode, tz, listingId }),
+    }),
+  // The strategy's flat positions its summary leaves out, newest first.
+  listFlatPositions: (strategyId: number, mode: Mode, tz: string, page: { before?: string; limit: number }) =>
+    sendApiRequest<LedgerPage<StrategyListingPnl>>('/pnl/summary', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: definedParams({ strategyId, mode, tz, positions: 'flat', ...page }),
     }),
   getFirmSummary: (mode: Mode, tz: string) =>
     sendApiRequest<FirmSummary>('/pnl/summary', 'GET', {
@@ -741,10 +749,11 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       queryParams: { sessionIds: sessionIds.join(',') },
     }),
-  getEventPositions: (scope: { strategyId: number; mode: Mode } | { sessionId: string }) =>
+  // Events still held; with a history page, events every contract of which is flat, most recently resolved first.
+  getEventPositions: (scope: EventScope, history?: { before?: string; limit: number }) =>
     sendApiRequest<EventPositions>('/pnl/events', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      queryParams: scope,
+      queryParams: definedParams({ ...scope, ...(history && { status: 'history', ...history }) }),
     }),
   getTableSizes: () =>
     sendApiRequest<TableSizes>('/monitoring/tables', 'GET', { apiUrl: REGISTRY_API_URL }),
@@ -781,10 +790,17 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       queryParams: definedParams({ listingId, start }),
     }),
-  getPnlSeries: (scope: LedgerScope, window: { start?: string; resolution?: number; since?: number; listingId?: number }) =>
+  getPnlSeries: (
+    scope: LedgerScope,
+    { byListing, listingIds, ...window }: {
+      start?: string; resolution?: number; since?: number; listingId?: number; byListing?: boolean; listingIds?: number[];
+    },
+  ) =>
     sendApiRequest<PnlSeries>('/pnl/series', 'GET', {
       apiUrl: REGISTRY_API_URL,
-      queryParams: definedParams({ ...scope, ...window }),
+      queryParams: definedParams({
+        ...scope, ...window, byListing: byListing ? 'true' : undefined, listingIds: listingIds?.join(','),
+      }),
     }),
   listFills: (scope: LedgerScope, page: LedgerPageParams = {}) =>
     sendApiRequest<LedgerPage<LedgerFill>>('/ledger/fills', 'GET', {

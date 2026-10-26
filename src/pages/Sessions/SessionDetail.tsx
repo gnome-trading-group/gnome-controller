@@ -22,7 +22,7 @@ import { Heartbeat } from '../../components/trading/Heartbeat';
 import { Kpi, KpiStrip, ModeBadge, ModeBand } from '../../components/trading/layout';
 import { PageHeader } from '../../components/PageHeader';
 import { Money, Time } from '../../components/trading/values';
-import { PnlChart } from '../../components/trading/PnlChart';
+import { ChartView, PnlChart } from '../../components/trading/PnlChart';
 import { PositionsTable } from '../../components/trading/PositionsTable';
 import { EventPositions } from '../../components/trading/EventPositions';
 import { FillsTable, OrdersTable } from '../../components/trading/LedgerTables';
@@ -33,6 +33,8 @@ import { SessionDetailsPanel } from './SessionDetailsPanel';
 const RANGES: Record<string, number | null> = { 'Since start': null, '1h': 3_600_000, '6h': 21_600_000, '24h': 86_400_000 };
 const TABS = ['positions', 'open', 'fills', 'orders', 'risk', 'logs', 'details'] as const;
 type Tab = typeof TABS[number];
+// The chart's views drawn per listing, which need the series' per-listing lines (asked for with byListing).
+const LISTING_VIEWS: ChartView[] = ['listings', 'position'];
 
 // A window ending now, or when an ended session stopped.
 function rangeStart(range: string, session: StrategySession | null | undefined): string | undefined {
@@ -56,7 +58,8 @@ function SessionDetail() {
   const strategyName = useStrategyName(session?.strategyId);
   const [range, setRange] = useState('Since start');
   const [start, setStart] = useState<string | undefined>(undefined);
-  const series = usePnlSeries(session ? { sessionId } : null, start, live);
+  const [chartView, setChartView] = useState<ChartView>('total');
+  const series = usePnlSeries(session ? { sessionId } : null, start, live, undefined, LISTING_VIEWS.includes(chartView));
   const tab: Tab = TABS.includes(params.get('tab') as Tab) ? params.get('tab') as Tab : 'positions';
   const scope = { sessionId };
   const positionsView = params.get('view') === 'events' ? 'events' : 'listings';
@@ -252,7 +255,12 @@ function SessionDetail() {
               <Text fw={600}>Session PnL</Text>
               <SegmentedControl size="xs" value={range} onChange={chooseRange} data={Object.keys(RANGES)} />
             </Group>
-            <PnlChart series={series.data} loading={series.isLoading} views={['total', 'listings', 'position', 'fees']} />
+            <PnlChart
+              series={series.data}
+              loading={series.isLoading}
+              views={['total', 'listings', 'position', 'fees']}
+              onViewChange={setChartView}
+            />
           </Card>
 
           <Tabs value={tab} onChange={setTab} keepMounted={false}>
@@ -282,6 +290,7 @@ function SessionDetail() {
               {positionsView === 'events' ? (
                 <EventPositions
                   data={eventPositions.data}
+                  scope={{ sessionId: session.sessionId }}
                   strategyId={session.strategyId}
                   mode={session.mode as Mode}
                   loading={eventPositions.isLoading}
