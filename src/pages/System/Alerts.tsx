@@ -134,7 +134,8 @@ function Alerts() {
       id: 'context',
       header: 'Context',
       size: 200,
-      accessorFn: a => [...alertContext(a), a.mode].filter(Boolean).join(' · '),
+      // The table's loading skeleton rows are blank placeholders with no labels.
+      accessorFn: a => a.labels ? [...alertContext(a), a.mode].filter(Boolean).join(' · ') : '',
       Cell: ({ cell }) => <Text size="xs" lineClamp={2}>{cell.getValue<string>() || '—'}</Text>,
     },
     {
