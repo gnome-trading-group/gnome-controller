@@ -53,6 +53,7 @@ const SessionsList = lazy(() => import('./pages/Sessions/SessionsList'));
 const SessionDetail = lazy(() => import('./pages/Sessions/SessionDetail'));
 const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
 const ServiceConfig = lazy(() => import('./pages/Tools/ServiceConfig'));
+const BotNotes = lazy(() => import('./pages/Tools/BotNotes'));
 const Launcher = lazy(() => import('./pages/Launcher/Launcher'));
 const RuleDetail = lazy(() => import('./pages/Launcher/RuleDetail'));
 const LaunchDetail = lazy(() => import('./pages/Launcher/LaunchDetail'));
@@ -195,6 +196,7 @@ function AppContent() {
                   <Route path="/market-data/quality-issues" element={<QualityIssues />} />
                   <Route path="/market-data/quality-issues/investigate/:listingId/:timestamp" element={<MinuteInvestigation />} />
                   <Route path="/tools/service-config" element={<ServiceConfig />} />
+                  <Route path="/tools/bot-notes" element={<BotNotes />} />
                   <Route path="/tools/latency-probe" element={<LatencyProbe />} />
                   <Route path="/strategies" element={<Strategies />} />
                   <Route path="/strategies/:strategyId" element={<StrategyDetail />} />

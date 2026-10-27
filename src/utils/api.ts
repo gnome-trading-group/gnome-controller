@@ -36,6 +36,18 @@ export interface ServiceConfigVersion {
   updated_by: string;
 }
 
+// A lesson someone saved for gnome-bot from a Slack thread. Scope is the alert type it's about, or `general`.
+export interface BotNote {
+  id: string;
+  scope: string;
+  note: string;
+  saved_by: string;
+  saved_at: string;
+  link: string | null;
+  edited_by: string | null;
+  edited_at: string | null;
+}
+
 export interface ServiceConfigHistoryResponse {
   versions: ServiceConfigVersion[];
 }
@@ -78,6 +90,7 @@ const CONTROLLER_API_URL = import.meta.env.VITE_CONTROLLER_API_URL;
 const REGISTRY_API_URL = import.meta.env.VITE_REGISTRY_API_URL;
 const MARKET_DATA_API_URL = import.meta.env.VITE_MARKET_DATA_API_URL;
 const LAUNCHER_API_URL = import.meta.env.VITE_LAUNCHER_API_URL;
+const BOT_API_URL = import.meta.env.VITE_BOT_API_URL;
 
 export class ApiError extends Error {
   // Validation failures some APIs itemise (the launcher's {message, problems}), one message per problem.
@@ -1328,3 +1341,10 @@ export interface RequestFilters {
   before?: string;
   limit?: number;
 }
+
+export const botApi = {
+  listNotes: () => sendApiRequest<BotNote[]>('/notes', 'GET', { apiUrl: BOT_API_URL }),
+  editNote: (id: string, changes: { note?: string; scope?: string }) =>
+    sendApiRequest<BotNote>(`/notes/${id}`, 'PATCH', { apiUrl: BOT_API_URL, body: changes }),
+  deleteNote: (id: string) => sendApiRequest<{ id: string }>(`/notes/${id}`, 'DELETE', { apiUrl: BOT_API_URL }),
+};

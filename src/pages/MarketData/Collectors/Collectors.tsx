@@ -689,8 +689,8 @@ function Collectors() {
 
           <TextInput
             label="Orchestrator Version"
-            placeholder="Latest"
-            description="Blank deploys the latest release"
+            placeholder="Last collector release"
+            description="Blank deploys the last release with per-listing collectors"
             value={createVersion}
             onChange={e => setCreateVersion(e.currentTarget.value)}
           />
@@ -740,7 +740,7 @@ function Collectors() {
       >
         <Stack>
           <Text>Are you sure you want to redeploy this collector?</Text>
-          <TextInput label="Orchestrator Version" placeholder="Latest" description="Blank deploys the latest release" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} disabled={actionPending} />
+          <TextInput label="Orchestrator Version" placeholder="Last collector release" description="Blank deploys the last release with per-listing collectors" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} disabled={actionPending} />
           {actionError && <Text c="red" size="sm">{actionError}</Text>}
           <Group justify="flex-end">
             <Button variant="default" disabled={actionPending} onClick={() => { setRedeployModalOpen(false); setCollectorToRedeploy(null); setActionError(null); }}>
@@ -760,7 +760,7 @@ function Collectors() {
       >
         <Stack>
           <Text>Are you sure you want to redeploy all active collectors?</Text>
-          <TextInput label="Orchestrator Version" placeholder="Latest" description="Blank deploys the latest release" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} disabled={actionPending} />
+          <TextInput label="Orchestrator Version" placeholder="Last collector release" description="Blank deploys the last release with per-listing collectors" value={redeployVersion} onChange={e => setRedeployVersion(e.currentTarget.value)} disabled={actionPending} />
           {actionError && <Text c="red" size="sm">{actionError}</Text>}
           <Group justify="flex-end">
             <Button variant="default" disabled={actionPending} onClick={() => { setRedeployAllModalOpen(false); setActionError(null); }}>
