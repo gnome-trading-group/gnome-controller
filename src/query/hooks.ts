@@ -42,6 +42,7 @@ export const keys = {
   venueAccounts: ['venueAccounts'] as const,
   treasury: ['treasury'] as const,
   marketDataKeys: ['marketDataKeys'] as const,
+  marketDataAccounts: ['marketDataAccounts'] as const,
   transfers: (accountId: number | null) => ['treasury', 'transfers', accountId] as const,
   recon: (accountId: number) => ['treasury', 'recon', accountId] as const,
   sessionAccounts: (sessionId: string) => ['sessionAccounts', sessionId] as const,
@@ -373,6 +374,12 @@ export function useVenueAccounts() {
 }
 
 // Balances move with the venue poller's snapshots, every few minutes.
+export function useMarketDataAccounts() {
+  return useQuery({
+    queryKey: keys.marketDataAccounts, queryFn: () => registryApi.listMarketDataAccounts(), refetchInterval: 60_000,
+  });
+}
+
 export function useMarketDataKeys() {
   return useQuery({ queryKey: keys.marketDataKeys, queryFn: () => registryApi.listMarketDataKeys(), refetchInterval: 60_000 });
 }

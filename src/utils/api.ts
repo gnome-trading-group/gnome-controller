@@ -19,7 +19,7 @@ import { BboTimelineResponse } from '../types/bbo-timeline';
 import {
   AccountConfigUpdate, AccountStatus, AccountStatusChange, CreateAccountRequest, CreatedAccount, DeletedSecrets, UpdateCredentialsRequest, ManualSnapshot, ReconDetail, SessionAccount, Transfer, TransferKind, TreasurySummary, VenueAccount,
 } from '../types/treasury';
-import { MarketDataKey } from '../types/credentials';
+import { MarketDataAccount, MarketDataKey } from '../types/credentials';
 import { SimulationParametersRow } from './simulation';
 
 export interface ServiceConfigResponse {
@@ -891,6 +891,18 @@ export const registryApi = {
     sendApiRequest<MarketDataKey>('/market-data-keys', 'POST', {
       apiUrl: REGISTRY_API_URL,
       body: { exchangeCode, credentials },
+    }),
+  listMarketDataAccounts: () =>
+    sendApiRequest<MarketDataAccount[]>('/market-data-accounts', 'GET', { apiUrl: REGISTRY_API_URL, convertToCamelCase: true }),
+  setMarketDataAccount: (request: {
+    sourceCode: string; label: string; credentials: Record<string, string>; connectionBudget: number | null; note?: string;
+  }) =>
+    sendApiRequest<MarketDataAccount>('/market-data-accounts', 'POST', {
+      apiUrl: REGISTRY_API_URL, convertToCamelCase: true, body: request,
+    }),
+  updateMarketDataAccount: (accountId: number, change: { status?: string; connectionBudget?: number | null; note?: string }) =>
+    sendApiRequest<MarketDataAccount>('/sources/accounts', 'PATCH', {
+      apiUrl: REGISTRY_API_URL, convertToCamelCase: true, body: { accountId, ...change },
     }),
   deleteAccountSecrets: (accountId: number) =>
     sendApiRequest<DeletedSecrets>('/venue-accounts/delete-secrets', 'POST', {
