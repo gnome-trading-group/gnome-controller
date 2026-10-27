@@ -11,7 +11,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import { Construct } from "constructs";
-import { CallerKind, GnomeApiAuthorizer, Stage } from "@gnome-trading-group/gnome-shared-cdk";
+import { CallerKind, GnomeApiAuthorizer, lookupPlatformNetwork, Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 
 export interface BacktestStackProps extends cdk.StackProps {
@@ -80,7 +80,7 @@ export class BacktestStack extends cdk.Stack {
     // AWS Batch — Spot compute
     // ---------------------------------------------------------------------------
 
-    const vpc = ec2.Vpc.fromLookup(this, "Vpc", { vpcName: "gnome-orchestrator-vpc" });
+    const { vpc, securityGroup } = lookupPlatformNetwork(this);
 
     const batchJobRole = new iam.Role(this, "BatchJobRole", {
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
@@ -108,7 +108,8 @@ export class BacktestStack extends cdk.Stack {
     });
 
     const computeEnvironment = new batch.ManagedEc2EcsComputeEnvironment(this, "BacktestComputeEnv", {
-      computeEnvironmentName: "gnome-backtest-spot",
+      // Renamed when it moved to the platform network: a named compute environment can't be replaced in place.
+      computeEnvironmentName: "gnome-backtest-spot-platform",
       spot: true,
       instanceTypes: [
         ec2.InstanceType.of(ec2.InstanceClass.C5, ec2.InstanceSize.XLARGE),
@@ -119,6 +120,7 @@ export class BacktestStack extends cdk.Stack {
       maxvCpus: 64,
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      securityGroups: [securityGroup],
     });
 
     const jobQueue = new batch.JobQueue(this, "BacktestJobQueue", {

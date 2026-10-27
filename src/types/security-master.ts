@@ -75,9 +75,17 @@ export interface Source {
   adapter: string;
   families: string[];
   active: boolean;
+  // Capacity, read by shard assignment: markets on one connection, how many connections the venue allows and per
+  // what (null: no limit), and how many subscribe messages a client may send a minute (null: no limit).
+  maxPerConnection: number;
+  connectionScope: ConnectionScope;
+  connectionsPerScope: number | null;
+  clientMessagesPerMinute: number | null;
   dateCreated: string;
   dateModified: string;
 }
+
+export type ConnectionScope = 'IP' | 'KEY' | 'ACCOUNT';
 
 // One thing collected from a source: a listing's book (subjectKind LISTING) or a vendor subject such as a match.
 export interface Stream {

@@ -11,7 +11,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import { Construct } from "constructs";
-import { CallerKind, GnomeApiAuthorizer, Stage } from "@gnome-trading-group/gnome-shared-cdk";
+import { CallerKind, GnomeApiAuthorizer, lookupPlatformNetwork, Stage } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 
 export interface ResearchJobsStackProps extends cdk.StackProps {
@@ -100,7 +100,7 @@ export class ResearchJobsStack extends cdk.Stack {
     // AWS Batch — its own spot compute environment, so research jobs have their own vCPU cap
     // ---------------------------------------------------------------------------
 
-    const vpc = ec2.Vpc.fromLookup(this, "Vpc", { vpcName: "gnome-orchestrator-vpc" });
+    const { vpc, securityGroup } = lookupPlatformNetwork(this);
 
     const jobRole = new iam.Role(this, "ResearchJobRole", {
       assumedBy: new iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
@@ -150,7 +150,8 @@ export class ResearchJobsStack extends cdk.Stack {
       .map((size) => ec2.InstanceType.of(cls, size)));
 
     const computeEnvironment = new batch.ManagedEc2EcsComputeEnvironment(this, "ResearchJobComputeEnv", {
-      computeEnvironmentName: "gnome-research-spot",
+      // Renamed when it moved to the platform network: a named compute environment can't be replaced in place.
+      computeEnvironmentName: "gnome-research-spot-platform",
       spot: true,
       instanceTypes,
       useOptimalInstanceClasses: false,
@@ -158,6 +159,7 @@ export class ResearchJobsStack extends cdk.Stack {
       maxvCpus: props.maxVcpus,
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      securityGroups: [securityGroup],
     });
 
     const jobQueue = new batch.JobQueue(this, "ResearchJobQueue", {

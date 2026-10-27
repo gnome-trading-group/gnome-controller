@@ -3,7 +3,7 @@ import {
   DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
   RuleType, TriggerEvaluation,
 } from '../types/launcher';
-import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream } from '../types';
+import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
 import { BacktestRun } from '../types/backtests';
@@ -598,7 +598,11 @@ export const registryApi = {
       convertToCamelCase: true,
       body: source,
     }),
-  updateSource: (sourceId: number, source: { homeRegion?: string; adapter?: string; families?: string[]; active?: boolean }) =>
+  updateSource: (sourceId: number, source: {
+    homeRegion?: string; adapter?: string; families?: string[]; active?: boolean;
+    maxPerConnection?: number; connectionScope?: ConnectionScope; connectionsPerScope?: number | null;
+    clientMessagesPerMinute?: number | null;
+  }) =>
     sendApiRequest<Source>('/sources', 'PATCH', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
