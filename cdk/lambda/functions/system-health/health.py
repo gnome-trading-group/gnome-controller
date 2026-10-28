@@ -11,12 +11,20 @@ from typing import Any
 
 OTHER_SERVICE = "Other"
 ALARM_STATES = ("ALARM", "INSUFFICIENT_DATA", "OK")
+# Alarms AWS creates for target-tracking scaling policies: their ALARM state is the policy scaling in or out, not
+# something wrong. The registry's alert router ignores them too.
+MANAGED_ALARM_PREFIXES = ("TargetTracking",)
 
 
 def service_of(alarm_name: str) -> str:
     """The service an alarm belongs to: the prefix every monitoring stack puts on its alarm names ("Registry-...")."""
     prefix, separator, _ = alarm_name.partition("-")
     return prefix if separator and prefix else OTHER_SERVICE
+
+
+def is_shown(alarm: dict) -> bool:
+    """Whether the page lists an alarm: every one except those AWS manages for scaling policies."""
+    return not alarm["AlarmName"].startswith(MANAGED_ALARM_PREFIXES)
 
 
 def _iso(value: Any) -> str | None:

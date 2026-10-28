@@ -179,6 +179,15 @@ export function zoneName(zone: TimeZoneChoice): string {
   return zone === 'UTC' ? 'UTC' : Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+const COMPACT_USD = new Intl.NumberFormat('en-US', {
+  style: 'currency', currency: 'USD', notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1,
+});
+
+/** An event's 24h volume (about USD, a plain number from the registry) as e.g. "$12.5K"; "-" before any reading. */
+export function formatVolume(usd: number | null | undefined): string {
+  return usd == null ? '-' : COMPACT_USD.format(usd);
+}
+
 export function formatDuration(ms: number | null | undefined): string {
   if (ms === null || ms === undefined || ms < 0) return '—';
   const seconds = Math.floor(ms / 1000);

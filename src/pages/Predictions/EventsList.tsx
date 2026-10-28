@@ -7,6 +7,7 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { Event } from '../../types';
 import { registryApi } from '../../utils/api';
+import { formatVolume } from '../../utils/format';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
@@ -112,6 +113,13 @@ function EventsList() {
           {row.original.resolved ? 'Resolved' : 'Active'}
         </Badge>
       ),
+    },
+    {
+      accessorKey: 'volume24h',
+      header: '24h Volume',
+      enableSorting: true,
+      size: 120,
+      Cell: ({ row }) => formatVolume(row.original.volume24h),
     },
     {
       accessorKey: 'expiry',

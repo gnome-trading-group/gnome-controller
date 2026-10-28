@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CollectionShard, CollectionTarget, ShardStreamStatus, ShardTaskStatus, WARMING } from '../types/collection';
 import {
-  attentionItems, collectionCounts, currentStatus, cutTime, handoffStep, parseStreamIds, shardHealth, shardStreams,
-  stateCounts,
+  CollectionRule, CollectionShard, CollectionTarget, ShardStreamStatus, ShardTaskStatus, StreamCoverage, WARMING,
+} from '../types/collection';
+import {
+  attentionItems, collectionCounts, coverageSegments, currentStatus, cutTime, handoffStep, parseStreamIds, ruleCriteria,
+  ruleSelection, ruleStreamCount, segmentTime, shardHealth, shardStreams, stateCounts,
 } from './collection';
 
 const MIN = 60_000;
@@ -102,5 +104,70 @@ describe('attentionItems and collectionCounts', () => {
     expect(collectionCounts(targets, shards)).toEqual({
       wanted: 4, covered: 1, uncovered: 2, unplaced: 1, handingOff: 1, retiring: 1, shards: 2, draining: 1,
     });
+  });
+});
+
+describe('rule summaries', () => {
+  const rule = (over: Partial<CollectionRule>) => ({
+    ruleId: 'r', name: 'r', ruleType: 'static_streams', parameters: {}, priority: 'RESEARCH', tier: 'standard',
+    status: 'ACTIVE', ...over,
+  }) as CollectionRule;
+
+  it('counts a static rule from its own list and the others from what the reconciler resolved', () => {
+    expect(ruleStreamCount(rule({ parameters: { stream_ids: [1, 2, 3] } }))).toBe(3);
+    expect(ruleStreamCount(rule({ ruleType: 'event', parameters: { event_ids: [7] } }))).toBeNull();
+    expect(ruleStreamCount(rule({ ruleType: 'event', resolvedStreams: 6 }))).toBe(6);
+  });
+
+  it('says what a rule selects, waiting events and a cap included', () => {
+    expect(ruleSelection(rule({ parameters: { stream_ids: [1] } }))).toBe('1 stream');
+    expect(ruleSelection(rule({ ruleType: 'event' }))).toBe('not resolved yet');
+    expect(ruleSelection(rule({ ruleType: 'event', resolvedEvents: 3, resolvedStreams: 6, waitingEvents: 1 })))
+      .toBe('3 events · 6 streams · 1 waiting');
+    expect(ruleSelection(rule({ ruleType: 'event_filter', resolvedEvents: 1, resolvedStreams: 2, capped: true })))
+      .toBe('1 event · 2 streams · capped');
+  });
+
+  it('puts an event filter in a line', () => {
+    expect(ruleCriteria(rule({
+      ruleType: 'event_filter',
+      parameters: { top_n: 20, min_volume_24h: 5000, exchange_ids: [1, 2], tags: ['nfl'], max_streams: 200 },
+    }))).toBe('top 20 by volume · ≥ $5,000 24h · exchanges: 1, 2 · tags: nfl · max 200 streams');
+    expect(ruleCriteria(rule({ parameters: { stream_ids: [1] } }))).toBeNull();
+  });
+});
+
+describe('coverageSegments', () => {
+  const ns = (ms: number) => ms * 1_000_000;
+  const coverage = (over: Partial<StreamCoverage>): StreamCoverage => ({
+    streamId: 1, fromNs: 0, toNs: 0, intervals: [], gaps: [], openGap: null, coveredFraction: 0, ...over,
+  });
+
+  it('draws intervals, gaps and the open gap in time order, clipped to the range', () => {
+    const segments = coverageSegments(coverage({
+      intervals: [
+        { fromNs: ns(0), toNs: ns(50 * MIN), open: false, shardId: 's1' },
+        { fromNs: ns(52 * MIN), toNs: ns(80 * MIN), open: false, shardId: 's2' },
+      ],
+      gaps: [{ fromNs: ns(50 * MIN), toNs: ns(52 * MIN), reason: 'TASK_STOPPED' }],
+      openGap: { fromNs: ns(80 * MIN), reason: 'NOT_PLACED' },
+    }), 10 * MIN, 120 * MIN, 90 * MIN);
+
+    expect(segments.map(s => [s.kind, s.startMs / MIN, s.endMs / MIN, s.label])).toEqual([
+      ['covered', 10, 50, 's1'],
+      ['gap', 50, 52, 'task_stopped'],
+      ['covered', 52, 80, 's2'],
+      ['uncovered', 80, 90, 'not_placed'],
+    ]);
+    expect(segmentTime(segments, 'covered')).toBe(68 * MIN);
+  });
+
+  it('runs an open interval to now and leaves out what falls outside the range', () => {
+    const segments = coverageSegments(coverage({
+      intervals: [{ fromNs: ns(30 * MIN), toNs: ns(31 * MIN), open: true, shardId: 's1' }],
+      gaps: [{ fromNs: ns(0), toNs: ns(5 * MIN), reason: 'REMOVED' }],
+    }), 10 * MIN, 60 * MIN, 45 * MIN);
+
+    expect(segments.map(s => [s.kind, s.startMs / MIN, s.endMs / MIN])).toEqual([['covered', 30, 45]]);
   });
 });

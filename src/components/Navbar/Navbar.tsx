@@ -19,8 +19,6 @@ const routes = [
     icon: IconNotes,
     links: [
       { label: 'Collection', link: '/market-data/collection' },
-      { label: 'Coverage', link: '/market-data/coverage' },
-      { label: 'Gaps', link: '/market-data/gaps' },
       { label: 'Credentials', link: '/market-data/credentials' },
     ],
   },

@@ -16,6 +16,11 @@ def test_an_alarm_belongs_to_the_service_its_name_starts_with():
     assert health.service_of("-leading") == health.OTHER_SERVICE
 
 
+def test_scaling_policy_alarms_are_not_shown():
+    assert not health.is_shown(alarm("TargetTracking-Dev-CollectionRegionalStack-us-east-1-SpotHostsASG-AlarmLow-3aae", "ALARM"))
+    assert health.is_shown(alarm("MarketData--ReconcilerLambda-Fault-Count-Error", "ALARM"))
+
+
 def test_services_with_firing_alarms_come_first_and_list_their_longest_firing_alarm_first():
     early = datetime(2026, 10, 7, 9, tzinfo=timezone.utc)
     rows = [health.alarm_row(a, "us-east-1") for a in [

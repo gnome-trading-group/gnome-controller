@@ -58,7 +58,8 @@ def scan_alarms(region: str) -> list[dict]:
     rows = []
     for page in paginator.paginate(AlarmTypes=["MetricAlarm", "CompositeAlarm"]):
         for alarm in page.get("MetricAlarms", []) + page.get("CompositeAlarms", []):
-            rows.append(health.alarm_row(alarm, region))
+            if health.is_shown(alarm):
+                rows.append(health.alarm_row(alarm, region))
     return rows
 
 

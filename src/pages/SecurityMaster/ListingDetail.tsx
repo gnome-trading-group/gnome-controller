@@ -41,6 +41,7 @@ import { describeFeeDefinition, FEE_SCOPE_LABELS } from '../../utils/fees';
 import { usePageTitleLabels } from '../../context/PageTitleContext';
 import { useTradedSessions } from '../../query/hooks';
 import { RunningSessionsBadge, TradedSessionsPanel } from '../../components/TradedSessions';
+import { StreamCoverage } from '../../components/collection/StreamCoverage';
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -368,9 +369,9 @@ function ListingDetail() {
               <InfoRow
                 label="Market-data Stream"
                 value={stream ? (
-                  <Link to={`/market-data/coverage/${stream.streamId}`}>
+                  <Anchor component={Link} to={`/market-data/collection/streams/${stream.streamId}`} size="sm">
                     {stream.streamId} ({stream.family}, {stream.resolvedRegion})
-                  </Link>
+                  </Anchor>
                 ) : '—'}
               />
               <InfoRow label="Fee Group" value={listing.feeGroup ?? '—'} />
@@ -452,6 +453,22 @@ function ListingDetail() {
             error={tradedSessions.error}
           />
         </Grid.Col>
+
+        {stream && (
+          <Grid.Col span={12}>
+            <Paper p="md" withBorder>
+              <StreamCoverage
+                streamId={stream.streamId}
+                title="Market Data Coverage"
+                action={(
+                  <Anchor component={Link} to={`/market-data/collection/streams/${stream.streamId}`} size="sm">
+                    Stream {stream.streamId}
+                  </Anchor>
+                )}
+              />
+            </Paper>
+          </Grid.Col>
+        )}
 
         <Grid.Col span={12}>
           <Paper p="md" withBorder>

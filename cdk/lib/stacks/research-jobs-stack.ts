@@ -11,7 +11,9 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import { Construct } from "constructs";
-import { CallerKind, GnomeApiAuthorizer, lookupPlatformNetwork, Stage } from "@gnome-trading-group/gnome-shared-cdk";
+import {
+  API_KEY_SECRET_NAMES, CallerKind, GnomeApiAuthorizer, lookupPlatformNetwork, Stage,
+} from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 
 export interface ResearchJobsStackProps extends cdk.StackProps {
@@ -131,6 +133,13 @@ export class ResearchJobsStack extends cdk.Stack {
     jobRole.addToPolicy(new iam.PolicyStatement({
       actions: ["secretsmanager:GetSecretValue"],
       resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:gnomepy/gh-token*`],
+    }));
+    // gnomepy reads the registry's and market-data API's keys from their mirrors: the registry for listings and
+    // streams, market-data for where a backtest's data is missing.
+    jobRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["secretsmanager:GetSecretValue"],
+      resources: [API_KEY_SECRET_NAMES.REGISTRY, API_KEY_SECRET_NAMES.MARKET_DATA].map(
+        (name) => `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${name}-*`),
     }));
 
     const executionRole = new iam.Role(this, "ResearchJobExecutionRole", {

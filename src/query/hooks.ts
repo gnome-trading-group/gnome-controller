@@ -44,6 +44,7 @@ export const keys = {
   marketDataKeys: ['marketDataKeys'] as const,
   marketDataAccounts: ['marketDataAccounts'] as const,
   collectionRules: ['collection', 'rules'] as const,
+  collectionRuleTypes: ['collection', 'rule-types'] as const,
   collectionTargets: ['collection', 'targets'] as const,
   collectionShards: (includeDeleted: boolean) => ['collection', 'shards', includeDeleted] as const,
   collectionShard: (shardId: string) => ['collection', 'shard', shardId] as const,
@@ -390,6 +391,21 @@ export const COLLECTION_POLL = 10_000;
 
 export function useCollectionRules() {
   return useQuery({ queryKey: keys.collectionRules, queryFn: collectionApi.listRules, refetchInterval: COLLECTION_POLL });
+}
+
+// A stream's collection history over [fromMs, toMs]; the range moves with now, so it refetches on the collection poll.
+export function useStreamCoverage(streamId: number, fromMs: number, toMs: number) {
+  return useQuery({
+    queryKey: ['collection', 'coverage', streamId, Math.floor(fromMs / 60_000), Math.floor(toMs / 60_000)],
+    queryFn: () => collectionApi.getStreamCoverage(streamId, fromMs, toMs),
+    refetchInterval: COLLECTION_POLL,
+    placeholderData: (previous) => previous,
+  });
+}
+
+// The rule types' schemas change only with a market-data release.
+export function useCollectionRuleTypes() {
+  return useQuery({ queryKey: keys.collectionRuleTypes, queryFn: collectionApi.getRuleTypes, staleTime: 60 * 60_000 });
 }
 
 export function useCollectionTargets() {

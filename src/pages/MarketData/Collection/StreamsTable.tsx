@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
 import { Badge, Code, Text } from '@mantine/core';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
+import { useNavigate } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { CollectionTarget } from '../../../types/collection';
 import { nsToDate } from '../../../utils/collection';
+import { navigateRowProps } from '../../../utils/navigation';
 import { StreamName } from '../../../components/collection/StreamName';
 import { CutProgress } from '../../../components/collection/CutProgress';
 
@@ -13,10 +15,11 @@ interface Row extends CollectionTarget {
 }
 
 // Every stream collection wants or is retiring: where it is, whether it's handing off, and whether it's covered.
-// Searchable and filterable; uncovered streams first.
+// Searchable and filterable; uncovered streams first. A row opens the stream's coverage history.
 export function StreamsTable({ targets, names, loading }: {
   targets: CollectionTarget[]; names: Map<number, string> | undefined; loading: boolean;
 }) {
+  const navigate = useNavigate();
   const now = Date.now();
   const data = useMemo<Row[]>(() => targets
     .map((t) => ({
@@ -76,6 +79,10 @@ export function StreamsTable({ targets, names, loading }: {
     enableHiding: false,
     initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 25 } },
     mantineTableProps: { striped: true, highlightOnHover: true },
+    mantineTableBodyRowProps: ({ row }) => ({
+      ...navigateRowProps(navigate, `/market-data/collection/streams/${row.original.streamId}`),
+      style: { cursor: 'pointer' },
+    }),
     renderEmptyRowsFallback: () => <Text c="dimmed" size="sm" p="md">No streams: add a rule to collect some.</Text>,
   });
   return <MantineReactTable table={table} />;

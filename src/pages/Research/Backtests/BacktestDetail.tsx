@@ -48,6 +48,9 @@ import {
   TaskFilter, isRunActive, isTaskFinished, runElapsedMs, taskElapsedMs, taskMatches,
 } from '../../../components/batch/status';
 
+// summary.json's market_data_missing_fraction (gnomepy): its own column, as a percentage.
+const MISSING_FRACTION_KEY = 'marketDataMissingFraction';
+
 const EXPLORABLE = new Set<BacktestStatus>(['COMPLETED', 'PARTIALLY_FAILED']);
 const POLL_INTERVAL_MS = 10000;
 
@@ -148,6 +151,7 @@ function BacktestDetail() {
       }
     }
     keys.delete('backtestId');
+    keys.delete(MISSING_FRACTION_KEY);
     return Array.from(keys);
   }, [jobs]);
 
@@ -225,6 +229,21 @@ function BacktestDetail() {
       id: 'configParams',
       header: 'Parameters',
       accessorFn: (row) => Object.entries(row.configParams ?? {}).map(([k, v]) => `${k}=${v}`).join(', '),
+    },
+    {
+      id: 'missingData',
+      header: 'Missing data',
+      size: 110,
+      accessorFn: (row) => row.summary?.[MISSING_FRACTION_KEY],
+      Cell: ({ cell }) => {
+        const v = cell.getValue() as number | undefined;
+        if (v === undefined) return <Text c="dimmed" size="sm">—</Text>;
+        return (
+          <Tooltip label="Of the run's stream-time, the share collection had no market data for" withArrow>
+            <Text size="sm" c={v > 0 ? 'orange' : undefined}>{(v * 100).toFixed(1)}%</Text>
+          </Tooltip>
+        );
+      },
     },
     ...metricColumns,
     {

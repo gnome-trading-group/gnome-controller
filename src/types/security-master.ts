@@ -231,6 +231,9 @@ export interface Event {
   exchangeId: number | null;
   nativeEventId: string | null;
   nativeUrl: string | null;
+  // About USD traded over the last 24 hours, as the classifier last read it; null before its first reading.
+  volume24h: number | null;
+  volumeUpdatedAt: string | null;
 }
 
 export interface EventContract {

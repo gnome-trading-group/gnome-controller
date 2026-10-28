@@ -1,4 +1,6 @@
-import { CollectionShard, CollectionTarget, ShardStreamStatus, ShardTaskStatus, WARMING } from '../types/collection';
+import {
+  CollectionRule, CollectionShard, CollectionTarget, ShardStreamStatus, ShardTaskStatus, StreamCoverage, WARMING,
+} from '../types/collection';
 
 const NANOS_PER_MS = 1_000_000;
 const MS_PER_MINUTE = 60_000;
@@ -27,6 +29,51 @@ export function nsToMs(ns: number | null | undefined): number | null {
 }
 
 /** Stream ids typed or pasted any way (commas, spaces, new lines); throws on anything that isn't one. */
+// Rule parameters that list ids: the rule form edits them as pasted text rather than one tag per id.
+export const ID_LIST_PARAMETERS = new Set(['stream_ids', 'event_ids']);
+
+export const RULE_TYPE_LABELS: Record<CollectionRule['ruleType'], string> = {
+  static_streams: 'Streams',
+  event: 'Events',
+  event_filter: 'Event filter',
+};
+
+/** How many streams a rule selects: its own list, or what the reconciler last resolved it to (null before that). */
+export function ruleStreamCount(rule: CollectionRule): number | null {
+  if (rule.ruleType === 'static_streams') {
+    return ((rule.parameters.stream_ids as number[] | undefined) ?? []).length;
+  }
+  return rule.resolvedStreams ?? null;
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** What a rule selects now, for the rules table: e.g. "3 events · 6 streams · 1 waiting" or "streams · capped". */
+export function ruleSelection(rule: CollectionRule): string {
+  if (rule.ruleType === 'static_streams') return plural(ruleStreamCount(rule) ?? 0, 'stream');
+  if (rule.resolvedStreams == null) return 'not resolved yet';
+  const parts = [plural(rule.resolvedEvents ?? 0, 'event'), plural(rule.resolvedStreams, 'stream')];
+  if (rule.waitingEvents) parts.push(`${rule.waitingEvents} waiting`);
+  if (rule.capped) parts.push('capped');
+  return parts.join(' · ');
+}
+
+/** An event_filter rule's parameters in a line: e.g. "top 20 by volume · ≥ $5K · max 200 streams". */
+export function ruleCriteria(rule: CollectionRule): string | null {
+  if (rule.ruleType !== 'event_filter') return null;
+  const p = rule.parameters;
+  const parts: string[] = [];
+  if (p.top_n != null) parts.push(`top ${p.top_n} by volume`);
+  if (p.min_volume_24h != null) parts.push(`≥ $${Number(p.min_volume_24h).toLocaleString('en-US')} 24h`);
+  if (p.expires_within_hours != null) parts.push(`expiring within ${p.expires_within_hours}h`);
+  for (const key of ['exchange_ids', 'categories', 'tags'] as const) {
+    const values = p[key] as unknown[] | undefined;
+    if (values?.length) parts.push(`${key.replace('_ids', 's')}: ${values.join(', ')}`);
+  }
+  parts.push(`max ${p.max_streams} streams`);
+  return parts.join(' · ');
+}
+
 export function parseStreamIds(text: string): number[] {
   const parts = text.split(/[\s,]+/).filter(Boolean);
   const ids = parts.map((part) => {
@@ -202,4 +249,39 @@ export function collectionCounts(targets: CollectionTarget[], shards: Collection
     shards: shards.filter((s) => s.state !== 'DELETED').length,
     draining: shards.filter((s) => s.state === 'DRAINING').length,
   };
+}
+
+export type SegmentKind = 'covered' | 'gap' | 'uncovered';
+
+export interface CoverageSegment {
+  kind: SegmentKind;
+  startMs: number;
+  endMs: number;
+  // A gap's reason, or the shard that covered it.
+  label: string;
+}
+
+/**
+ * A stream's coverage over [fromMs, toMs] as segments to draw, in time order: intervals it was covered, gaps written
+ * with their reason, and the gap still open (uncovered now). Each is clipped to the range; time with neither is time
+ * collection didn't want the stream.
+ */
+export function coverageSegments(coverage: StreamCoverage, fromMs: number, toMs: number, nowMs: number): CoverageSegment[] {
+  const clip = (startMs: number, endMs: number) => [Math.max(startMs, fromMs), Math.min(endMs, toMs)] as const;
+  const segments: CoverageSegment[] = [];
+  const add = (kind: SegmentKind, startNs: number, endMs: number, label: string) => {
+    const [start, end] = clip(startNs / NANOS_PER_MS, endMs);
+    if (end > start) segments.push({ kind, startMs: start, endMs: end, label });
+  };
+  for (const i of coverage.intervals) {
+    add('covered', i.fromNs, i.open ? nowMs : i.toNs / NANOS_PER_MS, i.shardId ?? 'covered');
+  }
+  for (const g of coverage.gaps) add('gap', g.fromNs, g.toNs / NANOS_PER_MS, (g.reason ?? 'gap').toLowerCase());
+  if (coverage.openGap) add('uncovered', coverage.openGap.fromNs, nowMs, (coverage.openGap.reason ?? 'uncovered').toLowerCase());
+  return segments.sort((a, b) => a.startMs - b.startMs);
+}
+
+/** Total time in segments of one kind, in ms. */
+export function segmentTime(segments: CoverageSegment[], kind: SegmentKind): number {
+  return segments.filter(s => s.kind === kind).reduce((sum, s) => sum + s.endMs - s.startMs, 0);
 }

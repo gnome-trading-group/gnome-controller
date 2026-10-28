@@ -11,13 +11,14 @@ import { ArtifactDetail, ArtifactSummary, Dataset, DatasetDetail } from '../type
 import { PipelineDetailResponse, PipelineListResponse, PipelineRun, RunLogsResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
-import { CoverageSummaryResponse, StreamCoverageResponse } from '../types/coverage';
-import { GapsListResponse, GapsListParams, GapsByListingParams, GapsUpdateRequest, GapsUpdateResponse } from '../types/gaps';
 import {
   AccountConfigUpdate, AccountStatus, AccountStatusChange, CreateAccountRequest, CreatedAccount, DeletedSecrets, UpdateCredentialsRequest, ManualSnapshot, ReconDetail, SessionAccount, Transfer, TransferKind, TreasurySummary, VenueAccount,
 } from '../types/treasury';
 import { MarketDataAccount, MarketDataKey } from '../types/credentials';
-import { CollectionRule, CollectionShard, CollectionTarget, NewRule, RuleChange, ShardDetail, ShardLogs } from '../types/collection';
+import {
+  CollectionRule, CollectionRuleType, CollectionShard, CollectionTarget, NewRule, RuleChange, RuleParameters, RulePreview,
+  RuleTypeSchema, ShardDetail, ShardLogs, StreamCoverage,
+} from '../types/collection';
 import { SimulationParametersRow } from './simulation';
 
 export interface ServiceConfigResponse {
@@ -106,8 +107,9 @@ interface ApiConfig {
   body?: any;
 }
 
+// A digit after an underscore joins it too, so volume_24h reads as volume24h.
 function toCamelCase(str: string): string {
-  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+  return str.replace(/_([a-z0-9])/g, (_, char) => char.toUpperCase());
 }
 
 function convertObjectToCamelCase(obj: any, preserveKeys?: Set<string>): any {
@@ -214,22 +216,41 @@ export async function sendApiRequest<T>(
 
 // Shard fields keyed by data (source codes, stream ids) or copied as the shard wrote them.
 const COLLECTION_DATA_KEYS = new Set(['accounts', 'cuts', 'process']);
+// A rule's parameters keep the names its type's schema gives them, which the rule form edits.
+const RULE_DATA_KEYS = new Set(['parameters']);
 
 // The collection control plane. Rule changes wake the reconciler at once; everything else it does on its 1-minute tick.
 export const collectionApi = {
   listRules: () => sendApiRequest<{ rules: CollectionRule[] }>('/collection/rules', 'GET', {
-    apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true,
+    apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true, preserveKeys: RULE_DATA_KEYS,
   }).then(r => r.rules),
   createRule: (rule: NewRule) => sendApiRequest<CollectionRule>('/collection/rules', 'POST', {
-    apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true, body: { rule_type: 'static_streams', ...rule },
+    apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true, preserveKeys: RULE_DATA_KEYS, body: rule,
   }),
   updateRule: (ruleId: string, change: RuleChange) =>
     sendApiRequest<CollectionRule>(`/collection/rules/${encodeURIComponent(ruleId)}`, 'PATCH', {
-      apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true, body: change,
+      apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true, preserveKeys: RULE_DATA_KEYS, body: change,
+    }),
+  // Schemas keyed by type, their property names as rules store them: not camel-cased.
+  getRuleTypes: () => sendApiRequest<{ ruleTypes: Record<CollectionRuleType, RuleTypeSchema> }>(
+    '/collection/rule-types', 'GET', { apiUrl: MARKET_DATA_API_URL },
+  ).then(r => r.ruleTypes),
+  previewRule: (ruleType: CollectionRuleType, parameters: RuleParameters) =>
+    sendApiRequest<RulePreview>('/collection/rule-preview', 'POST', {
+      apiUrl: MARKET_DATA_API_URL, body: { rule_type: ruleType, parameters },
     }),
   deleteRule: (ruleId: string) =>
     sendApiRequest<{ deleted: string }>(`/collection/rules/${encodeURIComponent(ruleId)}`, 'DELETE', {
       apiUrl: MARKET_DATA_API_URL,
+    }),
+  // Nanoseconds as exact integer strings: epoch nanos exceed a double's integer range.
+  getStreamCoverage: (streamId: number, fromMs: number, toMs: number) =>
+    sendApiRequest<StreamCoverage>(`/collection/coverage/${streamId}`, 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+      queryParams: {
+        fromNs: (BigInt(Math.floor(fromMs)) * 1_000_000n).toString(),
+        toNs: (BigInt(Math.floor(toMs)) * 1_000_000n).toString(),
+      },
     }),
   reconcileNow: () => sendApiRequest<{ queued: boolean }>('/collection/triggers', 'POST', {
     apiUrl: MARKET_DATA_API_URL,
@@ -246,40 +267,6 @@ export const collectionApi = {
   getShardLogs: (shardId: string, region: string, taskId: string) =>
     sendApiRequest<ShardLogs>(`/collection/shards/${encodeURIComponent(shardId)}/logs`, 'GET', {
       apiUrl: MARKET_DATA_API_URL, queryParams: { region, taskId, limit: 300 },
-    }),
-};
-
-export const marketDataApi = {
-  getCoverageSummary: () => sendApiRequest<CoverageSummaryResponse>('/coverage/summary', 'GET', {
-    apiUrl: MARKET_DATA_API_URL,
-  }),
-  getStreamCoverage: (streamId: number) =>
-    sendApiRequest<StreamCoverageResponse>(`/coverage/stream/${streamId}`, 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-    }),
-  listGaps: (params?: GapsListParams) => {
-    const queryParams: Record<string, string | number | boolean> = {};
-    if (params?.status) queryParams.status = params.status;
-    if (params?.limit) queryParams.limit = params.limit;
-    if (params?.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
-    return sendApiRequest<GapsListResponse>('/gaps/list', 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
-    });
-  },
-  getGapsByListing: (params: GapsByListingParams) => {
-    const queryParams: Record<string, string | number | boolean> = {};
-    if (params.limit) queryParams.limit = params.limit;
-    if (params.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
-    return sendApiRequest<GapsListResponse>(`/gaps/list/${params.listingId}`, 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
-    });
-  },
-  updateGaps: (request: GapsUpdateRequest) =>
-    sendApiRequest<GapsUpdateResponse>('/gaps/update', 'POST', {
-      apiUrl: MARKET_DATA_API_URL,
-      body: request,
     }),
 };
 
@@ -912,7 +899,11 @@ export const registryApi = {
     const queryParams: Record<string, string | number | boolean> = {};
     if (params.limit !== undefined) queryParams.limit = params.limit;
     if (params.offset !== undefined) queryParams.offset = params.offset;
-    if (params.sortBy) queryParams.sortBy = params.sortBy.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
+    if (params.sortBy) {
+      queryParams.sortBy = params.sortBy === 'volume24h'
+        ? 'volume_24h'
+        : params.sortBy.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
+    }
     if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
     if (params.search) queryParams.search = params.search;
     Object.entries(params).forEach(([k, v]) => {

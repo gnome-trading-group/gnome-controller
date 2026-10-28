@@ -14,11 +14,9 @@ import { GlobalStateProvider } from './context/GlobalStateContext';
 import { PageTitleProvider } from './context/PageTitleContext';
 
 // Each page is its own chunk, so the first load only downloads the shell and the page being opened.
-const CoverageSummary = lazy(() => import('./pages/MarketData/Coverage/CoverageSummary'));
-const StreamCoverage = lazy(() => import('./pages/MarketData/Coverage/StreamCoverage'));
-const Gaps = lazy(() => import('./pages/MarketData/Gaps/Gaps'));
 const MarketDataCredentials = lazy(() => import('./pages/MarketData/Credentials/Credentials'));
 const Collection = lazy(() => import('./pages/MarketData/Collection/Collection'));
+const StreamDetail = lazy(() => import('./pages/MarketData/Collection/StreamDetail'));
 const ShardDetail = lazy(() => import('./pages/MarketData/Collection/ShardDetail'));
 const SecurityMaster = lazy(() => import('./pages/SecurityMaster/SecurityMaster'));
 const ListingDetail = lazy(() => import('./pages/SecurityMaster/ListingDetail'));
@@ -183,12 +181,10 @@ function AppContent() {
                   <Route path="/security-master" element={<SecurityMaster />} />
                   <Route path="/security-master/listings/:listingId" element={<ListingDetail />} />
                   <Route path="/security-master/securities/:securityId" element={<SecurityDetail />} />
-                  <Route path="/market-data/coverage" element={<CoverageSummary />} />
-                  <Route path="/market-data/coverage/:streamId" element={<StreamCoverage />} />
-                  <Route path="/market-data/gaps" element={<Gaps />} />
                   <Route path="/market-data/credentials" element={<MarketDataCredentials />} />
                   <Route path="/market-data/collection" element={<Collection />} />
                   <Route path="/market-data/collection/shards/:shardId" element={<ShardDetail />} />
+                  <Route path="/market-data/collection/streams/:streamId" element={<StreamDetail />} />
                   <Route path="/tools/service-config" element={<ServiceConfig />} />
                   <Route path="/tools/bot-notes" element={<BotNotes />} />
                   <Route path="/tools/latency-probe" element={<LatencyProbe />} />

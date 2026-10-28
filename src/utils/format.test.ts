@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  formatDuration, formatMoney, formatPrice, formatQty, formatSettlement, formatTime, parseScaled, plainDecimal,
+  formatDuration, formatMoney, formatPrice, formatVolume, formatQty, formatSettlement, formatTime, parseScaled, plainDecimal,
   settlementState,
 } from './format';
 
@@ -98,5 +98,15 @@ describe('settlements', () => {
     expect(settlementState('0')).toBe('none');
     expect(settlementState('470000000')).toBe('partial');
     expect(settlementState(null)).toBeNull();
+  });
+});
+
+describe('formatVolume', () => {
+  it('shortens to thousands and millions and shows nothing before a reading', () => {
+    expect(formatVolume(950)).toBe('$950');
+    expect(formatVolume(12_480)).toBe('$12.5K');
+    expect(formatVolume(3_400_000)).toBe('$3.4M');
+    expect(formatVolume(0)).toBe('$0');
+    expect(formatVolume(null)).toBe('-');
   });
 });

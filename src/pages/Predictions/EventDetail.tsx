@@ -28,7 +28,7 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
 import { ContractRelationship, ContractRelationshipType, DenormalizedListing, Event, EventContract, isActiveSession } from '../../types';
 import { SETTLEMENT_COLORS, SettlementBadge } from '../../components/trading/SettlementBadge';
-import { settlementState } from '../../utils/format';
+import { formatVolume, settlementState } from '../../utils/format';
 import { registryApi } from '../../utils/api';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { useLatestRequest } from '../../hooks/useLatestRequest';
@@ -522,6 +522,8 @@ function EventDetail() {
                 ) : '-'
               }
             />
+            <InfoRow label="24h Volume" value={formatVolume(event.volume24h)} />
+            <InfoRow label="Volume Read" value={event.volumeUpdatedAt ? <ReactTimeAgo date={new Date(event.volumeUpdatedAt)} timeStyle="round" /> : '-'} />
             <InfoRow label="Expiry" value={event.expiry ? <ReactTimeAgo date={new Date(event.expiry)} timeStyle="round" /> : '-'} />
             <InfoRow label="Resolved At" value={event.resolvedAt ? <ReactTimeAgo date={new Date(event.resolvedAt)} timeStyle="round" /> : '-'} />
             <InfoRow label="Created" value={event.dateCreated ? <ReactTimeAgo date={new Date(event.dateCreated)} timeStyle="round" /> : '-'} />
