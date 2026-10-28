@@ -179,12 +179,13 @@ export class FrontendStack extends cdk.Stack {
     userPoolClient.supportedIdentityProviders = ['IdentityCenter'];
 
     const uiPath = path.join(__dirname, "..", "..", "..");
+    // Only the UI sources decide the hash: hashing the CDK app and installed dependencies is slow, and would
+    // redeploy the bucket and invalidate CloudFront on every CDK-only change.
+    const uiExclude = ["node_modules", "dist", "cdk", ".git", ".env"];
 
     const asset = new cdk.AssetStaging(this, "ControllerUIAsset", {
       sourcePath: uiPath,
-      // Only the UI sources decide the hash: hashing the CDK app and installed dependencies is slow, and would
-      // redeploy the bucket and invalidate CloudFront on every CDK-only change.
-      exclude: ["node_modules", "dist", "cdk", ".git", ".env"],
+      exclude: uiExclude,
       bundling: {
         image: cdk.DockerImage.fromRegistry('public.ecr.aws/docker/library/node:20'),
         local: {
@@ -214,7 +215,9 @@ export class FrontendStack extends cdk.Stack {
     });
 
     new s3deploy.BucketDeployment(this, "DeployControllerUI", {
-      sources: [s3deploy.Source.asset(asset.absoluteStagedPath)],
+      // A deploy of other stacks only skips bundling this one, and its staged path is then the repo itself: without the
+      // exclude, that copies cdk/cdk.out into a new asset inside cdk.out, nesting deeper on every such deploy.
+      sources: [s3deploy.Source.asset(asset.absoluteStagedPath, { exclude: uiExclude })],
       destinationBucket: websiteBucket,
       distribution,
       distributionPaths: ["/*"],

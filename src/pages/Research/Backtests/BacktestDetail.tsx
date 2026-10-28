@@ -48,8 +48,9 @@ import {
   TaskFilter, isRunActive, isTaskFinished, runElapsedMs, taskElapsedMs, taskMatches,
 } from '../../../components/batch/status';
 
-// summary.json's market_data_missing_fraction (gnomepy): its own column, as a percentage.
-const MISSING_FRACTION_KEY = 'marketDataMissingFraction';
+// Summary keys arrive as gnomepy wrote them (getBacktest preserves them). The missing fraction gets its own column, as a
+// percentage.
+const MISSING_FRACTION_KEY = 'market_data_missing_fraction';
 
 const EXPLORABLE = new Set<BacktestStatus>(['COMPLETED', 'PARTIALLY_FAILED']);
 const POLL_INTERVAL_MS = 10000;
@@ -150,7 +151,7 @@ function BacktestDetail() {
         Object.keys(job.summary).forEach((k) => keys.add(k));
       }
     }
-    keys.delete('backtestId');
+    keys.delete('backtest_id');
     keys.delete(MISSING_FRACTION_KEY);
     return Array.from(keys);
   }, [jobs]);

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import postCSSPresetMantine from 'postcss-preset-mantine'
 import postCSSSimpleVars from 'postcss-simple-vars'
@@ -21,6 +21,10 @@ export default defineConfig({
         })
       ]
     }
+  },
+  test: {
+    // cdk/ is its own package, tested with jest (`cd cdk && npx jest`).
+    exclude: [...configDefaults.exclude, 'cdk/**'],
   },
   resolve: {
     alias: {
