@@ -61,6 +61,21 @@ def test_a_run_counts_jobs_as_they_finish_and_records_why_they_failed(table):
     assert (job["exit_code"], job["status_reason"], job["attempt_count"]) == (137, "OutOfMemoryError", 2)
 
 
+def test_a_summary_with_nan_or_infinity_is_stored_without_them(table, monkeypatch):
+    s3 = FakeS3()
+    s3.objects["backtests/r-1/jobs/0/summary.json"] = json.dumps(
+        {"final_pnl": 1.5, "sharpe": float("nan"), "final_position": float("nan"), "sortino": float("inf"),
+         "market_data_missing_fraction": 0.25}).encode()
+    monkeypatch.setattr(status, "_s3", s3)
+    t = table(rows(["RUNNING"]))
+
+    status.handler(batch_event("SUCCEEDED", 0), None)
+
+    job = t.items[("r-1", "JOB#0000")]
+    assert set(job["summary"]) == {"final_pnl", "market_data_missing_fraction"}
+    assert (float(job["final_pnl"]), float(job["sharpe"])) == (1.5, 0.0)
+
+
 def test_a_late_event_does_not_undo_a_finished_job(table):
     t = table(rows(["FAILED", "SUBMITTED"]))
     status.handler(batch_event("RUNNING", 0), None)

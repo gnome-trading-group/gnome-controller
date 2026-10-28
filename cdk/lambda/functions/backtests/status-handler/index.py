@@ -3,6 +3,7 @@ has finished."""
 from __future__ import annotations
 
 import json
+import math
 import os
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -68,6 +69,10 @@ def _serialize_summary(raw: dict) -> dict:
     for k, v in raw.items():
         if isinstance(v, (dict, list)) or v is None:
             continue
+        # DynamoDB stores no NaN or infinity, and a run of several listings has a NaN final_position: positions in
+        # different instruments don't sum.
+        if isinstance(v, float) and not math.isfinite(v):
+            continue
         if isinstance(v, float):
             result[k] = Decimal(str(v))
         elif isinstance(v, int):
@@ -75,6 +80,10 @@ def _serialize_summary(raw: dict) -> dict:
         else:
             result[k] = str(v)
     return result
+
+
+def _finite(value) -> Decimal:
+    return Decimal(str(value)) if isinstance(value, (int, float)) and math.isfinite(value) else Decimal(0)
 
 
 def _update_job(run_id: str, index: int, detail: dict) -> None:
@@ -102,8 +111,8 @@ def _update_job(run_id: str, index: int, detail: dict) -> None:
     if status == "SUCCEEDED" and (summary := _read_summary(run_id, index)):
         expr += ["summary = :sum", "final_pnl = :pnl", "sharpe = :sh"]
         values[":sum"] = _serialize_summary(summary)
-        values[":pnl"] = Decimal(str(summary.get("final_pnl", 0)))
-        values[":sh"] = Decimal(str(summary.get("sharpe", 0)))
+        values[":pnl"] = _finite(summary.get("final_pnl"))
+        values[":sh"] = _finite(summary.get("sharpe"))
         if summary.get("warnings"):
             expr.append("warnings = :w")
             values[":w"] = summary["warnings"]
