@@ -14,12 +14,12 @@ import { GlobalStateProvider } from './context/GlobalStateContext';
 import { PageTitleProvider } from './context/PageTitleContext';
 
 // Each page is its own chunk, so the first load only downloads the shell and the page being opened.
-const Collectors = lazy(() => import('./pages/MarketData/Collectors/Collectors'));
 const CoverageSummary = lazy(() => import('./pages/MarketData/Coverage/CoverageSummary'));
 const StreamCoverage = lazy(() => import('./pages/MarketData/Coverage/StreamCoverage'));
-const TransformJobs = lazy(() => import('./pages/MarketData/TransformJobs/TransformJobs'));
 const Gaps = lazy(() => import('./pages/MarketData/Gaps/Gaps'));
 const MarketDataCredentials = lazy(() => import('./pages/MarketData/Credentials/Credentials'));
+const Collection = lazy(() => import('./pages/MarketData/Collection/Collection'));
+const ShardDetail = lazy(() => import('./pages/MarketData/Collection/ShardDetail'));
 const SecurityMaster = lazy(() => import('./pages/SecurityMaster/SecurityMaster'));
 const ListingDetail = lazy(() => import('./pages/SecurityMaster/ListingDetail'));
 const SecurityDetail = lazy(() => import('./pages/SecurityMaster/SecurityDetail'));
@@ -32,9 +32,6 @@ const SystemHealth = lazy(() => import('./pages/System/SystemHealth'));
 const Alerts = lazy(() => import('./pages/System/Alerts'));
 const RiskPolicies = lazy(() => import('./pages/Risk/RiskPolicies'));
 const Treasury = lazy(() => import('./pages/Treasury/Treasury'));
-const CollectorDetail = lazy(() => import('./pages/CollectorDetail/CollectorDetail'));
-const QualityIssues = lazy(() => import('./pages/MarketData/QualityIssues/QualityIssues'));
-const MinuteInvestigation = lazy(() => import('./pages/MarketData/QualityIssues/MinuteInvestigation'));
 const BacktestList = lazy(() => import('./pages/Research/Backtests/BacktestList'));
 const BacktestDetail = lazy(() => import('./pages/Research/Backtests/BacktestDetail'));
 const ResearchList = lazy(() => import('./pages/Research/Sessions/ResearchList'));
@@ -186,15 +183,12 @@ function AppContent() {
                   <Route path="/security-master" element={<SecurityMaster />} />
                   <Route path="/security-master/listings/:listingId" element={<ListingDetail />} />
                   <Route path="/security-master/securities/:securityId" element={<SecurityDetail />} />
-                  <Route path="/market-data/collectors" element={<Collectors />} />
-                  <Route path="/market-data/collectors/:listingId" element={<CollectorDetail />} />
                   <Route path="/market-data/coverage" element={<CoverageSummary />} />
                   <Route path="/market-data/coverage/:streamId" element={<StreamCoverage />} />
-                  <Route path="/market-data/transform-jobs" element={<TransformJobs />} />
                   <Route path="/market-data/gaps" element={<Gaps />} />
                   <Route path="/market-data/credentials" element={<MarketDataCredentials />} />
-                  <Route path="/market-data/quality-issues" element={<QualityIssues />} />
-                  <Route path="/market-data/quality-issues/investigate/:listingId/:timestamp" element={<MinuteInvestigation />} />
+                  <Route path="/market-data/collection" element={<Collection />} />
+                  <Route path="/market-data/collection/shards/:shardId" element={<ShardDetail />} />
                   <Route path="/tools/service-config" element={<ServiceConfig />} />
                   <Route path="/tools/bot-notes" element={<BotNotes />} />
                   <Route path="/tools/latency-probe" element={<LatencyProbe />} />

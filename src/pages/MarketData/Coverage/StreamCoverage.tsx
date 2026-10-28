@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
   Title,
@@ -21,13 +21,12 @@ import {
   Skeleton,
 } from '@mantine/core';
 import { IconRefresh, IconDatabase, IconClock, IconCalendar, IconArrowLeft, IconTable, IconLayoutGrid, IconChartBar } from '@tabler/icons-react';
-import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { marketDataApi, registryApi } from '../../../utils/api';
 import { StatValue } from '../../../components/StatValue';
 import { DenormalizedListing, Stream } from '../../../types';
 import { StreamCoverageResponse, DayCoverage } from '../../../types/coverage';
-import { ListingStatisticsHistoryPoint, QualityIssue, formatRuleType, getRuleTypeColor, QualityRuleType } from '../../../types/quality-issues';
 import { usePageTitleLabels } from '../../../context/PageTitleContext';
 
 // Helper function to format bytes to human-readable string
@@ -62,24 +61,6 @@ function getCoverageColor(minutes: number, maxMinutes: number): string {
   return 'var(--mantine-color-green-8)';
 }
 
-const METRIC_LABELS: Record<string, string> = {
-  tickCount: 'Tick Count',
-  spread: 'Spread',
-  midPrice: 'Mid Price',
-  tradeVolume: 'Trade Volume',
-  tradeFrequency: 'Trade Frequency',
-  volatility: 'Volatility',
-};
-
-const METRIC_COLORS: Record<string, string> = {
-  tickCount: '#4c6ef5',
-  spread: '#f76707',
-  midPrice: '#2f9e44',
-  tradeVolume: '#ae3ec9',
-  tradeFrequency: '#e03131',
-  volatility: '#1098ad',
-};
-
 // Group dates by month for calendar view
 function groupByMonth(dates: string[]): Map<string, string[]> {
   const groups = new Map<string, string[]>();
@@ -101,10 +82,6 @@ function StreamCoverage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<string | null>('calendar');
-  const [metricsHistory, setMetricsHistory] = useState<ListingStatisticsHistoryPoint[] | null>(null);
-  const [qualityIssueSummary, setQualityIssueSummary] = useState<QualityIssue[]>([]);
-  const [qualityIssuesTruncated, setQualityIssuesTruncated] = useState(false);
-  const [statsLoading, setStatsLoading] = useState(false);
   const [stream, setStream] = useState<Stream | null>(null);
   const [listing, setListing] = useState<DenormalizedListing | null>(null);
 
@@ -151,23 +128,6 @@ function StreamCoverage() {
     return () => { cancelled = true; };
   }, [streamId]);
 
-  useEffect(() => {
-    if (!listing) return;
-    setStatsLoading(true);
-    Promise.all([
-      marketDataApi.getListingStatisticsHistory(listing.listingId),
-      marketDataApi.getQualityIssuesByListing({ listingId: listing.listingId, limit: 100 }),
-    ]).then(([statsHistory, issues]) => {
-      setMetricsHistory(statsHistory.history);
-      setQualityIssueSummary(issues?.issues ?? []);
-      setQualityIssuesTruncated(!!issues?.lastEvaluatedKey);
-    }).catch(() => {
-      // Non-critical — statistics may not exist yet
-    }).finally(() => {
-      setStatsLoading(false);
-    });
-  }, [listing?.listingId]);
-
   const tableData = useMemo((): TableRow[] => {
     if (!data?.coverage) return [];
     return Object.entries(data.coverage)
@@ -203,24 +163,6 @@ function StreamCoverage() {
       .sort((a, b) => a.date.localeCompare(b.date))
       .map(row => ({ date: row.date, minutes: row.totalMinutes }));
   }, [tableData]);
-
-  const metricNames = useMemo(() => {
-    if (!metricsHistory) return [];
-    const seen = new Set<string>();
-    for (const point of metricsHistory) {
-      for (const key of Object.keys(point.metrics)) seen.add(key);
-    }
-    return Object.keys(METRIC_LABELS).filter(m => seen.has(m));
-  }, [metricsHistory]);
-
-  // Quality issues grouped by rule type
-  const qualityByRuleType = useMemo(() => {
-    const counts: Partial<Record<QualityRuleType, number>> = {};
-    (qualityIssueSummary ?? []).forEach(issue => {
-      counts[issue.ruleType] = (counts[issue.ruleType] ?? 0) + 1;
-    });
-    return counts;
-  }, [qualityIssueSummary]);
 
   const columns = useMemo<MRT_ColumnDef<TableRow>[]>(() => [
     { accessorKey: 'date', header: 'Date', size: 110 },
@@ -443,7 +385,7 @@ function StreamCoverage() {
               Table View
             </Tabs.Tab>
             <Tabs.Tab value="statistics" leftSection={<IconChartBar size={16} />}>
-              Statistics
+              Trend
             </Tabs.Tab>
           </Tabs.List>
 
@@ -481,152 +423,6 @@ function StreamCoverage() {
 
           <Tabs.Panel value="statistics">
             <Stack gap="lg">
-              {/* Listing Statistics Charts */}
-              <div>
-                <Text size="sm" fw={600} mb="sm">Listing Statistics</Text>
-                {statsLoading && !metricsHistory ? (
-                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-                    {[0, 1, 2, 3, 4, 5].map(i => (
-                      <Paper key={i} withBorder p="md" radius="md">
-                        <Skeleton height={160} />
-                      </Paper>
-                    ))}
-                  </SimpleGrid>
-                ) : metricNames.length === 0 ? (
-                  <Text size="sm" c="dimmed">No statistics available</Text>
-                ) : (
-                  <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-                    {metricNames.map(metric => {
-                      const color = METRIC_COLORS[metric] ?? '#868e96';
-                      const chartData = metricsHistory!.map(point => {
-                        const m = point.metrics[metric];
-                        if (!m) return { date: point.date.slice(5), mean: null, lower: null, band: null };
-                        return {
-                          date: point.date.slice(5),
-                          mean: m.mean,
-                          lower: m.mean - m.stddev,
-                          band: 2 * m.stddev,
-                        };
-                      });
-                      return (
-                        <Paper key={metric} withBorder p="sm" radius="md">
-                          <Text size="xs" fw={600} mb="xs" c="dimmed" tt="uppercase">
-                            {METRIC_LABELS[metric] ?? metric}
-                          </Text>
-                          <ResponsiveContainer width="100%" height={160}>
-                            <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="var(--mantine-color-gray-2)" />
-                              <XAxis
-                                dataKey="date"
-                                tick={{ fontSize: 10 }}
-                                interval="preserveStartEnd"
-                                tickLine={false}
-                              />
-                              <YAxis
-                                tick={{ fontSize: 10 }}
-                                tickLine={false}
-                                axisLine={false}
-                                width={50}
-                                tickFormatter={(v: number) =>
-                                  v >= 1_000_000
-                                    ? `${(v / 1_000_000).toFixed(1)}M`
-                                    : v >= 1_000
-                                    ? `${(v / 1_000).toFixed(1)}K`
-                                    : v.toFixed(2)
-                                }
-                              />
-                              <RechartsTooltip
-                                content={(props) => {
-                                  if (!props.active || !props.payload?.length) return null;
-                                  const d = props.payload[0]?.payload;
-                                  if (d?.mean == null) return null;
-                                  const upper = (d.lower + d.band).toFixed(4);
-                                  const lower = Number(d.lower).toFixed(4);
-                                  const mean = Number(d.mean).toFixed(4);
-                                  return (
-                                    <div style={{ background: 'var(--mantine-color-dark-7)', border: '1px solid var(--mantine-color-dark-4)', padding: '6px 10px', fontSize: 11, borderRadius: 4 }}>
-                                      <div style={{ marginBottom: 4, color: 'var(--mantine-color-dimmed)' }}>{props.label}</div>
-                                      <div style={{ color: color }}>Mean: {mean}</div>
-                                      <div style={{ color: 'var(--mantine-color-dimmed)' }}>+1σ: {upper}</div>
-                                      <div style={{ color: 'var(--mantine-color-dimmed)' }}>−1σ: {lower}</div>
-                                    </div>
-                                  );
-                                }}
-                              />
-                              <Area
-                                type="monotone"
-                                dataKey="lower"
-                                stackId="band"
-                                fill="transparent"
-                                stroke="none"
-                                dot={false}
-                                isAnimationActive={false}
-                                legendType="none"
-                              />
-                              <Area
-                                type="monotone"
-                                dataKey="band"
-                                stackId="band"
-                                fill={color}
-                                fillOpacity={0.15}
-                                stroke="none"
-                                dot={false}
-                                isAnimationActive={false}
-                                legendType="none"
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="mean"
-                                stroke={color}
-                                dot={false}
-                                strokeWidth={1.5}
-                                connectNulls
-                              />
-                            </ComposedChart>
-                          </ResponsiveContainer>
-                        </Paper>
-                      );
-                    })}
-                  </SimpleGrid>
-                )}
-              </div>
-
-              {/* Quality Issues Summary */}
-              <div>
-                <Group justify="space-between" mb="sm">
-                  <Text size="sm" fw={600}>Quality Issues</Text>
-                  {listing && (
-                    <Link
-                      to={`/market-data/quality-issues?listingId=${listing.listingId}`}
-                      style={{ fontSize: 'var(--mantine-font-size-xs)', color: 'var(--mantine-color-blue-6)' }}
-                    >
-                      View all issues →
-                    </Link>
-                  )}
-                </Group>
-                <Skeleton visible={statsLoading && qualityIssueSummary.length === 0}>
-                  {Object.keys(qualityByRuleType).length === 0 ? (
-                    <Text size="sm" c="dimmed">No quality issues found</Text>
-                  ) : (
-                    <Group gap="xs">
-                      {(Object.entries(qualityByRuleType) as [string, number][]).map(([ruleType, count]) => (
-                        <Badge
-                          key={ruleType}
-                          color={getRuleTypeColor(ruleType)}
-                          size="md"
-                          variant="light"
-                        >
-                          {formatRuleType(ruleType)}: {count}{qualityIssuesTruncated ? '+' : ''}
-                        </Badge>
-                      ))}
-                    </Group>
-                  )}
-                  {qualityIssuesTruncated && (
-                    <Text size="xs" c="dimmed" mt={4}>Counted from the most recent {qualityIssueSummary.length} issues only.</Text>
-                  )}
-                </Skeleton>
-              </div>
-
               {/* Coverage Trend Chart */}
               <div>
                 <Text size="sm" fw={600} mb="sm">Coverage Trend</Text>

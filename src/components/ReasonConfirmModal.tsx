@@ -11,6 +11,8 @@ interface ReasonConfirmModalProps {
   confirmColor?: string;
   loadingMessage?: string;
   reasonDescription?: string;
+  // Off where nothing records a reason, so the modal doesn't ask for one it would drop.
+  askReason?: boolean;
   onConfirm: (reason: string | undefined) => Promise<void>;
 }
 
@@ -23,6 +25,7 @@ export function ReasonConfirmModal({
   confirmColor = 'red',
   loadingMessage,
   reasonDescription = 'Recorded in the risk policy audit log',
+  askReason = true,
   onConfirm,
 }: ReasonConfirmModalProps) {
   const [reason, setReason] = useState('');
@@ -53,13 +56,13 @@ export function ReasonConfirmModal({
     <Modal opened={opened} onClose={() => { if (!submitting) onClose(); }} title={title} size="md">
       <Stack>
         {typeof message === 'string' ? <Text>{message}</Text> : message}
-        <TextInput
+        {askReason && <TextInput
           label="Reason (optional)"
           description={reasonDescription}
           value={reason}
           onChange={(e) => setReason(e.currentTarget.value)}
           disabled={submitting}
-        />
+        />}
         {submitting && loadingMessage && <Text size="sm" c="dimmed">{loadingMessage}</Text>}
         {error && <Alert color="red" title="Error">{error}</Alert>}
         <Group justify="flex-end">

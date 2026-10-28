@@ -24,8 +24,9 @@ Python Lambda tests (`cd cdk`; `pip install -r requirements-dev.txt` first). Run
 - Tests use fakes in `lambda/tests/fakes.py`, not AWS. Conftests set `sys.dont_write_bytecode` because the function folder is uploaded as is.
 
 ## Layout
-- `src/pages/*` - one folder per nav area: Dashboard, Trading, Strategies, Sessions, Launcher, Risk, Treasury, Predictions, SecurityMaster, MarketData, CollectorDetail, Data (pipelines/datasets/artifacts), Research (Backtests, Jobs, Sessions), System (health, alerts), Tools (ServiceConfig, LatencyProbe, BotNotes: gnome-bot's team notes through its own API). Routes are in `src/App.tsx`.
+- `src/pages/*` - one folder per nav area: Dashboard, Trading, Strategies, Sessions, Launcher, Risk, Treasury, Predictions, SecurityMaster, MarketData (Collection: shards, rules and stream targets from the market-data `collection/*` routes; plus Coverage, Gaps, Credentials), Data (pipelines/datasets/artifacts), Research (Backtests, Jobs, Sessions), System (health, alerts), Tools (ServiceConfig, LatencyProbe, BotNotes: gnome-bot's team notes through its own API). Routes are in `src/App.tsx`.
 - `src/utils/api.ts` - every HTTP call. `sendApiRequest` plus `registryApi`, `marketDataApi`, `controllerApi`, `launcherApi`, `botApi` (gnome-bot's `notes` routes), one per `VITE_*_API_URL`. Other files in `src/utils` are pure logic with colocated tests.
+- Collection UI: pure logic (health, hand-off steps, counts) in `src/utils/collection.ts` with tests; widgets in `src/components/collection/`; queries in `src/query/hooks.ts` (`COLLECTION_POLL`).
 - `src/components`, `src/hooks`, `src/query` (TanStack Query client and hooks), `src/types`, `src/context`. `src/amplify-config.ts` configures Cognito from `VITE_COGNITO_*`.
 - `.env.dev` / `.env.prod` - per-stage build config (Cognito ids, API URLs, `VITE_STAGE`); the deploy builds with `vite build --mode <stage>`.
 - `cdk/bin/cdk.ts` -> `ControllerPipelineStack` in the pipelines account. `cdk/lib/controller-pipeline-stack.ts` defines the stage (`AppStage`) and the pipeline; `cdk/lib/config.ts` holds per-stage domain, SSO metadata, certificate, `approvesPipelines`, `researchJobMaxVcpus`.

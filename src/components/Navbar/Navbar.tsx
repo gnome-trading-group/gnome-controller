@@ -18,11 +18,9 @@ const routes = [
     label: 'Market Data',
     icon: IconNotes,
     links: [
+      { label: 'Collection', link: '/market-data/collection' },
       { label: 'Coverage', link: '/market-data/coverage' },
-      { label: 'Collectors', link: '/market-data/collectors' },
-      { label: 'Transform Jobs', link: '/market-data/transform-jobs' },
       { label: 'Gaps', link: '/market-data/gaps' },
-      { label: 'Quality Issues', link: '/market-data/quality-issues' },
       { label: 'Credentials', link: '/market-data/credentials' },
     ],
   },

@@ -3,15 +3,11 @@ import { Anchor, Badge, Card, Divider, Group, SimpleGrid, Stack, Text, UnstyledB
 import ReactTimeAgo from 'react-time-ago';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { controllerApi, marketDataApi } from '../../utils/api';
+import { controllerApi } from '../../utils/api';
+import { useCollectionShards, useCollectionTargets } from '../../query/hooks';
+import { collectionCounts } from '../../utils/collection';
 import { BacktestRun } from '../../types/backtests';
 import { ResearchSession } from '../../types/research';
-
-interface Collector {
-  listingId: number;
-  status: string;
-  failureReason: string | null;
-}
 
 const BACKTEST_STATUS_COLORS: Record<string, string> = {
   SUBMITTED: 'blue',
@@ -66,14 +62,11 @@ function Empty({ loading, children }: { loading: boolean; children: ReactNode })
   return <Text size="sm" c="dimmed">{loading ? 'Loading…' : children}</Text>;
 }
 
-// The rest of the platform, below the trading overview: market data collectors, backtests and research.
+// The rest of the platform, below the trading overview: market data collection, backtests and research.
 export function PlatformSection() {
   const navigate = useNavigate();
-  const collectors = useQuery({
-    queryKey: ['collectors'],
-    queryFn: async () => (await marketDataApi.listCollectors() as { collectors: Collector[] }).collectors,
-    refetchInterval: REFRESH_MS,
-  });
+  const targets = useCollectionTargets();
+  const shards = useCollectionShards();
   const backtests = useQuery({
     queryKey: ['recentBacktests'],
     queryFn: async () => (await controllerApi.listBacktests({ limit: 10 }) as { runs: BacktestRun[] }).runs,
@@ -85,9 +78,8 @@ export function PlatformSection() {
     refetchInterval: REFRESH_MS,
   });
 
-  const all = collectors.data ?? [];
-  const active = all.filter(c => c.status === 'ACTIVE').length;
-  const failed = all.filter(c => c.status === 'FAILED');
+  const collection = collectionCounts(targets.data ?? [], shards.data ?? []);
+  const collectionLoading = targets.isLoading || shards.isLoading;
   const recentBacktests = (backtests.data ?? []).slice(0, SHOWN);
   const recentResearch = (research.data ?? []).slice(0, SHOWN);
 
@@ -95,30 +87,23 @@ export function PlatformSection() {
     <>
       <Divider label="Platform" labelPosition="left" mt="xl" mb="md" />
       <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
-        <PlatformCard title="Market data collectors" href="/market-data/collectors">
-          <Group gap="xl" mb={failed.length ? 'sm' : 0}>
+        <PlatformCard title="Market data collection" href="/market-data/collection">
+          <Group gap="xl">
             <div>
-              <Text size="xl" fw={700}>{collectors.isLoading ? '—' : active}</Text>
-              <Text size="xs" c="dimmed">active</Text>
+              <Text size="xl" fw={700}>{collectionLoading ? '—' : collection.wanted}</Text>
+              <Text size="xs" c="dimmed">streams</Text>
             </div>
             <div>
-              <Text size="xl" fw={700} c={failed.length ? 'red' : undefined}>{collectors.isLoading ? '—' : failed.length}</Text>
-              <Text size="xs" c="dimmed">failed</Text>
+              <Text size="xl" fw={700} c={collection.uncovered ? 'red' : undefined}>
+                {collectionLoading ? '—' : collection.uncovered}
+              </Text>
+              <Text size="xs" c="dimmed">uncovered</Text>
             </div>
             <div>
-              <Text size="xl" fw={700}>{collectors.isLoading ? '—' : all.length}</Text>
-              <Text size="xs" c="dimmed">total</Text>
+              <Text size="xl" fw={700}>{collectionLoading ? '—' : collection.shards}</Text>
+              <Text size="xs" c="dimmed">shards</Text>
             </div>
           </Group>
-          {failed.length > 0 && (
-            <Stack gap={4}>
-              {failed.slice(0, SHOWN).map(c => (
-                <Anchor key={c.listingId} component={Link} to={`/market-data/collectors/${c.listingId}`} size="sm" c="red" truncate>
-                  Listing {c.listingId}{c.failureReason ? `: ${c.failureReason}` : ''}
-                </Anchor>
-              ))}
-            </Stack>
-          )}
         </PlatformCard>
 
         <PlatformCard title="Recent backtests" href="/research/backtests">

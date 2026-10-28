@@ -12,14 +12,12 @@ import { PipelineDetailResponse, PipelineListResponse, PipelineRun, RunLogsRespo
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 import { CoverageSummaryResponse, StreamCoverageResponse } from '../types/coverage';
-import { TransformJobsListResponse, TransformJobsSearchResponse, TransformJobsListParams, TransformJobsSearchParams } from '../types/transform-jobs';
 import { GapsListResponse, GapsListParams, GapsByListingParams, GapsUpdateRequest, GapsUpdateResponse } from '../types/gaps';
-import { QualityIssuesListResponse, QualityIssuesListParams, QualityIssuesByListingParams, QualityIssuesUpdateRequest, QualityIssuesUpdateResponse, QualityBackfillRequest, QualityBackfillResponse, ListingStatisticsResponse, ListingStatisticsHistoryResponse, MinuteInvestigationResponse } from '../types/quality-issues';
-import { BboTimelineResponse } from '../types/bbo-timeline';
 import {
   AccountConfigUpdate, AccountStatus, AccountStatusChange, CreateAccountRequest, CreatedAccount, DeletedSecrets, UpdateCredentialsRequest, ManualSnapshot, ReconDetail, SessionAccount, Transfer, TransferKind, TreasurySummary, VenueAccount,
 } from '../types/treasury';
 import { MarketDataAccount, MarketDataKey } from '../types/credentials';
+import { CollectionRule, CollectionShard, CollectionTarget, NewRule, RuleChange, ShardDetail, ShardLogs } from '../types/collection';
 import { SimulationParametersRow } from './simulation';
 
 export interface ServiceConfigResponse {
@@ -214,37 +212,44 @@ export async function sendApiRequest<T>(
   }
 }
 
+// Shard fields keyed by data (source codes, stream ids) or copied as the shard wrote them.
+const COLLECTION_DATA_KEYS = new Set(['accounts', 'cuts', 'process']);
+
+// The collection control plane. Rule changes wake the reconciler at once; everything else it does on its 1-minute tick.
+export const collectionApi = {
+  listRules: () => sendApiRequest<{ rules: CollectionRule[] }>('/collection/rules', 'GET', {
+    apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true,
+  }).then(r => r.rules),
+  createRule: (rule: NewRule) => sendApiRequest<CollectionRule>('/collection/rules', 'POST', {
+    apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true, body: { rule_type: 'static_streams', ...rule },
+  }),
+  updateRule: (ruleId: string, change: RuleChange) =>
+    sendApiRequest<CollectionRule>(`/collection/rules/${encodeURIComponent(ruleId)}`, 'PATCH', {
+      apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true, body: change,
+    }),
+  deleteRule: (ruleId: string) =>
+    sendApiRequest<{ deleted: string }>(`/collection/rules/${encodeURIComponent(ruleId)}`, 'DELETE', {
+      apiUrl: MARKET_DATA_API_URL,
+    }),
+  reconcileNow: () => sendApiRequest<{ queued: boolean }>('/collection/triggers', 'POST', {
+    apiUrl: MARKET_DATA_API_URL,
+  }),
+  listTargets: () => sendApiRequest<{ targets: CollectionTarget[] }>('/collection/targets', 'GET', {
+    apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true,
+  }).then(r => r.targets),
+  listShards: (includeDeleted = false) => sendApiRequest<{ shards: CollectionShard[] }>('/collection/shards', 'GET', {
+    apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true, preserveKeys: COLLECTION_DATA_KEYS, queryParams: { includeDeleted },
+  }).then(r => r.shards),
+  getShard: (shardId: string) => sendApiRequest<ShardDetail>(`/collection/shards/${encodeURIComponent(shardId)}`, 'GET', {
+    apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true, preserveKeys: COLLECTION_DATA_KEYS,
+  }),
+  getShardLogs: (shardId: string, region: string, taskId: string) =>
+    sendApiRequest<ShardLogs>(`/collection/shards/${encodeURIComponent(shardId)}/logs`, 'GET', {
+      apiUrl: MARKET_DATA_API_URL, queryParams: { region, taskId, limit: 300 },
+    }),
+};
+
 export const marketDataApi = {
-  listCollectors: () => sendApiRequest<{ collectors: any[] }>('/collectors/list', 'GET', {
-    apiUrl: MARKET_DATA_API_URL,
-  }),
-  createCollector: (listingIds: number[], region: string, cpu?: string, memory?: string, orchestratorVersion?: string) =>
-    sendApiRequest<{ message: string }>('/collectors/create', 'POST', {
-      apiUrl: MARKET_DATA_API_URL,
-      body: { listingIds, region, cpu, memory, orchestratorVersion },
-    }),
-  deleteCollector: (listingId: number) =>
-    sendApiRequest<{ message: string }>('/collectors/delete', 'DELETE', {
-      apiUrl: MARKET_DATA_API_URL,
-      body: { listingId },
-    }),
-  purgeCollector: (listingId: number) =>
-    sendApiRequest<{ message: string }>('/collectors/purge', 'DELETE', {
-      apiUrl: MARKET_DATA_API_URL,
-      body: { listingId },
-    }),
-  redeployCollector: (listingId?: number, orchestratorVersion?: string) =>
-    sendApiRequest<{ message: string }>('/collectors/redeploy', 'POST', {
-      apiUrl: MARKET_DATA_API_URL,
-      body: { listingId, orchestratorVersion },
-    }),
-  getCollector: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}`, 'GET', {
-    apiUrl: MARKET_DATA_API_URL,
-  }),
-  getCollectorLogs: (listingId: number) => sendApiRequest<any>(`/collectors/${listingId}/logs`, 'GET', {
-    apiUrl: MARKET_DATA_API_URL,
-  }),
-  // Coverage endpoints
   getCoverageSummary: () => sendApiRequest<CoverageSummaryResponse>('/coverage/summary', 'GET', {
     apiUrl: MARKET_DATA_API_URL,
   }),
@@ -252,30 +257,6 @@ export const marketDataApi = {
     sendApiRequest<StreamCoverageResponse>(`/coverage/stream/${streamId}`, 'GET', {
       apiUrl: MARKET_DATA_API_URL,
     }),
-  // Transform Jobs endpoints
-  listTransformJobs: (params?: TransformJobsListParams) => {
-    const queryParams: Record<string, string | number | boolean> = {};
-    if (params?.status) queryParams.status = params.status;
-    if (params?.limit) queryParams.limit = params.limit;
-    if (params?.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
-    return sendApiRequest<TransformJobsListResponse>('/transform-jobs/list', 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
-    });
-  },
-  searchTransformJobs: (params: TransformJobsSearchParams) => {
-    const queryParams: Record<string, string | number | boolean> = {
-      listingId: params.listingId,
-    };
-    if (params.schemaType) queryParams.schemaType = params.schemaType;
-    if (params.limit) queryParams.limit = params.limit;
-    if (params.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
-    return sendApiRequest<TransformJobsSearchResponse>('/transform-jobs/search', 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-      queryParams,
-    });
-  },
-  // Gaps endpoints
   listGaps: (params?: GapsListParams) => {
     const queryParams: Record<string, string | number | boolean> = {};
     if (params?.status) queryParams.status = params.status;
@@ -299,64 +280,6 @@ export const marketDataApi = {
     sendApiRequest<GapsUpdateResponse>('/gaps/update', 'POST', {
       apiUrl: MARKET_DATA_API_URL,
       body: request,
-    }),
-  // Quality Issues endpoints
-  listQualityIssues: (params?: QualityIssuesListParams) => {
-    const queryParams: Record<string, string | number | boolean> = {};
-    if (params?.status) queryParams.status = params.status;
-    if (params?.ruleType) queryParams.ruleType = params.ruleType;
-    if (params?.limit) queryParams.limit = params.limit;
-    if (params?.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
-    return sendApiRequest<QualityIssuesListResponse>('/quality-issues/list', 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
-    });
-  },
-  getQualityIssuesByListing: (params: QualityIssuesByListingParams) => {
-    const queryParams: Record<string, string | number | boolean> = {};
-    if (params.limit) queryParams.limit = params.limit;
-    if (params.lastEvaluatedKey) queryParams.lastEvaluatedKey = params.lastEvaluatedKey;
-    return sendApiRequest<QualityIssuesListResponse>(`/quality-issues/list/${params.listingId}`, 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
-    });
-  },
-  updateQualityIssues: (request: QualityIssuesUpdateRequest) =>
-    sendApiRequest<QualityIssuesUpdateResponse>('/quality-issues/update', 'POST', {
-      apiUrl: MARKET_DATA_API_URL,
-      body: request,
-    }),
-  triggerQualityBackfill: (request: QualityBackfillRequest) =>
-    sendApiRequest<QualityBackfillResponse>('/quality-issues/backfill', 'POST', {
-      apiUrl: MARKET_DATA_API_URL,
-      body: request,
-    }),
-  // Listing Statistics endpoint
-  getListingStatistics: (listingId: number) =>
-    sendApiRequest<ListingStatisticsResponse>(`/listing-statistics/${listingId}`, 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-    }),
-  getListingStatisticsHistory: (listingId: number, lookbackDays?: number) =>
-    sendApiRequest<ListingStatisticsHistoryResponse>(`/listing-statistics/${listingId}/history`, 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-      queryParams: lookbackDays !== undefined ? { lookbackDays } : undefined,
-    }),
-  investigateQualityIssue: (listingId: number, timestamp: number, windowMinutes?: number) =>
-    sendApiRequest<MinuteInvestigationResponse>(`/quality-issues/investigate/${listingId}`, 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-      queryParams: {
-        timestamp,
-        ...(windowMinutes !== undefined ? { windowMinutes } : {}),
-      },
-    }),
-  getBboTimeline: (listingId: number, startTimestamp: number, endTimestamp: number, maxPoints?: number) =>
-    sendApiRequest<BboTimelineResponse>(`/bbo/timeline/${listingId}`, 'GET', {
-      apiUrl: MARKET_DATA_API_URL,
-      queryParams: {
-        startTimestamp,
-        endTimestamp,
-        ...(maxPoints !== undefined ? { maxPoints } : {}),
-      },
     }),
 };
 

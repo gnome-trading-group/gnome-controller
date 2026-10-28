@@ -1,6 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { controllerApi, registryApi, EventScope, LedgerFilters, LedgerScope } from '../utils/api';
+import { collectionApi, controllerApi, registryApi, EventScope, LedgerFilters, LedgerScope } from '../utils/api';
 import { ACTIVE_SESSION_STATUSES, AlertFilters, isActiveSession, LedgerFill, LedgerOrder, Mode, PnlSeries, StrategySession } from '../types';
 import { mergeSeries } from './series';
 
@@ -43,6 +43,11 @@ export const keys = {
   treasury: ['treasury'] as const,
   marketDataKeys: ['marketDataKeys'] as const,
   marketDataAccounts: ['marketDataAccounts'] as const,
+  collectionRules: ['collection', 'rules'] as const,
+  collectionTargets: ['collection', 'targets'] as const,
+  collectionShards: (includeDeleted: boolean) => ['collection', 'shards', includeDeleted] as const,
+  collectionShard: (shardId: string) => ['collection', 'shard', shardId] as const,
+  shardLogs: (shardId: string, taskId: string) => ['collection', 'logs', shardId, taskId] as const,
   transfers: (accountId: number | null) => ['treasury', 'transfers', accountId] as const,
   recon: (accountId: number) => ['treasury', 'recon', accountId] as const,
   sessionAccounts: (sessionId: string) => ['sessionAccounts', sessionId] as const,
@@ -377,6 +382,71 @@ export function useVenueAccounts() {
 export function useMarketDataAccounts() {
   return useQuery({
     queryKey: keys.marketDataAccounts, queryFn: () => registryApi.listMarketDataAccounts(), refetchInterval: 60_000,
+  });
+}
+
+// Shards report every 15 s and the reconciler ticks every minute; reading more often shows nothing new.
+export const COLLECTION_POLL = 10_000;
+
+export function useCollectionRules() {
+  return useQuery({ queryKey: keys.collectionRules, queryFn: collectionApi.listRules, refetchInterval: COLLECTION_POLL });
+}
+
+export function useCollectionTargets() {
+  return useQuery({ queryKey: keys.collectionTargets, queryFn: collectionApi.listTargets, refetchInterval: COLLECTION_POLL });
+}
+
+export function useCollectionShards(includeDeleted = false) {
+  return useQuery({
+    queryKey: keys.collectionShards(includeDeleted),
+    queryFn: () => collectionApi.listShards(includeDeleted),
+    refetchInterval: COLLECTION_POLL,
+  });
+}
+
+export function useCollectionShard(shardId: string) {
+  return useQuery({
+    queryKey: keys.collectionShard(shardId), queryFn: () => collectionApi.getShard(shardId), refetchInterval: COLLECTION_POLL,
+  });
+}
+
+/** Each shard's detail (item and statuses), for the overview's cards; a shard is a few kB, read every poll. */
+export function useCollectionShardDetails(shardIds: string[]) {
+  return useQueries({
+    queries: shardIds.map((shardId) => ({
+      queryKey: keys.collectionShard(shardId),
+      queryFn: () => collectionApi.getShard(shardId),
+      refetchInterval: COLLECTION_POLL,
+    })),
+  });
+}
+
+export function useShardLogs(shardId: string, region: string, taskId: string | null) {
+  return useQuery({
+    queryKey: keys.shardLogs(shardId, taskId ?? ''),
+    queryFn: () => collectionApi.getShardLogs(shardId, region, taskId!),
+    enabled: taskId != null,
+    refetchInterval: 15_000,
+  });
+}
+
+const STREAM_LOOKUP_CHUNK = 200;
+
+/** Each stream's source and venue id, for showing streams by name rather than number. */
+export function useStreamNames(ids: number[]) {
+  const sorted = useMemo(() => [...new Set(ids)].sort((a, b) => a - b), [ids]);
+  return useQuery({
+    queryKey: ['collection', 'streamNames', sorted],
+    queryFn: async () => {
+      const names = new Map<number, string>();
+      for (let i = 0; i < sorted.length; i += STREAM_LOOKUP_CHUNK) {
+        const rows = await registryApi.listStreamsByIds(sorted.slice(i, i + STREAM_LOOKUP_CHUNK));
+        rows.forEach((s) => names.set(s.streamId, `${s.sourceCode} ${s.nativeSubjectId}`));
+      }
+      return names;
+    },
+    enabled: sorted.length > 0,
+    staleTime: 10 * 60_000,
   });
 }
 
