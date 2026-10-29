@@ -337,7 +337,8 @@ export interface LedgerPage<T> {
 export interface SessionHealth {
   uptimeMs: number;
   agents: { name: string; hotPath: boolean; stalledMs: number; exited: boolean }[];
-  listings: { listingId: number; priceUnchangedMs: number }[];
+  // marketDataBadMs: how long the book has been flagged bad data (new orders refused); 0 is trusted. Older sessions omit it.
+  listings: { listingId: number; priceUnchangedMs: number; marketDataBadMs?: number }[];
   ledger: { lastAcceptedAgoMs: number | null; consecutiveFailures: number; fenced: boolean } | null;
   // Older sessions don't report the rest.
   gateways: { name: string; reconnecting: boolean; resyncsLast5m?: number }[];

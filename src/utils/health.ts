@@ -52,6 +52,11 @@ export function healthProblems(health: SessionHealth | null): HealthProblem[] {
   else if (health.ledger && health.ledger.consecutiveFailures > 0) {
     problems.push({ part: 'Ledger', detail: `${health.ledger.consecutiveFailures} failed writes` });
   }
+  for (const listing of health.listings) {
+    if ((listing.marketDataBadMs ?? 0) > 0) {
+      problems.push({ part: `Listing ${listing.listingId}`, detail: `book bad data ${formatDuration(listing.marketDataBadMs!)} (orders refused)` });
+    }
+  }
   problems.push(...hostProblems(health));
   return problems;
 }
