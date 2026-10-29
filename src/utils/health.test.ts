@@ -34,6 +34,18 @@ describe('what a heartbeat says is wrong', () => {
     ]);
   });
 
+  it('a listing whose book is flagged bad data, with orders refused', () => {
+    const problems = healthProblems({
+      ...healthy,
+      listings: [
+        { listingId: 7, priceUnchangedMs: 0, marketDataBadMs: 130_000 },
+        { listingId: 8, priceUnchangedMs: 0, marketDataBadMs: 0 },
+        { listingId: 9, priceUnchangedMs: 0 },
+      ],
+    });
+    expect(problems).toEqual([{ part: 'Listing 7', detail: 'book bad data 2m 10s (orders refused)' }]);
+  });
+
   it('unguarded says why nothing trades, rather than stale', () => {
     const problems = healthProblems({ ...healthy, risk: { stale: true, unguarded: true, unbuildablePolicies: 0, droppedLatches: 0 } });
     expect(problems).toEqual([{ part: 'Risk', detail: 'missing required policies: every order refused' }]);

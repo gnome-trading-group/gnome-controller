@@ -126,6 +126,7 @@ function HealthDetail({ health, problems }: { health: SessionHealth | null; prob
 // One row, not one per listing: a quiet price is normal, so per-listing rows only made the card long.
 function PricesSummary({ listings }: { listings: SessionHealth['listings'] }) {
   if (listings.length === 0) return null;
+  const bad = listings.filter(l => (l.marketDataBadMs ?? 0) > 0);
   const quietest = listings.reduce((a, b) => (b.priceUnchangedMs > a.priceUnchangedMs ? b : a));
   return (
     <>
@@ -134,6 +135,9 @@ function PricesSummary({ listings }: { listings: SessionHealth['listings'] }) {
         name={`${listings.length} listing${listings.length > 1 ? 's' : ''}`}
         value={`longest unchanged ${formatDuration(quietest.priceUnchangedMs)} (${quietest.listingId})`}
       />
+      {bad.map(l => (
+        <Row key={l.listingId} name={`Listing ${l.listingId}`} value={`book bad data ${formatDuration(l.marketDataBadMs!)} (orders refused)`} warn />
+      ))}
     </>
   );
 }
