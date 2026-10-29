@@ -82,6 +82,9 @@ export interface CollectionShard {
   state: ShardState;
   createdAtNs: number;
   emptySinceNs: number;
+  // Since when all its streams would fit on its partition's other shards (0: they wouldn't); after the reconciler's
+  // consolidation wait it drains into them.
+  mergeableSinceNs: number;
 }
 
 export const WARMING = 2147483647;

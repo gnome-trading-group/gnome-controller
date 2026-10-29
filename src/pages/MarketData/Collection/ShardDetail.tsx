@@ -1,8 +1,9 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { Alert, Badge, Container, Group, SimpleGrid, Stack, Tabs, Text } from '@mantine/core';
+import { Alert, Badge, Container, Group, SimpleGrid, Stack, Tabs, Text, Tooltip } from '@mantine/core';
+import ReactTimeAgo from 'react-time-ago';
 import { IconExternalLink } from '@tabler/icons-react';
 import { COLLECTION_POLL, useCollectionShard, useStreamNames } from '../../../query/hooks';
-import { currentStatus, isCovered, processLine, shardStreams } from '../../../utils/collection';
+import { currentStatus, isCovered, nsToDate, processLine, ProcessLine, shardStreams } from '../../../utils/collection';
 import { PageHeader } from '../../../components/PageHeader';
 import { LastUpdated } from '../../../components/LastUpdated';
 import { Kpi } from '../../../components/trading/layout';
@@ -20,6 +21,11 @@ function ecsUrl(region: string, shardId: string): string {
 
 // One shard: whether it's alive, what it was assigned and how each stream is doing, its connections, recent state
 // changes, logs and tasks. Its newest task's status drives the page.
+/** Cumulative GC pause time across collectors since the task started. */
+function gcMsTotal(p: ProcessLine): number | null {
+  return p.gc ? Object.values(p.gc).reduce((sum, gc) => sum + gc.ms, 0) : null;
+}
+
 function ShardDetail() {
   const { shardId = '' } = useParams();
   const navigate = useNavigate();
@@ -42,6 +48,14 @@ function ShardDetail() {
         badges={shard && (
           <Group gap="xs" wrap="nowrap">
             <Badge variant="light" color={shard.state === 'ACTIVE' ? 'teal' : 'yellow'}>{shard.state.toLowerCase()}</Badge>
+            {shard.state === 'ACTIVE' && shard.mergeableSinceNs > 0 && (
+              <Tooltip withArrow multiline w={280}
+                label="Its streams would all fit on its partition's other shards; once that has held long enough (Service Config consolidation.after_minutes), it drains into them.">
+                <Badge variant="light" color="grape">
+                  mergeable <ReactTimeAgo date={nsToDate(shard.mergeableSinceNs)!} timeStyle="round" />
+                </Badge>
+              </Tooltip>
+            )}
             <ShardHealth status={status} createdAtNs={shard.createdAtNs} asOfMs={detail.dataUpdatedAt} />
             <LastUpdated at={detail.dataUpdatedAt ? new Date(detail.dataUpdatedAt) : null} intervalMs={COLLECTION_POLL}
               failing={detail.isError} compact />
@@ -63,7 +77,7 @@ function ShardDetail() {
       {detail.error && <Alert color="red" mb="md">{detail.error.message}</Alert>}
       {shard && (
         <Stack gap="lg" mt="md">
-          <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }}>
+          <SimpleGrid cols={{ base: 2, sm: 4, lg: 7 }}>
             <Kpi label="Streams" value={rows.length} footer={shard.draining.length ? `${shard.draining.length} draining` : undefined} />
             <Kpi label="Covered" value={<Text span inherit c={covered < rows.length ? 'orange' : undefined}>{covered}</Text>}
               footer={`of ${rows.length}`} hint="Live, suspect or empty: collected and trusted" />
@@ -75,6 +89,10 @@ function ShardDetail() {
             <Kpi label="CPU · heap"
               value={p.cpu_busy_permille != null ? `${(p.cpu_busy_permille / 10).toFixed(0)}%` : '—'}
               footer={p.heap_used_mb != null ? `heap ${p.heap_used_mb} of ${p.heap_max_mb} MB` : undefined} />
+            <Kpi label="Latency p99.9"
+              value={p.sched_latency?.p999_us != null ? `${(p.sched_latency.p999_us / 1000).toFixed(1)} ms` : '—'}
+              hint="Scheduling latency of the collector's threads over the status window: how late they ran. Over a few ms means the host is overloaded."
+              footer={gcMsTotal(p) != null ? `GC ${gcMsTotal(p)} ms total` : undefined} />
           </SimpleGrid>
           <StateBar states={rows.map((r) => r.state)} height={10} />
           {!status && (
