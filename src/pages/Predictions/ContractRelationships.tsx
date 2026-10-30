@@ -8,10 +8,7 @@ import {
   Container,
   Group,
   Modal,
-  Paper,
-  SegmentedControl,
   Select,
-  Skeleton,
   Stack,
   Switch,
   Text,
@@ -28,7 +25,6 @@ import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
-import RelationshipGraph from './RelationshipGraph';
 import CreateRelationshipModal from './CreateRelationshipModal';
 import { EvidencePanel, FlagBadges } from './PropositionParts';
 import { STORED_ROWS_NOTE } from '../../utils/propositions';
@@ -58,12 +54,10 @@ function ContractRelationships() {
   const methodFilter = urlState.getParam('method') || null;
   const typeFilter = urlState.getParam('type') || null;
   const showResolved = urlState.getParam('resolved') === 'true';
-  const view = (urlState.getParam('view') || 'table') as 'table' | 'graph';
 
   const setMethodFilter = (v: string | null) => urlState.setParam('method', v ?? '');
   const setTypeFilter = (v: string | null) => urlState.setParam('type', v ?? '');
   const setShowResolved = (v: boolean) => urlState.setParam('resolved', v ? 'true' : '');
-  const setView = (v: string) => urlState.setParam('view', v === 'table' ? '' : v);
 
   const extraParams = useMemo(() => {
     const p: Record<string, string | number | boolean> = {};
@@ -119,15 +113,6 @@ function ContractRelationships() {
   };
 
   const deleteTargetRow = relationships.find(r => r.relationshipId === deleteTarget);
-
-  const symbolMap = useMemo(() => {
-    const map: Record<number, string> = {};
-    for (const r of relationships) {
-      if (r.symbolA) map[r.securityIdA] = r.symbolA;
-      if (r.symbolB) map[r.securityIdB] = r.symbolB;
-    }
-    return map;
-  }, [relationships]);
 
   const columns = useMemo<MRT_ColumnDef<ContractRelationship>[]>(() => [
     {
@@ -236,7 +221,9 @@ function ContractRelationships() {
       <Group justify="space-between" mb="md">
         <Stack gap={2}>
           <Title order={2}>Contract Relationships</Title>
-          <Text size="sm" c="dimmed" maw={640}>{STORED_ROWS_NOTE}</Text>
+          <Text size="sm" c="dimmed" maw={640}>
+            {STORED_ROWS_NOTE} Graphs and ladders are on each <Anchor component={Link} to="/predictions/subjects">subject</Anchor> and event page.
+          </Text>
         </Stack>
         <Group>
           <Select
@@ -273,36 +260,12 @@ function ContractRelationships() {
               <IconRefresh size={20} />
             </ActionIcon>
           </Tooltip>
-          <SegmentedControl
-            value={view}
-            onChange={setView}
-            size="sm"
-            data={[
-              { value: 'table', label: 'Table' },
-              { value: 'graph', label: 'Graph' },
-            ]}
-          />
         </Group>
       </Group>
 
       {error && <Alert color="red" title="Error" mb="md">{error}</Alert>}
 
-      {view === 'table' ? (
-        <MantineReactTable table={table} />
-      ) : (
-        <Paper withBorder p="xs" style={{ height: 'calc(100vh - 200px)' }}>
-          {isLoading ? (
-            <Skeleton h="100%" />
-          ) : (
-            <RelationshipGraph
-              relationships={relationships}
-              securitySymbols={symbolMap}
-              height="100%"
-              onDelete={requestDelete}
-            />
-          )}
-        </Paper>
-      )}
+      <MantineReactTable table={table} />
 
       <CreateRelationshipModal opened={createOpened} onClose={closeCreate} onCreated={refresh} />
 

@@ -33,7 +33,7 @@ import { registryApi } from '../../utils/api';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { useLatestRequest } from '../../hooks/useLatestRequest';
 import { errorMessage } from '../../utils/kill-switch';
-import RelationshipGraph from './RelationshipGraph';
+import EventRelationshipViews from './relationships/EventRelationshipViews';
 import BulkCreateRelationshipModal from './BulkCreateRelationshipModal';
 import { EvidencePanel, FlagBadges } from './PropositionParts';
 import { STORED_ROWS_NOTE } from '../../utils/propositions';
@@ -132,7 +132,6 @@ function EventDetail() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const beginRelationshipsRequest = useLatestRequest();
   const [listingsBySecurityId, setListingsBySecurityId] = useState<Record<number, DenormalizedListing[]>>({});
-  const [showGraph, setShowGraph] = useState(false);
   const [subjectBySecurityId, setSubjectBySecurityId] = useState<Record<number, { subjectId: number; key: string }>>({});
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
 
@@ -198,6 +197,10 @@ function EventDetail() {
     }).catch(() => { if (!cancelled) setSubjectBySecurityId({}); });
     return () => { cancelled = true; };
   }, [contractSecurityIds]);
+  const eventSubjects = useMemo(() => {
+    const byId = new Map(Object.values(subjectBySecurityId).map(s => [s.subjectId, s]));
+    return [...byId.values()].sort((a, b) => a.key.localeCompare(b.key));
+  }, [subjectBySecurityId]);
 
   const settledCount = contracts.filter(c => c.settlementPrice !== null && c.settlementPrice !== undefined).length;
 
@@ -307,11 +310,6 @@ function EventDetail() {
   const requestDelete = (relationship: ContractRelationship) => {
     setDeleteError(null);
     setDeleteTarget(relationship);
-  };
-
-  const requestDeleteById = (relationshipId: number) => {
-    const relationship = relationships.find(r => r.relationshipId === relationshipId);
-    if (relationship) requestDelete(relationship);
   };
 
   const confirmDelete = async () => {
@@ -480,18 +478,6 @@ function EventDetail() {
     () => Object.fromEntries(exchanges.map(e => [e.exchangeId, e.exchangeCode])),
     [exchanges],
   );
-
-  const securitySymbolMap = useMemo(() => {
-    const map: Record<number, string> = {};
-    for (const c of contracts) {
-      if (c.securitySymbol) map[c.securityId] = c.securitySymbol;
-    }
-    for (const r of relationships) {
-      if (r.symbolA) map[r.securityIdA] = r.symbolA;
-      if (r.symbolB) map[r.securityIdB] = r.symbolB;
-    }
-    return map;
-  }, [contracts, relationships]);
 
   usePageTitleLabels([{ segment: eventId, label: event?.title }]);
 
@@ -681,26 +667,10 @@ function EventDetail() {
         </Stack>
       </Modal>
 
-      {relationships.length > 0 && (
-        <Paper withBorder p="md" mb="md">
-          <Group justify="space-between" mb={showGraph ? 'sm' : undefined}>
-            <Title order={5}>Relationship Graph</Title>
-            <Button variant="subtle" size="xs" onClick={() => setShowGraph(v => !v)}>
-              {showGraph ? 'Hide Graph' : 'Show Graph'}
-            </Button>
-          </Group>
-          {showGraph && (
-            <RelationshipGraph
-              relationships={relationships}
-              securitySymbols={securitySymbolMap}
-              eventContracts={contracts}
-              events={[event]}
-              height={400}
-              onDelete={requestDeleteById}
-            />
-          )}
-        </Paper>
-      )}
+      <Paper withBorder p="md" mb="md">
+        <Title order={5} mb="sm">Relationships by unit</Title>
+        <EventRelationshipViews subjects={eventSubjects} securityIds={contractSecurityIds} />
+      </Paper>
 
     </Container>
   );

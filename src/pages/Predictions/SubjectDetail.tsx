@@ -29,6 +29,7 @@ import { errorMessage } from '../../utils/kill-switch';
 import { STORED_ROWS_NOTE, summarizeProposition } from '../../utils/propositions';
 import { EvidencePanel, FlagBadges, MergeSubjectModal, SubjectRef } from './PropositionParts';
 import { DerivedStatus } from './SubjectsList';
+import UnitViews from './relationships/UnitViews';
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
@@ -265,6 +266,15 @@ function SubjectDetail() {
         <Stack gap="xs">
           <Title order={4}>Contracts ({data.propositions.length})</Title>
           <MantineReactTable table={propositionTable} />
+        </Stack>
+
+        <Stack gap="xs">
+          <Title order={4}>Relationships by unit</Title>
+          <Text size="sm" c="dimmed">
+            Contracts in different units (snapshots at different times, deadlines on different events) never relate,
+            so each is shown on its own: a strike ladder as a table, anything else as a graph.
+          </Text>
+          <UnitViews propositions={data.propositions} relationships={data.relationships} />
         </Stack>
 
         <Stack gap="xs">
