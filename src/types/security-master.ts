@@ -246,6 +246,15 @@ export interface EventContract {
   settledAt: string | null;
 }
 
+// The rule a derived relationship came from and the proposition fields it compared, as the classifier wrote them
+// (snake_case keys).
+export interface RelationshipEvidence {
+  rule: string;
+  version: string;
+  a: Record<string, unknown>;
+  b: Record<string, unknown>;
+}
+
 export interface ContractRelationship {
   relationshipId: number;
   securityIdA: number;
@@ -253,9 +262,71 @@ export interface ContractRelationship {
   relationshipType: ContractRelationshipType;
   method: string;
   flags: string[];
+  evidence?: RelationshipEvidence | null;
+  derivationVersion?: string | null;
   dateCreated: string;
   symbolA?: string;
   symbolB?: string;
+}
+
+// What a proposition's contracts are about; duplicates are merged into a canonical subject.
+export interface PropositionSubject {
+  subjectId: number;
+  key: string;
+  description: string;
+  derivedAt: string | null;
+  dateCreated: string;
+  dateModified: string;
+  hasEmbedding: boolean;
+  canonicalSubjectId: number | null;
+  propositionCount: number;
+  similarity?: number;
+}
+
+export interface SubjectDuplicate {
+  similarity: number;
+  subjectId: number;
+  key: string;
+  description: string;
+  dateCreated: string;
+  propositionCount: number;
+  candidateSubjectId: number;
+  candidateKey: string;
+  candidateDescription: string;
+  candidateDateCreated: string;
+  candidatePropositionCount: number;
+}
+
+export interface SubjectMergeLogEntry {
+  mergeLogId: number;
+  action: 'MERGE' | 'UNMERGE';
+  aliasSubjectId: number;
+  aliasKey: string;
+  canonicalSubjectId: number;
+  canonicalKey: string;
+  actor: string;
+  propositionsMoved: number;
+  dateCreated: string;
+}
+
+// What one security asks, as the classifier extracted it; `fields` keeps the classifier's snake_case keys.
+export interface ContractProposition {
+  securityId: number;
+  subjectId: number;
+  extractedSubjectId: number;
+  fields: Record<string, unknown>;
+  method: 'VENUE' | 'LLM';
+  extractorVersion: string;
+  sourceHash: string;
+  dateCreated: string;
+  dateModified: string;
+  symbol?: string;
+  eventId?: number | null;
+  outcomeLabel?: string | null;
+  eventTitle?: string | null;
+  eventResolved?: boolean | null;
+  exchangeCode?: string | null;
+  exchangeSecurityId?: string | null;
 }
 
 export interface CreateContractRelationship {

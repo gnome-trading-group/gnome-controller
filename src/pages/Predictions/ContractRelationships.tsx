@@ -30,6 +30,8 @@ import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import RelationshipGraph from './RelationshipGraph';
 import CreateRelationshipModal from './CreateRelationshipModal';
+import { EvidencePanel, FlagBadges } from './PropositionParts';
+import { STORED_ROWS_NOTE } from '../../utils/propositions';
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
@@ -42,8 +44,7 @@ const RELATIONSHIP_TYPE_OPTIONS = [
 ];
 
 const METHOD_OPTIONS = [
-  { value: 'embedding', label: 'Embedding' },
-  { value: 'rule', label: 'Rule' },
+  { value: 'derived', label: 'Derived' },
   { value: 'manual', label: 'Manual' },
 ];
 
@@ -169,9 +170,7 @@ function ContractRelationships() {
       accessorKey: 'flags',
       header: 'Flags',
       size: 160,
-      Cell: ({ row }) => (row.original.flags ?? []).map(f => (
-        <Badge key={f} color="pink" variant="light" size="xs" mr={4}>{f.replace(/_/g, ' ').toLowerCase()}</Badge>
-      )),
+      Cell: ({ row }) => <FlagBadges flags={row.original.flags} />,
     },
     {
       accessorKey: 'method',
@@ -216,6 +215,13 @@ function ContractRelationships() {
     initialState: {
       density: 'xs',
     },
+    renderDetailPanel: ({ row }: { row: MRT_Row<ContractRelationship> }) => (
+      <EvidencePanel
+        evidence={row.original.evidence}
+        labelA={row.original.symbolA ?? `#${row.original.securityIdA}`}
+        labelB={row.original.symbolB ?? `#${row.original.securityIdB}`}
+      />
+    ),
     renderRowActions: ({ row }: { row: MRT_Row<ContractRelationship> }) => (
       <Tooltip label="Delete" position="left" withArrow openDelay={500}>
         <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); requestDelete(row.original.relationshipId); }}>
@@ -228,7 +234,10 @@ function ContractRelationships() {
   return (
     <Container size="xl" py="xl">
       <Group justify="space-between" mb="md">
-        <Title order={2}>Contract Relationships</Title>
+        <Stack gap={2}>
+          <Title order={2}>Contract Relationships</Title>
+          <Text size="sm" c="dimmed" maw={640}>{STORED_ROWS_NOTE}</Text>
+        </Stack>
         <Group>
           <Select
             placeholder="All Methods"

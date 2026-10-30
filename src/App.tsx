@@ -43,6 +43,8 @@ const ResearchJobDetail = lazy(() => import('./pages/Research/Jobs/ResearchJobDe
 const EventsList = lazy(() => import('./pages/Predictions/EventsList'));
 const EventDetail = lazy(() => import('./pages/Predictions/EventDetail'));
 const ContractRelationships = lazy(() => import('./pages/Predictions/ContractRelationships'));
+const SubjectsList = lazy(() => import('./pages/Predictions/SubjectsList'));
+const SubjectDetail = lazy(() => import('./pages/Predictions/SubjectDetail'));
 const SessionsList = lazy(() => import('./pages/Sessions/SessionsList'));
 const SessionDetail = lazy(() => import('./pages/Sessions/SessionDetail'));
 const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
@@ -212,6 +214,8 @@ function AppContent() {
                   <Route path="/predictions/events" element={<EventsList />} />
                   <Route path="/predictions/events/:eventId" element={<EventDetail />} />
                   <Route path="/predictions/relationships" element={<ContractRelationships />} />
+                  <Route path="/predictions/subjects" element={<SubjectsList />} />
+                  <Route path="/predictions/subjects/:subjectId" element={<SubjectDetail />} />
                   <Route path="/sessions" element={<SessionsList />} />
                   <Route path="/sessions/:sessionId" element={<SessionDetail />} />
                   <Route path="/launcher" element={<Launcher />} />

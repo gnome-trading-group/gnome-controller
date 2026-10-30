@@ -35,6 +35,8 @@ import { useLatestRequest } from '../../hooks/useLatestRequest';
 import { errorMessage } from '../../utils/kill-switch';
 import RelationshipGraph from './RelationshipGraph';
 import BulkCreateRelationshipModal from './BulkCreateRelationshipModal';
+import { EvidencePanel, FlagBadges } from './PropositionParts';
+import { STORED_ROWS_NOTE } from '../../utils/propositions';
 import { usePageTitleLabels } from '../../context/PageTitleContext';
 import { useTradedSessions } from '../../query/hooks';
 import { RunningSessionsBadge, TradedSessionsPanel } from '../../components/TradedSessions';
@@ -131,6 +133,7 @@ function EventDetail() {
   const beginRelationshipsRequest = useLatestRequest();
   const [listingsBySecurityId, setListingsBySecurityId] = useState<Record<number, DenormalizedListing[]>>({});
   const [showGraph, setShowGraph] = useState(false);
+  const [subjectBySecurityId, setSubjectBySecurityId] = useState<Record<number, { subjectId: number; key: string }>>({});
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
 
 
@@ -180,6 +183,22 @@ function EventDetail() {
     return () => { cancelled = true; };
   }, [id, beginRelationshipsRequest]);
 
+  const contractSecurityIds = useMemo(() => [...new Set(contracts.map(c => c.securityId))], [contracts]);
+  useEffect(() => {
+    if (contractSecurityIds.length === 0) return;
+    let cancelled = false;
+    registryApi.listSecurityPropositions(contractSecurityIds).then(async propositions => {
+      const subjectIds = [...new Set(propositions.map(p => p.subjectId))];
+      const subjects = subjectIds.length > 0 ? await registryApi.listPropositionSubjects({ subjectIds }) : [];
+      const keyOf = Object.fromEntries(subjects.map(s => [s.subjectId, s.key]));
+      if (cancelled) return;
+      setSubjectBySecurityId(Object.fromEntries(propositions.map(p =>
+        [p.securityId, { subjectId: p.subjectId, key: keyOf[p.subjectId] ?? `#${p.subjectId}` }])));
+    // The subject column is a pointer, not the page's content: without it the contracts still read fine.
+    }).catch(() => { if (!cancelled) setSubjectBySecurityId({}); });
+    return () => { cancelled = true; };
+  }, [contractSecurityIds]);
+
   const settledCount = contracts.filter(c => c.settlementPrice !== null && c.settlementPrice !== undefined).length;
 
   const tradedSessions = useTradedSessions({ eventId: id });
@@ -217,6 +236,19 @@ function EventDetail() {
     {
       accessorKey: 'outcomeLabel',
       header: 'Outcome',
+    },
+    {
+      id: 'subject',
+      header: 'Subject',
+      enableSorting: false,
+      Cell: ({ row }) => {
+        const subject = subjectBySecurityId[row.original.securityId];
+        return subject ? (
+          <Anchor component={Link} to={`/predictions/subjects/${subject.subjectId}`} size="sm" ff="monospace">
+            {subject.key}
+          </Anchor>
+        ) : <Text span size="sm" c="dimmed">—</Text>;
+      },
     },
     {
       accessorKey: 'settlementPrice',
@@ -270,7 +302,7 @@ function EventDetail() {
           <ReactTimeAgo date={new Date(row.original.dateCreated)} timeStyle="round" />
         ) : '-',
     },
-  ], [event?.exchangeId, sessionsBySecurityId]);
+  ], [event?.exchangeId, sessionsBySecurityId, subjectBySecurityId]);
 
   const requestDelete = (relationship: ContractRelationship) => {
     setDeleteError(null);
@@ -345,9 +377,7 @@ function EventDetail() {
       accessorKey: 'flags',
       header: 'Flags',
       size: 160,
-      Cell: ({ row }) => (row.original.flags ?? []).map(f => (
-        <Badge key={f} color="pink" variant="light" size="xs" mr={4}>{f.replace(/_/g, ' ').toLowerCase()}</Badge>
-      )),
+      Cell: ({ row }) => <FlagBadges flags={row.original.flags} />,
     },
     {
       accessorKey: 'method',
@@ -426,6 +456,13 @@ function EventDetail() {
     positionActionsColumn: 'last',
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     initialState: { density: 'xs', sorting: [{ id: 'relationshipType', desc: false }] },
+    renderDetailPanel: ({ row }: { row: MRT_Row<ContractRelationship> }) => (
+      <EvidencePanel
+        evidence={row.original.evidence}
+        labelA={row.original.symbolA ?? `#${row.original.securityIdA}`}
+        labelB={row.original.symbolB ?? `#${row.original.securityIdB}`}
+      />
+    ),
     renderRowActions: ({ row }: { row: MRT_Row<ContractRelationship> }) => (
       <Tooltip label="Delete" position="left" withArrow openDelay={500}>
         <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); requestDelete(row.original); }}>
@@ -596,7 +633,10 @@ function EventDetail() {
 
       <Paper withBorder p="md" mb="md">
         <Group justify="space-between" mb="sm">
-          <Title order={5}>Relationships ({relationships.length})</Title>
+          <Stack gap={2}>
+            <Title order={5}>Stored relationships ({relationships.length})</Title>
+            <Text size="xs" c="dimmed" maw={640}>{STORED_ROWS_NOTE}</Text>
+          </Stack>
           <Tooltip label="Bulk Create Relationships" position="left" withArrow openDelay={500}>
             <ActionIcon size="lg" variant="filled" color="green" onClick={openCreate}>
               <IconPlus size={20} />

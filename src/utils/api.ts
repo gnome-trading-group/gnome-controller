@@ -3,7 +3,7 @@ import {
   DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
   RuleType, TriggerEvaluation,
 } from '../types/launcher';
-import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope } from '../types';
+import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractProposition, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PropositionSubject, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope, SubjectDuplicate, SubjectMergeLogEntry } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
 import { BacktestRun } from '../types/backtests';
@@ -128,6 +128,9 @@ function convertObjectToCamelCase(obj: any, preserveKeys?: Set<string>): any {
 
   return obj;
 }
+
+// Classifier records whose keys are its own field names, shown as written.
+const PROPOSITION_DATA_KEYS = new Set(['fields', 'evidence']);
 
 // Pipeline payloads whose keys are data (parameter names, output names), so they keep their snake_case.
 const PIPELINE_DATA_KEYS = new Set(['paramsSchema', 'parameters', 'params', 'outputs']);
@@ -953,6 +956,7 @@ export const registryApi = {
     return sendApiRequest<ContractRelationship[]>('/contract-relationships', 'GET', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
+      preserveKeys: PROPOSITION_DATA_KEYS,
       queryParams,
     });
   },
@@ -989,15 +993,18 @@ export const registryApi = {
       queryParams,
     });
   },
-  listContractRelationships: (params?: { method?: string; relationshipType?: string; securityId?: number; eventId?: number }) => {
+  listContractRelationships: (params?: { method?: string; relationshipType?: string; securityId?: number; eventId?: number;
+    subjectId?: number }) => {
     const queryParams: Record<string, string | number | boolean> = { denormalize: true };
     if (params?.method) queryParams.method = params.method;
     if (params?.relationshipType) queryParams.relationshipType = params.relationshipType;
     if (params?.securityId !== undefined) queryParams.securityId = params.securityId;
     if (params?.eventId !== undefined) queryParams.eventId = params.eventId;
+    if (params?.subjectId !== undefined) queryParams.subjectId = params.subjectId;
     return sendApiRequest<ContractRelationship[]>('/contract-relationships', 'GET', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
+      preserveKeys: PROPOSITION_DATA_KEYS,
       queryParams,
     });
   },
@@ -1018,6 +1025,69 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
       body: { relationshipId },
+    }),
+  listPropositionSubjects: (params: { search?: string; canonical?: boolean; dirty?: boolean; subjectIds?: number[];
+    limit?: number; offset?: number }) => {
+    const queryParams: Record<string, string | number | boolean> = {};
+    if (params.search) queryParams.search = params.search;
+    if (params.canonical) queryParams.canonical = true;
+    if (params.dirty) queryParams.dirty = true;
+    if (params.subjectIds) queryParams.subjectIds = params.subjectIds.join(',');
+    if (params.limit !== undefined) queryParams.limit = params.limit;
+    if (params.offset !== undefined) queryParams.offset = params.offset;
+    return sendApiRequest<PropositionSubject[]>('/proposition-subjects', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams,
+    });
+  },
+  listSimilarSubjects: (subjectId: number, limit = 10) =>
+    sendApiRequest<PropositionSubject[]>('/proposition-subjects', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: { similarTo: subjectId, limit },
+    }),
+  listSubjectDuplicates: (params?: { minSimilarity?: number; limit?: number }) => {
+    const queryParams: Record<string, string | number | boolean> = { duplicates: true };
+    if (params?.minSimilarity !== undefined) queryParams.minSimilarity = params.minSimilarity;
+    if (params?.limit !== undefined) queryParams.limit = params.limit;
+    return sendApiRequest<SubjectDuplicate[]>('/proposition-subjects', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams,
+    });
+  },
+  listSubjectMergeHistory: (subjectId: number) =>
+    sendApiRequest<SubjectMergeLogEntry[]>('/proposition-subjects/merges', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: { subjectId, history: true },
+    }),
+  mergeSubjects: (fromSubjectId: number, intoSubjectId: number) =>
+    sendApiRequest<{ propositionsMoved: number }>('/proposition-subjects/merges', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      body: { fromSubjectId, intoSubjectId },
+    }),
+  unmergeSubject: (subjectId: number) =>
+    sendApiRequest<{ propositionsMoved: number }>('/proposition-subjects/merges', 'DELETE', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      body: { subjectId },
+    }),
+  listSubjectPropositions: (subjectId: number) =>
+    sendApiRequest<ContractProposition[]>('/contract-propositions', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      preserveKeys: PROPOSITION_DATA_KEYS,
+      queryParams: { subjectId, denormalize: true },
+    }),
+  listSecurityPropositions: (securityIds: number[]) =>
+    sendApiRequest<ContractProposition[]>('/contract-propositions', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      preserveKeys: PROPOSITION_DATA_KEYS,
+      queryParams: { securityIds: securityIds.join(',') },
     }),
 }
 
