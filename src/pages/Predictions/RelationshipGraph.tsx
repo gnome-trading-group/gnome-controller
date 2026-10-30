@@ -112,7 +112,7 @@ function RelationshipGraph({
         pathOptions: { curvature },
         data: {
           relationshipType: r.relationshipType,
-          confidence: r.confidence,
+          flags: r.flags ?? [],
           method: r.method,
         },
       };

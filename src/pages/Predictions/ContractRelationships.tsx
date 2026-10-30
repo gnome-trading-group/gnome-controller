@@ -34,15 +34,11 @@ import CreateRelationshipModal from './CreateRelationshipModal';
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
   IMPLIES: 'blue',
-  MUTUALLY_EXCLUSIVE: 'orange',
-  HEDGEABLE_WITH: 'violet',
 };
 
 const RELATIONSHIP_TYPE_OPTIONS = [
   { value: 'EQUIVALENT', label: 'Equivalent' },
   { value: 'IMPLIES', label: 'Implies' },
-  { value: 'MUTUALLY_EXCLUSIVE', label: 'Mutually Exclusive' },
-  { value: 'HEDGEABLE_WITH', label: 'Hedgeable With' },
 ];
 
 const METHOD_OPTIONS = [
@@ -57,7 +53,7 @@ function ContractRelationships() {
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const urlState = useUrlTableState({ defaultSort: { id: 'confidence', desc: true } });
+  const urlState = useUrlTableState({ defaultSort: { id: 'dateCreated', desc: true } });
   const methodFilter = urlState.getParam('method') || null;
   const typeFilter = urlState.getParam('type') || null;
   const showResolved = urlState.getParam('resolved') === 'true';
@@ -170,11 +166,12 @@ function ContractRelationships() {
       ),
     },
     {
-      accessorKey: 'confidence',
-      header: 'Confidence',
-      enableSorting: true,
-      size: 100,
-      Cell: ({ row }) => `${(row.original.confidence * 100).toFixed(0)}%`,
+      accessorKey: 'flags',
+      header: 'Flags',
+      size: 160,
+      Cell: ({ row }) => (row.original.flags ?? []).map(f => (
+        <Badge key={f} color="pink" variant="light" size="xs" mr={4}>{f.replace(/_/g, ' ').toLowerCase()}</Badge>
+      )),
     },
     {
       accessorKey: 'method',

@@ -134,6 +134,8 @@ export interface ShardStreamRow {
   cut: string | null;
   status: ShardStreamStatus | null;
   state: string;
+  // A session leases it, so the shard should be sending it.
+  leased: boolean;
 }
 
 /**
@@ -151,7 +153,9 @@ export function shardStreams(shard: CollectionShard, status: ShardTaskStatus | n
     else if (cutMinute === WARMING) role = 'warming';
     else if (cutMinute) role = 'taking over';
     const s = reported.get(streamId) ?? null;
-    return { streamId, role, cut: cutTime(cutMinute), status: s, state: s?.state ?? 'NONE' };
+    return {
+      streamId, role, cut: cutTime(cutMinute), status: s, state: s?.state ?? 'NONE', leased: shard.publish.includes(streamId),
+    };
   });
   // Covered streams are all fine; the rest by how bad their state is, an unknown one worst.
   const rank = (state: string) => {

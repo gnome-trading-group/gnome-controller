@@ -39,6 +39,7 @@ function ShardDetail() {
   const covered = rows.filter((r) => isCovered(r.state)).length;
   const reconnecting = (status?.connections ?? []).filter((c) => c.reconnecting).length;
   const handoffs = rows.filter((r) => r.role !== 'owned').length;
+  const dropped = rows.reduce((sum, r) => sum + (r.leased ? r.status?.dropped ?? 0 : 0), 0);
 
   return (
     <Container size="xl" py="xl">
@@ -77,11 +78,14 @@ function ShardDetail() {
       {detail.error && <Alert color="red" mb="md">{detail.error.message}</Alert>}
       {shard && (
         <Stack gap="lg" mt="md">
-          <SimpleGrid cols={{ base: 2, sm: 4, lg: 7 }}>
+          <SimpleGrid cols={{ base: 2, sm: 4, lg: 8 }}>
             <Kpi label="Streams" value={rows.length} footer={shard.draining.length ? `${shard.draining.length} draining` : undefined} />
             <Kpi label="Covered" value={<Text span inherit c={covered < rows.length ? 'orange' : undefined}>{covered}</Text>}
               footer={`of ${rows.length}`} hint="Live, suspect or empty: collected and trusted" />
             <Kpi label="Hand-offs" value={handoffs} hint="Streams warming, taking over or handing off at a cut" />
+            <Kpi label="To sessions" value={shard.publish.length}
+              hint="Streams a session leases, which the shard sends over Aeron"
+              footer={dropped ? <Text span size="xs" c="red">{dropped.toLocaleString()} dropped</Text> : undefined} />
             <Kpi label="Connections" value={status?.connections.length ?? '—'}
               footer={reconnecting ? <Text span size="xs" c="red">{reconnecting} reconnecting</Text> : undefined} />
             <Kpi label="Uploads queued" value={p.uploads_queued ?? '—'}

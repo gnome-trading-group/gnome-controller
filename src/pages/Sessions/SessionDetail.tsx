@@ -29,9 +29,10 @@ import { FillsTable, OrdersTable } from '../../components/trading/LedgerTables';
 import { StopSessionModal } from './StopSessionModal';
 import DeploySessionModal from './DeploySessionModal';
 import { SessionDetailsPanel } from './SessionDetailsPanel';
+import { SessionMarketData } from './SessionMarketData';
 
 const RANGES: Record<string, number | null> = { 'Since start': null, '1h': 3_600_000, '6h': 21_600_000, '24h': 86_400_000 };
-const TABS = ['positions', 'open', 'fills', 'orders', 'risk', 'logs', 'details'] as const;
+const TABS = ['positions', 'open', 'fills', 'orders', 'risk', 'market-data', 'logs', 'details'] as const;
 type Tab = typeof TABS[number];
 // The chart's views drawn per listing, which need the series' per-listing lines (asked for with byListing).
 const LISTING_VIEWS: ChartView[] = ['listings', 'position'];
@@ -270,6 +271,7 @@ function SessionDetail() {
               <Tabs.Tab value="fills">Fills</Tabs.Tab>
               <Tabs.Tab value="orders">Orders</Tabs.Tab>
               <Tabs.Tab value="risk">Risk</Tabs.Tab>
+              {session.mode === 'paper' && <Tabs.Tab value="market-data">Market data</Tabs.Tab>}
               {session.instanceId && <Tabs.Tab value="logs">Logs</Tabs.Tab>}
               <Tabs.Tab value="details">Config & compute</Tabs.Tab>
             </Tabs.List>
@@ -332,6 +334,9 @@ function SessionDetail() {
                 canKill={canKill}
                 onChanged={refreshAll}
               />
+            </Tabs.Panel>
+            <Tabs.Panel value="market-data">
+              <SessionMarketData sessionId={session.sessionId} live={live} />
             </Tabs.Panel>
             <Tabs.Panel value="logs">
               <ContainerLogs

@@ -75,6 +75,8 @@ export interface CollectionShard {
   generation: number;
   streams: number[];
   draining: number[];
+  // Streams a session leases (or released under 5 minutes ago), which the shard sends over Aeron.
+  publish: number[];
   // Stream id to cut minute; WARMING means collecting without writing yet.
   cuts: Record<string, number>;
   accounts: Record<string, string>;
@@ -105,6 +107,10 @@ export interface ShardStreamStatus {
   lastVerifiedNs: number;
   resyncs: number;
   records: number;
+  // Whether a session leases it, so the shard sends it over Aeron; and what reached or missed that publication.
+  published?: boolean;
+  offered?: number;
+  dropped?: number;
   failure?: string;
 }
 
@@ -181,4 +187,40 @@ export interface StreamCoverage {
   openGap: { fromNs: number; reason?: string } | null;
   targetState?: TargetState;
   coveredFraction: number;
+}
+
+// A session's lease on market-data streams (market-data collection/leases): where each stream is read from.
+export type LeasedStreamState = 'UNPLACED' | 'WARMING' | 'LIVE';
+
+export interface LeaseEndpoint {
+  privateIp: string;
+  port: number;
+}
+
+export interface LeasePlacement {
+  shardId: string | null;
+  state: string | null;
+  endpoint: LeaseEndpoint | null;
+}
+
+export interface LeasedStream {
+  streamId: number;
+  state: LeasedStreamState;
+  shardId: string | null;
+  endpoint: LeaseEndpoint | null;
+  // Where it is moving during a hand-off or roll; null otherwise.
+  next: LeasePlacement | null;
+}
+
+export interface SessionLease {
+  sessionId: string;
+  status: 'ACTIVE' | 'RELEASED';
+  mode: string;
+  priority: Priority;
+  // Epoch seconds; the reconciler extends it while the session runs.
+  expiresAt: number | null;
+  // Epoch seconds; null while ACTIVE.
+  releasedAt: number | null;
+  releaseReason: 'DELETED' | 'SESSION_ENDED' | 'EXPIRED' | null;
+  streams: LeasedStream[];
 }

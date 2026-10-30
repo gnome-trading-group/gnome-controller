@@ -11,7 +11,7 @@ const MIN = 60_000;
 const status = (writtenAtMs: number, streams: Partial<ShardStreamStatus>[] = []) =>
   ({ writtenAtNs: writtenAtMs * 1_000_000, streams, taskId: `t${writtenAtMs}` }) as unknown as ShardTaskStatus;
 const shard = (over: Partial<CollectionShard> = {}) =>
-  ({ shardId: 's', streams: [], draining: [], cuts: {}, state: 'ACTIVE', createdAtNs: 0, ...over }) as CollectionShard;
+  ({ shardId: 's', streams: [], draining: [], publish: [], cuts: {}, state: 'ACTIVE', createdAtNs: 0, ...over }) as CollectionShard;
 
 describe('parseStreamIds', () => {
   it('takes ids however they are separated, deduplicated and sorted', () => {
@@ -67,6 +67,11 @@ describe('shardStreams', () => {
       [3, 'taking over', 'STALE'], [5, 'draining', 'NONE'], [6, 'owned', 'REMOVING'],
       [1, 'owned', 'LIVE'], [2, 'warming', 'LIVE'], [4, 'handing off', 'LIVE'],
     ]);
+  });
+
+  it('marks the streams a session leases, owned or draining', () => {
+    const rows = shardStreams(shard({ streams: [1, 2], draining: [3], publish: [2, 3] }), null);
+    expect(rows.filter((r) => r.leased).map((r) => r.streamId)).toEqual([2, 3]);
   });
 });
 

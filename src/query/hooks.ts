@@ -49,6 +49,7 @@ export const keys = {
   collectionShards: (includeDeleted: boolean) => ['collection', 'shards', includeDeleted] as const,
   collectionShard: (shardId: string) => ['collection', 'shard', shardId] as const,
   shardLogs: (shardId: string, taskId: string) => ['collection', 'logs', shardId, taskId] as const,
+  sessionLease: (sessionId: string) => ['collection', 'lease', sessionId] as const,
   transfers: (accountId: number | null) => ['treasury', 'transfers', accountId] as const,
   recon: (accountId: number) => ['treasury', 'recon', accountId] as const,
   sessionAccounts: (sessionId: string) => ['sessionAccounts', sessionId] as const,
@@ -434,6 +435,15 @@ export function useCollectionShardDetails(shardIds: string[]) {
       queryFn: () => collectionApi.getShard(shardId),
       refetchInterval: COLLECTION_POLL,
     })),
+  });
+}
+
+// Polled only while the session runs; afterwards the lease no longer changes.
+export function useSessionLease(sessionId: string, live: boolean) {
+  return useQuery({
+    queryKey: keys.sessionLease(sessionId),
+    queryFn: () => collectionApi.getSessionLease(sessionId),
+    refetchInterval: live ? COLLECTION_POLL : false,
   });
 }
 

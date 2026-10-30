@@ -18,6 +18,27 @@ function Ago({ ns }: { ns: number | undefined }) {
   return date ? <ReactTimeAgo date={date} timeStyle="round" /> : <Text span size="sm" c="dimmed">—</Text>;
 }
 
+// What the shard sent a leased stream's sessions over Aeron, and what it couldn't (lapped or back-pressured).
+function Sent({ row }: { row: ShardStreamRow }) {
+  if (!row.leased) return <Text size="sm" c="dimmed">—</Text>;
+  const s = row.status;
+  if (!s?.published) {
+    return (
+      <Tooltip label="Leased, but the shard's newest status doesn't say it is sending it yet" withArrow>
+        <Badge size="sm" variant="light" color="blue">starting</Badge>
+      </Tooltip>
+    );
+  }
+  return (
+    <Tooltip label="Records sent to sessions · records dropped (sessions see drops as bad data)" withArrow>
+      <Text size="sm">
+        {(s.offered ?? 0).toLocaleString()}
+        {s.dropped ? <Text span size="sm" c="red"> · {s.dropped.toLocaleString()} dropped</Text> : null}
+      </Text>
+    </Tooltip>
+  );
+}
+
 interface Row extends ShardStreamRow {
   name: string;
 }
@@ -58,6 +79,11 @@ export function ShardStreamsTab({ rows, names }: { rows: ShardStreamRow[]; names
       id: 'resyncs', header: 'Resyncs', size: 90, enableColumnFilter: false, mantineTableBodyCellProps: { ta: 'right' },
       accessorFn: (r) => r.status?.resyncs ?? 0,
       Cell: ({ cell }) => <Text size="sm" c={cell.getValue<number>() ? 'orange' : undefined}>{cell.getValue<number>()}</Text>,
+    },
+    {
+      id: 'sessions', header: 'To sessions', size: 150, enableColumnFilter: false, mantineTableBodyCellProps: { ta: 'right' },
+      accessorFn: (r) => (r.leased ? r.status?.offered ?? 0 : -1),
+      Cell: ({ row }) => <Sent row={row.original} />,
     },
     {
       id: 'records', header: 'Records', size: 110, enableColumnFilter: false, mantineTableBodyCellProps: { ta: 'right' },

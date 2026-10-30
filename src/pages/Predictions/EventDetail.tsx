@@ -43,8 +43,6 @@ import { sessionListingIds } from '../../utils/session-config';
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
   IMPLIES: 'blue',
-  MUTUALLY_EXCLUSIVE: 'orange',
-  HEDGEABLE_WITH: 'violet',
 };
 
 function getExchangeSearchUrl(exchangeCode: string, query: string): string | null {
@@ -344,10 +342,12 @@ function EventDetail() {
       ),
     },
     {
-      accessorKey: 'confidence',
-      header: 'Confidence',
-      size: 100,
-      Cell: ({ row }) => `${(row.original.confidence * 100).toFixed(0)}%`,
+      accessorKey: 'flags',
+      header: 'Flags',
+      size: 160,
+      Cell: ({ row }) => (row.original.flags ?? []).map(f => (
+        <Badge key={f} color="pink" variant="light" size="xs" mr={4}>{f.replace(/_/g, ' ').toLowerCase()}</Badge>
+      )),
     },
     {
       accessorKey: 'method',
@@ -425,7 +425,7 @@ function EventDetail() {
     enableRowActions: true,
     positionActionsColumn: 'last',
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    initialState: { density: 'xs', sorting: [{ id: 'confidence', desc: true }] },
+    initialState: { density: 'xs', sorting: [{ id: 'relationshipType', desc: false }] },
     renderRowActions: ({ row }: { row: MRT_Row<ContractRelationship> }) => (
       <Tooltip label="Delete" position="left" withArrow openDelay={500}>
         <ActionIcon variant="subtle" color="red" onClick={e => { e.stopPropagation(); requestDelete(row.original); }}>

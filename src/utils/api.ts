@@ -3,7 +3,7 @@ import {
   DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
   RuleType, TriggerEvaluation,
 } from '../types/launcher';
-import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, CreateHedgeKeyword, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, HedgeKeyword, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope } from '../types';
+import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
 import { BacktestRun } from '../types/backtests';
@@ -17,7 +17,7 @@ import {
 import { MarketDataAccount, MarketDataKey } from '../types/credentials';
 import {
   CollectionRule, CollectionRuleType, CollectionShard, CollectionTarget, NewRule, RuleChange, RuleParameters, RulePreview,
-  RuleTypeSchema, ShardDetail, ShardLogs, StreamCoverage,
+  RuleTypeSchema, SessionLease, ShardDetail, ShardLogs, StreamCoverage,
 } from '../types/collection';
 import { SimulationParametersRow } from './simulation';
 
@@ -264,6 +264,14 @@ export const collectionApi = {
   getShard: (shardId: string) => sendApiRequest<ShardDetail>(`/collection/shards/${encodeURIComponent(shardId)}`, 'GET', {
     apiUrl: MARKET_DATA_API_URL, convertToCamelCase: true, preserveKeys: COLLECTION_DATA_KEYS,
   }),
+  // Null when the session never leased streams: it reads its own feeds.
+  getSessionLease: (sessionId: string) =>
+    sendApiRequest<SessionLease>(`/collection/leases/${encodeURIComponent(sessionId)}`, 'GET', {
+      apiUrl: MARKET_DATA_API_URL,
+    }).catch((error) => {
+      if (error instanceof ApiError && error.statusCode === 404) return null;
+      throw error;
+    }),
   getShardLogs: (shardId: string, region: string, taskId: string) =>
     sendApiRequest<ShardLogs>(`/collection/shards/${encodeURIComponent(shardId)}/logs`, 'GET', {
       apiUrl: MARKET_DATA_API_URL, queryParams: { region, taskId, limit: 300 },
@@ -1010,47 +1018,6 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
       body: { relationshipId },
-    }),
-  listHedgeKeywordsPaginated: (params: PaginationParams) => {
-    const queryParams: Record<string, string | number | boolean> = {};
-    if (params.limit !== undefined) queryParams.limit = params.limit;
-    if (params.offset !== undefined) queryParams.offset = params.offset;
-    if (params.sortBy) queryParams.sortBy = params.sortBy.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
-    if (params.sortOrder) queryParams.sortOrder = params.sortOrder;
-    Object.entries(params).forEach(([k, v]) => {
-      if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
-        queryParams[k] = v as string | number | boolean;
-      }
-    });
-    return sendApiRequest<HedgeKeyword[]>('/hedge-keywords', 'GET', {
-      apiUrl: REGISTRY_API_URL,
-      convertToCamelCase: true,
-      queryParams,
-    });
-  },
-  countHedgeKeywords: (params?: PaginationParams) => {
-    const queryParams: Record<string, string | number | boolean> = { count: true };
-    Object.entries(params ?? {}).forEach(([k, v]) => {
-      if (!['limit', 'offset', 'sortBy', 'sortOrder', 'search'].includes(k) && v !== undefined) {
-        queryParams[k] = v as string | number | boolean;
-      }
-    });
-    return sendApiRequest<{ count: number }>('/hedge-keywords', 'GET', {
-      apiUrl: REGISTRY_API_URL,
-      queryParams,
-    }).then(r => r.count);
-  },
-  createHedgeKeyword: (body: CreateHedgeKeyword) =>
-    sendApiRequest<HedgeKeyword>('/hedge-keywords', 'POST', {
-      apiUrl: REGISTRY_API_URL,
-      convertToCamelCase: true,
-      body,
-    }),
-  deleteHedgeKeyword: (hedgeKeywordId: number) =>
-    sendApiRequest<{ message: string }>('/hedge-keywords', 'DELETE', {
-      apiUrl: REGISTRY_API_URL,
-      convertToCamelCase: true,
-      body: { hedgeKeywordId },
     }),
 }
 

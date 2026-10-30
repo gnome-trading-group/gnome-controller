@@ -6,13 +6,11 @@ import { ContractRelationshipType } from '../../../types';
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
   IMPLIES: 'blue',
-  MUTUALLY_EXCLUSIVE: 'orange',
-  HEDGEABLE_WITH: 'violet',
 };
 
 export interface RelationshipEdgeData {
   relationshipType: ContractRelationshipType;
-  confidence: number;
+  flags: string[];
   method: string;
   [key: string]: unknown;
 }
@@ -62,9 +60,9 @@ function RelationshipEdge({
               color={color}
               variant="filled"
               style={{ cursor: 'default', opacity: 0.9 }}
-              title={`${edgeData.method} | ${(edgeData.confidence * 100).toFixed(0)}% confidence`}
+              title={[edgeData.method, ...edgeData.flags.map(f => f.replace(/_/g, ' ').toLowerCase())].join(' | ')}
             >
-              {edgeData.relationshipType.replace(/_/g, ' ')} {(edgeData.confidence * 100).toFixed(0)}%
+              {edgeData.relationshipType.replace(/_/g, ' ')}{edgeData.flags.length > 0 ? ' ⚑' : ''}
             </Badge>
           </div>
         </EdgeLabelRenderer>

@@ -6,7 +6,6 @@ import {
   Group,
   Loader,
   Modal,
-  NumberInput,
   Paper,
   ScrollArea,
   SegmentedControl,
@@ -25,15 +24,11 @@ import { errorMessage } from '../../utils/kill-switch';
 const RELATIONSHIP_TYPE_OPTIONS: { value: ContractRelationshipType; label: string }[] = [
   { value: 'EQUIVALENT', label: 'Equivalent' },
   { value: 'IMPLIES', label: 'Implies' },
-  { value: 'MUTUALLY_EXCLUSIVE', label: 'Mutually Exclusive' },
-  { value: 'HEDGEABLE_WITH', label: 'Hedgeable With' },
 ];
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
   EQUIVALENT: 'green',
   IMPLIES: 'blue',
-  MUTUALLY_EXCLUSIVE: 'orange',
-  HEDGEABLE_WITH: 'violet',
 };
 
 interface BulkCreateRelationshipModalProps {
@@ -138,7 +133,6 @@ function BulkCreateRelationshipModal({
   const [selectedB, setSelectedB] = useState<number[]>([]);
 
   const [relationshipType, setRelationshipType] = useState<ContractRelationshipType>('EQUIVALENT');
-  const [confidence, setConfidence] = useState<number>(0.9);
   const [bidirectional, setBidirectional] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
@@ -179,39 +173,39 @@ function BulkCreateRelationshipModal({
   const cartesianPreview = useMemo(() => {
     if (mode !== 'cartesian' || !relationshipType || selectedA.length === 0 || selectedB.length === 0) return [];
     const seen = new Set<string>();
-    const results: { securityIdA: number; securityIdB: number; symbolA: string; symbolB: string; relationshipType: ContractRelationshipType; confidence: number }[] = [];
+    const results: { securityIdA: number; securityIdB: number; symbolA: string; symbolB: string; relationshipType: ContractRelationshipType }[] = [];
     for (const a of selectedA) {
       for (const b of selectedB) {
         if (a === b) continue;
         if (!seen.has(`${a}-${b}`)) {
           seen.add(`${a}-${b}`);
-          results.push({ securityIdA: a, securityIdB: b, symbolA: contractSymbol(a, currentContracts), symbolB: contractSymbol(b, effectiveTargetContracts), relationshipType, confidence });
+          results.push({ securityIdA: a, securityIdB: b, symbolA: contractSymbol(a, currentContracts), symbolB: contractSymbol(b, effectiveTargetContracts), relationshipType });
         }
         if (bidirectional && !seen.has(`${b}-${a}`)) {
           seen.add(`${b}-${a}`);
-          results.push({ securityIdA: b, securityIdB: a, symbolA: contractSymbol(b, effectiveTargetContracts), symbolB: contractSymbol(a, currentContracts), relationshipType, confidence });
+          results.push({ securityIdA: b, securityIdB: a, symbolA: contractSymbol(b, effectiveTargetContracts), symbolB: contractSymbol(a, currentContracts), relationshipType });
         }
       }
     }
     return results;
-  }, [mode, selectedA, selectedB, relationshipType, confidence, bidirectional, currentContracts, effectiveTargetContracts]);
+  }, [mode, selectedA, selectedB, relationshipType, bidirectional, currentContracts, effectiveTargetContracts]);
 
   // 1:1 matching mode preview
   const matchingPreview = useMemo(() => {
     if (mode !== 'matching') return [];
-    const results: { securityIdA: number; securityIdB: number; symbolA: string; symbolB: string; relationshipType: ContractRelationshipType; confidence: number }[] = [];
+    const results: { securityIdA: number; securityIdB: number; symbolA: string; symbolB: string; relationshipType: ContractRelationshipType }[] = [];
     for (const contract of currentContracts) {
       const bId = pairings[contract.securityId];
       if (bId == null) continue;
       const symbolA = contractSymbol(contract.securityId, currentContracts);
       const symbolB = contractSymbol(bId, effectiveTargetContracts);
-      results.push({ securityIdA: contract.securityId, securityIdB: bId, symbolA, symbolB, relationshipType, confidence });
+      results.push({ securityIdA: contract.securityId, securityIdB: bId, symbolA, symbolB, relationshipType });
       if (bidirectional) {
-        results.push({ securityIdA: bId, securityIdB: contract.securityId, symbolA: symbolB, symbolB: symbolA, relationshipType, confidence });
+        results.push({ securityIdA: bId, securityIdB: contract.securityId, symbolA: symbolB, symbolB: symbolA, relationshipType });
       }
     }
     return results;
-  }, [mode, currentContracts, pairings, effectiveTargetContracts, relationshipType, confidence, bidirectional]);
+  }, [mode, currentContracts, pairings, effectiveTargetContracts, relationshipType, bidirectional]);
 
   const activePreview = mode === 'cartesian' ? cartesianPreview : matchingPreview;
 
@@ -227,7 +221,6 @@ function BulkCreateRelationshipModal({
     setTargetContracts([]);
     setSelectedB([]);
     setRelationshipType('EQUIVALENT');
-    setConfidence(0.9);
     setBidirectional(false);
     setError(null);
     onClose();
@@ -242,7 +235,6 @@ function BulkCreateRelationshipModal({
         securityIdA: p.securityIdA,
         securityIdB: p.securityIdB,
         relationshipType: p.relationshipType,
-        confidence: p.confidence,
         method: 'manual',
       }));
       await registryApi.createContractRelationshipsBulk(bodies);
@@ -375,15 +367,6 @@ function BulkCreateRelationshipModal({
             value={relationshipType}
             onChange={v => setRelationshipType((v ?? 'EQUIVALENT') as ContractRelationshipType)}
           />
-          <NumberInput
-            label="Confidence"
-            min={0}
-            max={1}
-            step={0.01}
-            decimalScale={2}
-            value={confidence}
-            onChange={v => setConfidence(typeof v === 'number' ? v : 0.9)}
-          />
           <Switch
             label="Both directions (A→B and B→A)"
             checked={bidirectional}
@@ -407,7 +390,6 @@ function BulkCreateRelationshipModal({
                     <Table.Th>Security A</Table.Th>
                     <Table.Th>Security B</Table.Th>
                     <Table.Th>Type</Table.Th>
-                    <Table.Th>Confidence</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -420,7 +402,6 @@ function BulkCreateRelationshipModal({
                           {p.relationshipType.replace(/_/g, ' ')}
                         </Badge>
                       </Table.Td>
-                      <Table.Td>{(p.confidence * 100).toFixed(0)}%</Table.Td>
                     </Table.Tr>
                   ))}
                 </Table.Tbody>

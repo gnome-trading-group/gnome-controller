@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Group, Modal, NumberInput, Select, Stack, Text } from '@mantine/core';
+import { Button, Group, Modal, Select, Stack, Text } from '@mantine/core';
 import { ContractRelationshipType, CreateContractRelationship } from '../../types';
 import { registryApi } from '../../utils/api';
 import { useSecuritySearch } from '../../hooks/useAsyncSearch';
@@ -7,8 +7,6 @@ import { useSecuritySearch } from '../../hooks/useAsyncSearch';
 const RELATIONSHIP_TYPE_OPTIONS: { value: ContractRelationshipType; label: string }[] = [
   { value: 'EQUIVALENT', label: 'Equivalent' },
   { value: 'IMPLIES', label: 'Implies' },
-  { value: 'MUTUALLY_EXCLUSIVE', label: 'Mutually Exclusive' },
-  { value: 'HEDGEABLE_WITH', label: 'Hedgeable With' },
 ];
 
 interface CreateRelationshipModalProps {
@@ -21,7 +19,6 @@ function CreateRelationshipModal({ opened, onClose, onCreated }: CreateRelations
   const [securityIdA, setSecurityIdA] = useState<number | null>(null);
   const [securityIdB, setSecurityIdB] = useState<number | null>(null);
   const [relationshipType, setRelationshipType] = useState<ContractRelationshipType | null>(null);
-  const [confidence, setConfidence] = useState<number>(0.9);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +31,6 @@ function CreateRelationshipModal({ opened, onClose, onCreated }: CreateRelations
     setSecurityIdA(null);
     setSecurityIdB(null);
     setRelationshipType(null);
-    setConfidence(0.9);
     setError(null);
     setSearchA('');
     setSearchB('');
@@ -57,7 +53,6 @@ function CreateRelationshipModal({ opened, onClose, onCreated }: CreateRelations
         securityIdA,
         securityIdB,
         relationshipType,
-        confidence,
         method: 'manual',
       };
       await registryApi.createContractRelationship(body);
@@ -101,15 +96,6 @@ function CreateRelationshipModal({ opened, onClose, onCreated }: CreateRelations
           data={RELATIONSHIP_TYPE_OPTIONS}
           value={relationshipType}
           onChange={v => setRelationshipType(v as ContractRelationshipType | null)}
-        />
-        <NumberInput
-          label="Confidence"
-          min={0}
-          max={1}
-          step={0.01}
-          decimalScale={2}
-          value={confidence}
-          onChange={v => setConfidence(typeof v === 'number' ? v : 0.9)}
         />
         {error && <Text c="red" size="sm">{error}</Text>}
         <Group justify="flex-end">

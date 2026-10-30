@@ -29,9 +29,7 @@ export enum AssetClass {
 
 export type ContractRelationshipType =
   | 'EQUIVALENT'
-  | 'IMPLIES'
-  | 'MUTUALLY_EXCLUSIVE'
-  | 'HEDGEABLE_WITH';
+  | 'IMPLIES';
 
 export interface Security {
   securityId: number;
@@ -253,8 +251,8 @@ export interface ContractRelationship {
   securityIdA: number;
   securityIdB: number;
   relationshipType: ContractRelationshipType;
-  confidence: number;
   method: string;
+  flags: string[];
   dateCreated: string;
   symbolA?: string;
   symbolB?: string;
@@ -264,20 +262,7 @@ export interface CreateContractRelationship {
   securityIdA: number;
   securityIdB: number;
   relationshipType: ContractRelationshipType;
-  confidence: number;
   method: string;
 }
 
-export interface HedgeKeyword {
-  hedgeKeywordId: number;
-  securityId: number;
-  keyword: string;
-  securitySymbol?: string;
-  dateModified: string;
-  dateCreated: string;
-}
 
-export interface CreateHedgeKeyword {
-  securityId: number;
-  keyword: string;
-}
