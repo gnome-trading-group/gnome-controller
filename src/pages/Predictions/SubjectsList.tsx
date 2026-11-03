@@ -23,37 +23,22 @@ import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
-import { PropositionSubject, SubjectDuplicate } from '../../types';
+import { PropositionSubject, SubjectMergeCandidate } from '../../types';
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
-import { subjectPairKey } from '../../utils/propositions';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
-import { MergeSubjectModal, SubjectRef } from './PropositionParts';
 
 const PAGE_LIMIT = 500;
-const DISMISSED_STORAGE_KEY = 'subjects.dismissedDuplicates';
-const SIMILARITY_OPTIONS = [
-  { value: '0.85', label: '≥ 85% similar' },
-  { value: '0.9', label: '≥ 90% similar' },
-  { value: '0.95', label: '≥ 95% similar' },
+const QUEUE_STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'MERGED', label: 'Merged' },
+  { value: 'DISMISSED', label: 'Dismissed' },
+  { value: 'ALL', label: 'All' },
 ];
-
-// Dismissals are a reviewer's own convenience, so they live in this browser only.
-function loadDismissed(): Set<string> {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(DISMISSED_STORAGE_KEY) ?? '[]') as string[]);
-  } catch {
-    return new Set();
-  }
-}
-
-function saveDismissed(dismissed: Set<string>) {
-  try {
-    localStorage.setItem(DISMISSED_STORAGE_KEY, JSON.stringify([...dismissed]));
-  } catch {
-    // Storage blocked: dismissals last until the page reloads.
-  }
-}
+const HOLD_LABELS: Record<SubjectMergeCandidate['hold'], string> = {
+  PRICE: 'prices disagree',
+  COLLISION: 'outcomes collide',
+};
 
 export function DerivedStatus({ subject }: { subject: Pick<PropositionSubject, 'derivedAt' | 'dateModified'> }) {
   if (!subject.derivedAt || new Date(subject.dateModified) > new Date(subject.derivedAt)) {
@@ -164,106 +149,136 @@ function SubjectsTable() {
   );
 }
 
-function DuplicatesReview() {
-  const [minSimilarity, setMinSimilarity] = useState('0.9');
-  const [pairs, setPairs] = useState<SubjectDuplicate[]>([]);
+function SubjectLink({ id, subjectKey }: { id: number; subjectKey: string }) {
+  return <Anchor component={Link} to={`/predictions/subjects/${id}`} size="sm" ff="monospace">{subjectKey}</Anchor>;
+}
+
+function HoldDetails({ candidate }: { candidate: SubjectMergeCandidate }) {
+  const { prices, collisions, entityMap } = candidate.details;
+  return (
+    <Stack gap={2}>
+      {(prices ?? []).slice(0, 3).map(p => (
+        <Text key={`${p.securityIdA}-${p.securityIdB}`} size="xs">
+          {p.relationshipType === 'EQUIVALENT' ? '≡' : '⇒'}{' '}
+          <Anchor component={Link} to={`/security-master/securities/${p.securityIdA}`} size="xs">{p.securityIdA}</Anchor>
+          {' '}at {p.midA.toFixed(2)} vs{' '}
+          <Anchor component={Link} to={`/security-master/securities/${p.securityIdB}`} size="xs">{p.securityIdB}</Anchor>
+          {' '}at {p.midB.toFixed(2)}
+        </Text>
+      ))}
+      {(prices?.length ?? 0) > 3 && <Text size="xs" c="dimmed">and {prices!.length - 3} more</Text>}
+      {Object.entries(collisions ?? {}).map(([eventId, ids]) => (
+        <Text key={eventId} size="xs">event {eventId}: securities {ids.join(', ')} would read alike</Text>
+      ))}
+      {(entityMap?.length ?? 0) > 0 && (
+        <Text size="xs" c="dimmed">renames {entityMap!.map(([keep, alias]) => `${alias} → ${keep}`).join(', ')}</Text>
+      )}
+    </Stack>
+  );
+}
+
+function MergeQueue() {
+  const [status, setStatus] = useState<string>('PENDING');
+  const [rows, setRows] = useState<SubjectMergeCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState<Set<string>>(loadDismissed);
-  const [merge, setMerge] = useState<{ from: SubjectRef; into: SubjectRef } | null>(null);
+  const [deciding, setDeciding] = useState<number | null>(null);
 
   const load = useCallback(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    registryApi.listSubjectDuplicates({ minSimilarity: Number(minSimilarity) })
-      .then(rows => { if (!cancelled) setPairs(rows); })
-      .catch(e => { if (!cancelled) setError(errorMessage(e, 'Failed to load likely duplicates')); })
+    registryApi.listSubjectMergeCandidates(status as SubjectMergeCandidate['status'] | 'ALL')
+      .then(r => { if (!cancelled) setRows(r); })
+      .catch(e => { if (!cancelled) setError(errorMessage(e, 'Failed to load the merge queue')); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [minSimilarity]);
+  }, [status]);
 
   useEffect(load, [load]);
 
-  const dismiss = (pair: SubjectDuplicate) => {
-    const next = new Set(dismissed).add(subjectPairKey(pair.subjectId, pair.candidateSubjectId));
-    setDismissed(next);
-    saveDismissed(next);
+  const decide = (candidate: SubjectMergeCandidate, decision: 'MERGED' | 'DISMISSED') => {
+    setDeciding(candidate.candidateId);
+    setError(null);
+    registryApi.decideSubjectMergeCandidate(candidate.candidateId, decision)
+      .then(load)
+      .catch(e => setError(errorMessage(e, decision === 'MERGED' ? 'Merge failed' : 'Dismiss failed')))
+      .finally(() => setDeciding(null));
   };
-
-  const visible = pairs.filter(p => !dismissed.has(subjectPairKey(p.subjectId, p.candidateSubjectId)));
-  const refOf = (p: SubjectDuplicate, candidate: boolean): SubjectRef => candidate
-    ? { subjectId: p.candidateSubjectId, key: p.candidateKey, propositionCount: p.candidatePropositionCount }
-    : { subjectId: p.subjectId, key: p.key, propositionCount: p.propositionCount };
-
-  const subjectCell = (id: number, key: string, description: string, count: number) => (
-    <Stack gap={2}>
-      <Anchor component={Link} to={`/predictions/subjects/${id}`} size="sm" ff="monospace">{key}</Anchor>
-      <Text size="xs" c="dimmed">{description || 'No description'} · {count} contract{count === 1 ? '' : 's'}</Text>
-    </Stack>
-  );
 
   return (
     <Stack>
       <Group>
-        <Select data={SIMILARITY_OPTIONS} value={minSimilarity} onChange={v => v && setMinSimilarity(v)}
-          allowDeselect={false} style={{ width: 180 }} />
+        <Select data={QUEUE_STATUS_OPTIONS} value={status} onChange={v => v && setStatus(v)} allowDeselect={false}
+          style={{ width: 160 }} />
         <Tooltip label="Refresh" withArrow openDelay={500}>
           <ActionIcon size="lg" variant="filled" color="green" onClick={load} loading={loading}>
             <IconRefresh size={20} />
           </ActionIcon>
         </Tooltip>
-        {dismissed.size > 0 && (
-          <Button variant="subtle" size="xs" onClick={() => { setDismissed(new Set()); saveDismissed(new Set()); }}>
-            Show {dismissed.size} dismissed
-          </Button>
-        )}
       </Group>
       <Text size="sm" c="dimmed">
-        The newest subjects, each with its closest other subject by embedding. Merge when both name the same thing;
-        dismissing only hides a pair in this browser.
+        Merges the classifier judged right but did not make: two venues' prices for a relationship the merge adds
+        disagree, or two outcomes of one event would read alike. Merge when the prices are wrong (a stale or one-sided
+        book) and the subjects really are the same; otherwise mark them not the same, and they won't come back.
       </Text>
       {error && <Alert color="red" title="Error">{error}</Alert>}
       <Paper withBorder>
         <Table striped highlightOnHover withColumnBorders>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th style={{ width: 90 }}>Similarity</Table.Th>
-              <Table.Th>Subject</Table.Th>
-              <Table.Th>Candidate</Table.Th>
-              <Table.Th style={{ width: 300 }} />
+              <Table.Th>Merge</Table.Th>
+              <Table.Th style={{ width: 70 }}>Adds</Table.Th>
+              <Table.Th>Why the judge says they're the same</Table.Th>
+              <Table.Th>Held because</Table.Th>
+              <Table.Th style={{ width: 220 }} />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {visible.length === 0 && (
+            {rows.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={4}>
-                  <Text size="sm" c="dimmed" ta="center" py="md">{loading ? 'Loading…' : 'No likely duplicates.'}</Text>
+                <Table.Td colSpan={5}>
+                  <Text size="sm" c="dimmed" ta="center" py="md">{loading ? 'Loading…' : 'Nothing in the queue.'}</Text>
                 </Table.Td>
               </Table.Tr>
             )}
-            {visible.map(p => (
-              <Table.Tr key={subjectPairKey(p.subjectId, p.candidateSubjectId)}>
-                <Table.Td>{(p.similarity * 100).toFixed(1)}%</Table.Td>
-                <Table.Td>{subjectCell(p.subjectId, p.key, p.description, p.propositionCount)}</Table.Td>
-                <Table.Td>{subjectCell(p.candidateSubjectId, p.candidateKey, p.candidateDescription, p.candidatePropositionCount)}</Table.Td>
+            {rows.map(c => (
+              <Table.Tr key={c.candidateId}>
                 <Table.Td>
-                  <Group gap={6} wrap="nowrap">
-                    <Button size="compact-xs" variant="light" onClick={() => setMerge({ from: refOf(p, true), into: refOf(p, false) })}>
-                      Merge into {p.key}
-                    </Button>
-                    <Button size="compact-xs" variant="light" onClick={() => setMerge({ from: refOf(p, false), into: refOf(p, true) })}>
-                      Merge into {p.candidateKey}
-                    </Button>
-                    <Button size="compact-xs" variant="subtle" color="gray" onClick={() => dismiss(p)}>Dismiss</Button>
-                  </Group>
+                  <Stack gap={2}>
+                    <SubjectLink id={c.aliasSubjectId} subjectKey={c.aliasKey} />
+                    <Text size="xs" c="dimmed">into</Text>
+                    <SubjectLink id={c.canonicalSubjectId} subjectKey={c.canonicalKey} />
+                  </Stack>
+                </Table.Td>
+                <Table.Td>{c.gain}</Table.Td>
+                <Table.Td><Text size="sm">{c.reason}</Text></Table.Td>
+                <Table.Td>
+                  <Stack gap={4}>
+                    <Badge color={c.hold === 'PRICE' ? 'orange' : 'red'} variant="light" size="sm">{HOLD_LABELS[c.hold]}</Badge>
+                    <HoldDetails candidate={c} />
+                  </Stack>
+                </Table.Td>
+                <Table.Td>
+                  {c.status === 'PENDING' ? (
+                    <Group gap={6} wrap="nowrap">
+                      <Button size="compact-xs" variant="light" loading={deciding === c.candidateId}
+                        onClick={() => decide(c, 'MERGED')}>Merge</Button>
+                      <Button size="compact-xs" variant="subtle" color="gray" disabled={deciding === c.candidateId}
+                        onClick={() => decide(c, 'DISMISSED')}>Not the same</Button>
+                    </Group>
+                  ) : (
+                    <Text size="xs" c="dimmed">
+                      {c.status === 'MERGED' ? 'Merged' : 'Dismissed'} by {c.decidedBy}
+                      {c.decidedAt && <> <ReactTimeAgo date={new Date(c.decidedAt)} timeStyle="round" /></>}
+                    </Text>
+                  )}
                 </Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
         </Table>
       </Paper>
-      <MergeSubjectModal from={merge?.from ?? null} into={merge?.into ?? null} onClose={() => setMerge(null)} onMerged={load} />
     </Stack>
   );
 }
@@ -282,10 +297,10 @@ function SubjectsList() {
       <Tabs value={tab} onChange={v => urlState.setParam('tab', v === 'subjects' ? '' : v ?? '')}>
         <Tabs.List mb="md">
           <Tabs.Tab value="subjects">Subjects</Tabs.Tab>
-          <Tabs.Tab value="duplicates">Likely duplicates</Tabs.Tab>
+          <Tabs.Tab value="queue">Merge queue</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="subjects"><SubjectsTable /></Tabs.Panel>
-        <Tabs.Panel value="duplicates"><DuplicatesReview /></Tabs.Panel>
+        <Tabs.Panel value="queue"><MergeQueue /></Tabs.Panel>
       </Tabs>
     </Container>
   );

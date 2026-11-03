@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evidenceRows, formatFieldValue, subjectPairKey, summarizeProposition } from './propositions';
+import { evidenceRows, formatFieldValue, summarizeProposition } from './propositions';
 
 describe('a proposition in one line', () => {
   it('reads a price threshold at a time with its source', () => {
@@ -52,11 +52,5 @@ describe('field values', () => {
     expect(formatFieldValue('comparator', 'LTE')).toBe('≤');
     expect(formatFieldValue('unknown', [])).toBe('—');
     expect(formatFieldValue('window_end', '2026-10-30T16:30:00-04:00')).toBe('2026-10-30 20:30Z');
-  });
-});
-
-describe('subject pairs', () => {
-  it('are the same whichever subject comes first', () => {
-    expect(subjectPairKey(7, 3)).toBe(subjectPairKey(3, 7));
   });
 });

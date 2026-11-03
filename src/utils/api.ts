@@ -3,7 +3,7 @@ import {
   DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
   RuleType, TriggerEvaluation,
 } from '../types/launcher';
-import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractProposition, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PropositionSubject, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope, SubjectDuplicate, SubjectMergeLogEntry } from '../types';
+import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractProposition, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PropositionSubject, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope, SubjectMergeCandidate, SubjectMergeLogEntry } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
 import { BacktestRun } from '../types/backtests';
@@ -1047,16 +1047,6 @@ export const registryApi = {
       convertToCamelCase: true,
       queryParams: { similarTo: subjectId, limit },
     }),
-  listSubjectDuplicates: (params?: { minSimilarity?: number; limit?: number }) => {
-    const queryParams: Record<string, string | number | boolean> = { duplicates: true };
-    if (params?.minSimilarity !== undefined) queryParams.minSimilarity = params.minSimilarity;
-    if (params?.limit !== undefined) queryParams.limit = params.limit;
-    return sendApiRequest<SubjectDuplicate[]>('/proposition-subjects', 'GET', {
-      apiUrl: REGISTRY_API_URL,
-      convertToCamelCase: true,
-      queryParams,
-    });
-  },
   listSubjectMergeHistory: (subjectId: number) =>
     sendApiRequest<SubjectMergeLogEntry[]>('/proposition-subjects/merges', 'GET', {
       apiUrl: REGISTRY_API_URL,
@@ -1068,6 +1058,18 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
       body: { fromSubjectId, intoSubjectId },
+    }),
+  listSubjectMergeCandidates: (status: SubjectMergeCandidate['status'] | 'ALL' = 'PENDING') =>
+    sendApiRequest<SubjectMergeCandidate[]>('/proposition-subjects/merge-candidates', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: { status },
+    }),
+  decideSubjectMergeCandidate: (candidateId: number, status: 'MERGED' | 'DISMISSED') =>
+    sendApiRequest<SubjectMergeCandidate>('/proposition-subjects/merge-candidates', 'PATCH', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      body: { candidateId, status },
     }),
   unmergeSubject: (subjectId: number) =>
     sendApiRequest<{ propositionsMoved: number }>('/proposition-subjects/merges', 'DELETE', {

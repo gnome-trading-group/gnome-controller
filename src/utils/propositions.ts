@@ -100,7 +100,3 @@ export function evidenceRows(evidence: RelationshipEvidence): EvidenceRow[] {
   });
 }
 
-/** An unordered pair of subjects, so a dismissed duplicate stays dismissed whichever side is listed first. */
-export function subjectPairKey(a: number, b: number): string {
-  return a < b ? `${a}-${b}` : `${b}-${a}`;
-}

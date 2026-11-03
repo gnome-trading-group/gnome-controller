@@ -283,18 +283,27 @@ export interface PropositionSubject {
   similarity?: number;
 }
 
-export interface SubjectDuplicate {
-  similarity: number;
-  subjectId: number;
-  key: string;
-  description: string;
+// A subject merge the classifier judged right but held back for a person: two venues' prices for a relationship it
+// would add disagree (PRICE), or two outcomes of one event would read alike (COLLISION).
+export interface SubjectMergeCandidate {
+  candidateId: number;
+  aliasSubjectId: number;
+  aliasKey: string;
+  canonicalSubjectId: number;
+  canonicalKey: string;
+  hold: 'PRICE' | 'COLLISION';
+  reason: string;
+  gain: number;
+  details: {
+    prices?: { securityIdA: number; securityIdB: number; relationshipType: string; midA: number; midB: number }[];
+    collisions?: Record<string, number[]>;
+    entityMap?: [string, string][];
+  };
+  status: 'PENDING' | 'MERGED' | 'DISMISSED';
+  decidedBy: string | null;
+  decidedAt: string | null;
   dateCreated: string;
-  propositionCount: number;
-  candidateSubjectId: number;
-  candidateKey: string;
-  candidateDescription: string;
-  candidateDateCreated: string;
-  candidatePropositionCount: number;
+  dateModified: string;
 }
 
 export interface SubjectMergeLogEntry {
