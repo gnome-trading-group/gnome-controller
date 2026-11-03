@@ -14,7 +14,7 @@ import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-prob
 import {
   AccountConfigUpdate, AccountStatus, AccountStatusChange, CreateAccountRequest, CreatedAccount, DeletedSecrets, UpdateCredentialsRequest, ManualSnapshot, ReconDetail, SessionAccount, Transfer, TransferKind, TreasurySummary, VenueAccount,
 } from '../types/treasury';
-import { MarketDataAccount, MarketDataKey } from '../types/credentials';
+import { MarketDataAccount } from '../types/credentials';
 import {
   CollectionRule, CollectionRuleType, CollectionShard, CollectionTarget, NewRule, RuleChange, RuleParameters, RulePreview,
   RuleTypeSchema, SessionLease, ShardDetail, ShardLogs, StreamCoverage,
@@ -809,13 +809,6 @@ export const registryApi = {
       convertToCamelCase: true,
       preserveKeys: new Set(['venueRef']),
       body: request,
-    }),
-  listMarketDataKeys: () =>
-    sendApiRequest<MarketDataKey[]>('/market-data-keys', 'GET', { apiUrl: REGISTRY_API_URL }),
-  setMarketDataKey: (exchangeCode: string, credentials: Record<string, string>) =>
-    sendApiRequest<MarketDataKey>('/market-data-keys', 'POST', {
-      apiUrl: REGISTRY_API_URL,
-      body: { exchangeCode, credentials },
     }),
   listMarketDataAccounts: () =>
     sendApiRequest<MarketDataAccount[]>('/market-data-accounts', 'GET', { apiUrl: REGISTRY_API_URL, convertToCamelCase: true }),

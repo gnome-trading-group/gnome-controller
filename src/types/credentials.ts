@@ -1,6 +1,6 @@
-// The per-exchange keys market data signs in with (registry /market-data-keys). Only metadata: Secrets Manager holds
-// the keys, and the registry never returns them.
-export interface MarketDataKeyReplica {
+// What the registry says about a market-data account's key. Only metadata: Secrets Manager holds the keys, and the
+// registry never returns them.
+export interface SecretReplica {
   region: string;
   status: 'InSync' | 'InProgress' | 'Failed' | 'Missing' | string;
   message: string | null;
@@ -13,12 +13,8 @@ export interface SecretStatus {
   apiKeyId: string | null;
   updatedBy: string | null;
   lastChangedAt: string | null;
-  replicas: MarketDataKeyReplica[];
+  replicas: SecretReplica[];
   inSync: boolean;
-}
-
-export interface MarketDataKey extends SecretStatus {
-  exchangeCode: string;
 }
 
 // A dedicated market-data account a source's shards collect with (registry /market-data-accounts): the registry's

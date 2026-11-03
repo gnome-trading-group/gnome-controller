@@ -3,10 +3,9 @@ import { Alert, Badge, Button, Code, Container, Group, Stack, Table, Text, Title
 import { useQueryClient } from '@tanstack/react-query';
 import ReactTimeAgo from 'react-time-ago';
 import { useGlobalState } from '../../../context/GlobalStateContext';
-import { keys, useMarketDataAccounts, useMarketDataKeys } from '../../../query/hooks';
-import { MarketDataAccount, MarketDataKey, SecretStatus } from '../../../types/credentials';
+import { keys, useMarketDataAccounts } from '../../../query/hooks';
+import { MarketDataAccount, SecretStatus } from '../../../types/credentials';
 import { KEY_SYNC_LABELS, keySync, SIGNED_SOURCES } from '../../../utils/credentials';
-import { SetMarketDataKeyModal } from './SetMarketDataKeyModal';
 import { AccountTarget, SetMarketDataAccountModal } from './SetMarketDataAccountModal';
 import { EditMarketDataAccountModal } from './EditMarketDataAccountModal';
 import { SkeletonRows } from '../../../components/SkeletonRows';
@@ -120,62 +119,20 @@ function CollectionAccounts({ nameOf }: { nameOf: (code: string) => string }) {
   );
 }
 
-// The keys market data signs in with. Shards use collection's own accounts; sessions still use one key per exchange
-// that requires one, in every region, until they read their data from shards. Venue accounts' own keys live on the
-// Treasury page.
+// The keys market data signs in with: collection's own accounts, which every shard collects with; sessions read their
+// data from shards and hold no key. Venue accounts' own keys live on the Treasury page.
 function Credentials() {
-  const queryClient = useQueryClient();
   const { exchanges } = useGlobalState();
-  const marketDataKeys = useMarketDataKeys();
-  const [target, setTarget] = useState<MarketDataKey | null>(null);
   const nameOf = (code: string) => exchanges.find((e) => e.exchangeCode === code)?.exchangeName ?? code;
 
   return (
     <Container size="xl" py="xl">
       <Title order={2} mb="xs">Credentials</Title>
       <Text size="sm" c="dimmed" mb="md">
-        Every shard and session reads its own region&apos;s copy of a key, so a key works everywhere only once all
-        three regions hold it. Polymarket International, Hyperliquid and Lighter need none.
+        Every shard reads its own region&apos;s copy of a key, so a key works everywhere only once all three regions
+        hold it. Polymarket International, Hyperliquid and Lighter need none.
       </Text>
       <CollectionAccounts nameOf={nameOf} />
-      <Title order={3} mb="xs">Session keys</Title>
-      <Text size="sm" c="dimmed" mb="md">
-        One per exchange, used by every session (paper and live) for its market data until sessions read it from shards.
-      </Text>
-      {marketDataKeys.error && <Alert color="red" mb="md">{marketDataKeys.error.message}</Alert>}
-      <Table striped withTableBorder withColumnBorders>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Exchange</Table.Th>
-            <Table.Th>Secret</Table.Th>
-            <Table.Th>Key id</Table.Th>
-            <Table.Th>Regions</Table.Th>
-            <Table.Th>Set by</Table.Th>
-            <Table.Th />
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {(marketDataKeys.data ?? []).map((k) => (
-            <Table.Tr key={k.exchangeCode}>
-              <Table.Td>
-                <Text size="sm" fw={600}>{nameOf(k.exchangeCode)}</Text>
-              </Table.Td>
-              <Table.Td><Code>{k.secretName}</Code></Table.Td>
-              <Table.Td>{k.apiKeyId ? <Code>{k.apiKeyId.slice(0, 8)}…</Code> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
-              <Table.Td><Regions marketDataKey={k} /></Table.Td>
-              <Table.Td><SetBy secret={k} /></Table.Td>
-              <Table.Td>
-                <Group justify="flex-end">
-                  <Button size="xs" variant="light" onClick={() => setTarget(k)}>{k.exists ? 'Replace key' : 'Set key'}</Button>
-                </Group>
-              </Table.Td>
-            </Table.Tr>
-          ))}
-          {marketDataKeys.isLoading && <SkeletonRows cols={6} />}
-        </Table.Tbody>
-      </Table>
-      <SetMarketDataKeyModal target={target} exchangeName={target ? nameOf(target.exchangeCode) : ''}
-        onClose={() => setTarget(null)} onSaved={() => queryClient.invalidateQueries({ queryKey: keys.marketDataKeys })} />
     </Container>
   );
 }

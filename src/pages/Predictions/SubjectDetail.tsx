@@ -160,7 +160,7 @@ function SubjectDetail() {
     renderDetailPanel: ({ row }: { row: MRT_Row<ContractProposition> }) => (
       <Table withColumnBorders fz="sm" style={{ maxWidth: 600 }}>
         <Table.Tbody>
-          {Object.entries(row.original.fields).map(([k, v]) => (
+          {Object.entries(row.original.fields ?? {}).map(([k, v]) => (
             <Table.Tr key={k}>
               <Table.Td><Text size="sm" ff="monospace">{k}</Text></Table.Td>
               <Table.Td>{v === null || v === undefined ? '—' : Array.isArray(v) ? v.join(', ') || '—' : String(v)}</Table.Td>

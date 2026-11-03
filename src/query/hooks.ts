@@ -41,7 +41,6 @@ export const keys = {
   orders: (scope: LedgerScope, status: string) => ['ledgerOrders', scope, status] as const,
   venueAccounts: ['venueAccounts'] as const,
   treasury: ['treasury'] as const,
-  marketDataKeys: ['marketDataKeys'] as const,
   marketDataAccounts: ['marketDataAccounts'] as const,
   collectionRules: ['collection', 'rules'] as const,
   collectionRuleTypes: ['collection', 'rule-types'] as const,
@@ -474,10 +473,6 @@ export function useStreamNames(ids: number[]) {
     enabled: sorted.length > 0,
     staleTime: 10 * 60_000,
   });
-}
-
-export function useMarketDataKeys() {
-  return useQuery({ queryKey: keys.marketDataKeys, queryFn: () => registryApi.listMarketDataKeys(), refetchInterval: 60_000 });
 }
 
 export function useTreasurySummary() {

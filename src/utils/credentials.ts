@@ -1,9 +1,9 @@
-import { MarketDataKey, SecretStatus } from '../types/credentials';
+import { SecretStatus } from '../types/credentials';
 
 export type KeySync = 'synced' | 'syncing' | 'out-of-sync' | 'not-set';
 
-// Every session and collector in a region reads that region's copy, so a key is only usable everywhere once each
-// replica holds the current value.
+// Every shard in a region reads that region's copy, so a key is only usable everywhere once each replica holds the
+// current value.
 export function keySync(key: SecretStatus): KeySync {
   if (!key.exists) return 'not-set';
   if (key.inSync) return 'synced';
@@ -17,11 +17,6 @@ export const KEY_SYNC_LABELS: Record<KeySync, { label: string; color: string }> 
   'out-of-sync': { label: 'out of sync', color: 'red' },
   'not-set': { label: 'not set', color: 'orange' },
 };
-
-/** The exchanges whose market data can't start: no key, or a region without the current one. */
-export function unusableKeys(keys: MarketDataKey[]): MarketDataKey[] {
-  return keys.filter((k) => keySync(k) === 'not-set' || keySync(k) === 'out-of-sync');
-}
 
 // The sources whose market data signs in with a key, so they collect with dedicated accounts; other feeds are public.
 export const SIGNED_SOURCES = ['KALSHI', 'POLYMARKET_US'];
