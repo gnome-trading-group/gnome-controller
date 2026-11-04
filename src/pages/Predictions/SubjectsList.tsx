@@ -36,7 +36,7 @@ const QUEUE_STATUS_OPTIONS = [
   { value: 'ALL', label: 'All' },
 ];
 const HOLD_LABELS: Record<SubjectMergeCandidate['hold'], string> = {
-  PRICE: 'prices disagree',
+  PRICE: 'books cross',
   COLLISION: 'outcomes collide',
 };
 
@@ -160,10 +160,10 @@ function HoldDetails({ candidate }: { candidate: SubjectMergeCandidate }) {
       {(prices ?? []).slice(0, 3).map(p => (
         <Text key={`${p.securityIdA}-${p.securityIdB}`} size="xs">
           {p.relationshipType === 'EQUIVALENT' ? '≡' : '⇒'}{' '}
-          <Anchor component={Link} to={`/security-master/securities/${p.securityIdA}`} size="xs">{p.securityIdA}</Anchor>
-          {' '}at {p.midA.toFixed(2)} vs{' '}
-          <Anchor component={Link} to={`/security-master/securities/${p.securityIdB}`} size="xs">{p.securityIdB}</Anchor>
-          {' '}at {p.midB.toFixed(2)}
+          <Anchor component={Link} to={`/security-master/securities/${p.bidSecurityId}`} size="xs">{p.bidSecurityId}</Anchor>
+          {' '}bid {p.bid.toFixed(2)} above{' '}
+          <Anchor component={Link} to={`/security-master/securities/${p.askSecurityId}`} size="xs">{p.askSecurityId}</Anchor>
+          {' '}ask {p.ask.toFixed(2)}
         </Text>
       ))}
       {(prices?.length ?? 0) > 3 && <Text size="xs" c="dimmed">and {prices!.length - 3} more</Text>}

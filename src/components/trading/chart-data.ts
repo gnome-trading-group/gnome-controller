@@ -1,34 +1,69 @@
-import { TimeZoneChoice } from '../../utils/format';
+import { DeepPartial, Time, TickMarkType, TimeChartOptions } from 'lightweight-charts';
+import { formatTime, TimeZoneChoice } from '../../utils/format';
 
-// Shapes series points for lightweight-charts, which wants strictly increasing whole-second times and has no time
-// zone of its own: local time is drawn by shifting each point by its zone offset.
+// Chart times are UTC seconds: lightweight-charts needs them strictly increasing, which wall-clock times are not
+// across a DST change (the repeated hour runs backwards). The chosen zone shows only in the labels.
 
 export interface ChartPoint {
   time: number;
   value: number;
 }
 
-export function chartTime(ms: number, zone: TimeZoneChoice): number {
-  const shift = zone === 'local' ? -new Date(ms).getTimezoneOffset() * 60 : 0;
-  return Math.floor(ms / 1000) + shift;
+export function chartTime(ms: number): number {
+  return Math.floor(ms / 1000);
 }
 
-// Back from a chart time to the instant it shows, in milliseconds.
-export function fromChartTime(time: number, zone: TimeZoneChoice): number {
-  if (zone === 'UTC') return time * 1000;
-  const approx = time * 1000;
-  return approx + new Date(approx).getTimezoneOffset() * 60_000;
+export function fromChartTime(time: number): number {
+  return time * 1000;
 }
 
 // Points sharing a second keep the last, the newest state in it.
-export function chartPoints(times: number[], values: number[], zone: TimeZoneChoice): ChartPoint[] {
+export function chartPoints(times: number[], values: number[]): ChartPoint[] {
   const points: ChartPoint[] = [];
   times.forEach((ms, i) => {
-    const time = chartTime(ms, zone);
+    const time = chartTime(ms);
     if (points.length > 0 && points[points.length - 1].time === time) points[points.length - 1].value = values[i];
     else points.push({ time, value: values[i] });
   });
   return points;
+}
+
+const tickFormats = new Map<string, Intl.DateTimeFormat>();
+
+function tickFormat(zone: TimeZoneChoice, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${zone}/${JSON.stringify(options)}`;
+  let f = tickFormats.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', { ...options, timeZone: zone === 'UTC' ? 'UTC' : undefined, hourCycle: 'h23' });
+    tickFormats.set(key, f);
+  }
+  return f;
+}
+
+// The library picks day and month ticks at UTC boundaries; in another zone those fall mid-day, so a date tick there
+// carries its time too rather than passing for midnight.
+export function tickLabel(time: number, type: TickMarkType, zone: TimeZoneChoice): string {
+  const date = new Date(fromChartTime(time));
+  const clock = (seconds: boolean) => tickFormat(zone, { hour: '2-digit', minute: '2-digit', second: seconds ? '2-digit' : undefined }).format(date);
+  const midnight = clock(true) === '00:00:00';
+  switch (type) {
+    case TickMarkType.Year:
+      return tickFormat(zone, { year: 'numeric' }).format(date) + (midnight ? '' : ` ${clock(false)}`);
+    case TickMarkType.Month:
+    case TickMarkType.DayOfMonth:
+      return tickFormat(zone, { month: 'short', day: 'numeric' }).format(date) + (midnight ? '' : ` ${clock(false)}`);
+    case TickMarkType.Time:
+      return clock(false);
+    case TickMarkType.TimeWithSeconds:
+      return clock(true);
+  }
+}
+
+export function chartZoneOptions(zone: TimeZoneChoice): DeepPartial<TimeChartOptions> {
+  return {
+    localization: { timeFormatter: (time: Time) => formatTime(fromChartTime(Number(time)), zone) },
+    timeScale: { tickMarkFormatter: (time: Time, type: TickMarkType) => tickLabel(Number(time), type, zone) },
+  };
 }
 
 // How far each point sits below the best before it: 0 at a new high, negative in a drawdown.

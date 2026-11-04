@@ -286,8 +286,8 @@ export interface PropositionSubject {
   similarity?: number;
 }
 
-// A subject merge the classifier judged right but held back for a person: two venues' prices for a relationship it
-// would add disagree (PRICE), or two outcomes of one event would read alike (COLLISION).
+// A subject merge the classifier judged right but held back for a person: the books cross on a relationship it would
+// add, one side's bid above the other's ask (PRICE), or two outcomes of one event would read alike (COLLISION).
 export interface SubjectMergeCandidate {
   candidateId: number;
   aliasSubjectId: number;
@@ -298,7 +298,15 @@ export interface SubjectMergeCandidate {
   reason: string;
   gain: number;
   details: {
-    prices?: { securityIdA: number; securityIdB: number; relationshipType: string; midA: number; midB: number }[];
+    prices?: {
+      securityIdA: number;
+      securityIdB: number;
+      relationshipType: string;
+      bidSecurityId: number;
+      bid: number;
+      askSecurityId: number;
+      ask: number;
+    }[];
     collisions?: Record<string, number[]>;
     entityMap?: [string, string][];
   };

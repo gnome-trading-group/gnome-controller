@@ -7,7 +7,7 @@ import {
 import { usePreferences } from '../../context/PreferencesContext';
 import { LedgerFill, PnlSeries, PriceHistory } from '../../types';
 import { formatMoney, formatPrice, formatQty, formatTime, moneyToNumber, sizeToNumber } from '../../utils/format';
-import { chartPoints, chartTime, ChartPoint, fromChartTime, snapToPoint } from './chart-data';
+import { chartPoints, chartTime, ChartPoint, chartZoneOptions, fromChartTime, snapToPoint } from './chart-data';
 import { ChartTooltip, TooltipState } from './ChartTooltip';
 import { MarkerKind, MarkerToggles } from './MarkerToggles';
 
@@ -66,13 +66,13 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
   const lines = useMemo(() => {
     const listing = series?.listings[0];
     return {
-      mark: prices ? known(chartPoints(prices.t, prices.mark.map(moneyToNumber), timeZone)) : [],
-      bid: prices ? known(chartPoints(prices.t, prices.bid.map(moneyToNumber), timeZone)) : [],
-      ask: prices ? known(chartPoints(prices.t, prices.ask.map(moneyToNumber), timeZone)) : [],
-      position: series && listing ? chartPoints(series.t, listing.netQuantity.map(sizeToNumber), timeZone) : [],
-      pnl: series && listing ? chartPoints(series.t, listing.total.map(moneyToNumber), timeZone) : [],
+      mark: prices ? known(chartPoints(prices.t, prices.mark.map(moneyToNumber))) : [],
+      bid: prices ? known(chartPoints(prices.t, prices.bid.map(moneyToNumber))) : [],
+      ask: prices ? known(chartPoints(prices.t, prices.ask.map(moneyToNumber))) : [],
+      position: series && listing ? chartPoints(series.t, listing.netQuantity.map(sizeToNumber)) : [],
+      pnl: series && listing ? chartPoints(series.t, listing.total.map(moneyToNumber)) : [],
     };
-  }, [prices, series, timeZone]);
+  }, [prices, series]);
   const traded = useMemo(() => (fills ?? [])
     .filter(f => f.fillPrice !== null && f.side !== null)
     .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt)), [fills]);
@@ -123,6 +123,10 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
   }, [scheme, height, price, quantity, tickSize, lotSize]);
 
   useEffect(() => {
+    chart?.applyOptions(chartZoneOptions(timeZone));
+  }, [chart, timeZone]);
+
+  useEffect(() => {
     const d = drawn.current;
     if (!chart || !d) return;
     const markPoints = lines.mark;
@@ -136,7 +140,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
     const markers: SeriesMarker<Time>[] = [];
     for (const f of traded) {
       // On the mark line, at the price point in force when it filled.
-      const time = snapToPoint(markPoints, chartTime(Date.parse(f.recordedAt), timeZone));
+      const time = snapToPoint(markPoints, chartTime(Date.parse(f.recordedAt)));
       if (time === null) continue;
       const buy = f.side === 0;
       if (hiddenMarkers.has(buy ? 'price:buy' : 'price:sell')) continue;
@@ -150,12 +154,12 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
     }
     d.markers.setMarkers(markers);
 
-    const key = `${prices?.t[0] ?? ''}|${timeZone}`;
+    const key = `${prices?.t[0] ?? ''}`;
     if (fitted.current !== key && markPoints.length > 0) {
       fitted.current = key;
       chart.timeScale().fitContent();
     }
-  }, [chart, lines, traded, prices, timeZone, tickSize, lotSize, cents, hiddenMarkers]);
+  }, [chart, lines, traded, prices, tickSize, lotSize, cents, hiddenMarkers]);
 
   const at = (points: ChartPoint[], time: number) => [...points].reverse().find(p => p.time <= time);
   const tooltip: TooltipState | null = hover && (() => {
@@ -166,7 +170,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
     // Fills drawn at this point: those between it and the next price point.
     const next = lines.mark.find(p => p.time > hover.time)?.time ?? Infinity;
     const here = traded.filter(f => {
-      const t = chartTime(Date.parse(f.recordedAt), timeZone);
+      const t = chartTime(Date.parse(f.recordedAt));
       return t >= hover.time && t < next;
     });
     const fillRows = here.slice(0, 3).map((f, i) => ({
@@ -178,7 +182,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
     return {
       x: hover.x,
       y: hover.y,
-      title: formatTime(fromChartTime(hover.time, timeZone), timeZone),
+      title: formatTime(fromChartTime(hover.time), timeZone),
       rows: [
         row('Mark', '#4dabf7', lines.mark, price),
         row('Bid', '#38d9a9', lines.bid, price),

@@ -7,7 +7,7 @@ import {
 import { usePreferences } from '../../context/PreferencesContext';
 import { PnlSeries, SeriesEventKind } from '../../types';
 import { formatMoney, formatQty, formatTime, moneyToNumber, sizeToNumber } from '../../utils/format';
-import { chartPoints, ChartPoint, chartTime, drawdown, fromChartTime, pointAt, snapToPoint } from './chart-data';
+import { chartPoints, ChartPoint, chartTime, chartZoneOptions, drawdown, fromChartTime, pointAt, snapToPoint } from './chart-data';
 import { ChartTooltip, TooltipState } from './ChartTooltip';
 import { MarkerKind, MarkerToggles } from './MarkerToggles';
 
@@ -83,7 +83,7 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
 
   const lines = useMemo<Line[]>(() => {
     if (!series) return [];
-    const pts = (values: string[], toNumber: (v: string) => number) => chartPoints(series.t, values.map(toNumber), timeZone);
+    const pts = (values: string[], toNumber: (v: string) => number) => chartPoints(series.t, values.map(toNumber));
     switch (view) {
       case 'total':
         return [
@@ -108,7 +108,7 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
           points: pts(l.netQuantity, sizeToNumber), ...quantity(l.lotSize),
         }));
     }
-  }, [series, view, timeZone]);
+  }, [series, view]);
 
   const markerKinds = useMemo<MarkerKind[]>(() => {
     const present = new Set(series?.events.map(e => e.kind) ?? []);
@@ -151,6 +151,10 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
       created.remove();
     };
   }, [scheme]);
+
+  useEffect(() => {
+    chart?.applyOptions(chartZoneOptions(timeZone));
+  }, [chart, timeZone]);
 
   useEffect(() => {
     if (!chart || lines.length === 0) return;
@@ -205,7 +209,7 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
       const markers: SeriesMarker<Time>[] = [];
       for (const event of series.events) {
         if (hiddenMarkers.has(`pnl:${event.kind}`)) continue;
-        const time = snapToPoint(lines[0].points, chartTime(Date.parse(event.time), timeZone));
+        const time = snapToPoint(lines[0].points, chartTime(Date.parse(event.time)));
         if (time === null) continue;
         const style = EVENT_STYLE[event.kind];
         const impact = event.pnlImpact && event.pnlImpact !== '0' ? ` ${formatMoney(event.pnlImpact).text}` : '';
@@ -213,12 +217,12 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
       }
       current.markers.setMarkers(markers);
     }
-    const key = `${structure}|${series?.t[0] ?? ''}|${timeZone}`;
+    const key = `${structure}|${series?.t[0] ?? ''}`;
     if (fitted.current !== key) {
       fitted.current = key;
       chart.timeScale().fitContent();
     }
-  }, [chart, lines, drawdownPoints, series, structure, timeZone, hiddenMarkers]);
+  }, [chart, lines, drawdownPoints, series, structure, hiddenMarkers]);
 
   const legendTime = hover?.time ?? lines[0]?.points[lines[0].points.length - 1]?.time ?? null;
   const valueAt = (line: Line, time: number) => pointAt(line.points, time);
@@ -229,7 +233,7 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
   const tooltip: TooltipState | null = hover && {
     x: hover.x,
     y: hover.y,
-    title: formatTime(fromChartTime(hover.time, timeZone), timeZone),
+    title: formatTime(fromChartTime(hover.time), timeZone),
     rows: [...lines, ...(drawdownLine ? [drawdownLine] : [])].map(line => {
       const point = valueAt(line, hover.time);
       return { label: line.name, color: line.color, value: point === undefined ? '—' : line.format(point.value) };
@@ -252,7 +256,7 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
             );
           })}
           {legendTime !== null && series && (
-            <Text size="xs" c="dimmed">at {formatTime(fromChartTime(legendTime, timeZone), timeZone)}</Text>
+            <Text size="xs" c="dimmed">at {formatTime(fromChartTime(legendTime), timeZone)}</Text>
           )}
           {(view === 'listings' || view === 'position') && series && hiddenListings(series) > 0 && (
             <Text size="xs" c="dimmed">
