@@ -60,7 +60,11 @@ def handler(event: dict, context) -> dict:
     except ValueError as error:
         return create_response(400, {"message": str(error)})
     try:
-        approvals_client().put_approval_result(
+        client = approvals_client()
+    except Exception as error:  # the pipelines account refusing this Lambda's role; a deploy problem, not the user's
+        return create_response(502, {"message": f"couldn't reach the pipelines account: {error}"})
+    try:
+        client.put_approval_result(
             pipelineName=body["pipeline"],
             stageName=body["stage"],
             actionName=body["action"],

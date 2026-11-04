@@ -1,4 +1,5 @@
 import * as cdk from "aws-cdk-lib";
+import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 
@@ -12,6 +13,8 @@ export interface PythonLambdaFunctionProps {
   readonly timeout?: cdk.Duration;
   readonly environment?: { [key: string]: string };
   readonly functionName?: string;
+  // A fixed name for the execution role, for when another account trusts it by ARN; otherwise CDK generates one.
+  readonly roleName?: string;
 }
 
 /**
@@ -46,8 +49,17 @@ export class PythonLambdaFunction extends Construct {
 
     const layer = this.getOrCreateCommonLayer();
 
+    const role = props.roleName
+      ? new iam.Role(this, "Role", {
+        roleName: props.roleName,
+        assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+        managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole")],
+      })
+      : undefined;
+
     this.function = new lambda.Function(this, "Function", {
       functionName: props.functionName,
+      role,
       runtime: DEFAULT_RUNTIME,
       handler: "index.handler",
       code: lambda.Code.fromAsset(props.codePath),

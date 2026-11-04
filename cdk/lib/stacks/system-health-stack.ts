@@ -3,6 +3,7 @@ import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Construct } from "constructs";
 import { CallerKind, GnomeApiAuthorizer } from "@gnome-trading-group/gnome-shared-cdk";
+import { SYSTEM_APPROVALS_LAMBDA_ROLE, SYSTEM_HEALTH_LAMBDA_ROLE } from "../config";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 
 export interface SystemHealthStackProps extends cdk.StackProps {
@@ -24,6 +25,7 @@ export class SystemHealthStack extends cdk.Stack {
     const healthLambda = new PythonLambdaFunction(this, "SystemHealthLambda", {
       codePath: "lambda/functions/system-health",
       functionName: "gnome-system-health",
+      roleName: SYSTEM_HEALTH_LAMBDA_ROLE,
       description: "Account health for the controller's System page (read-only, all regions)",
       timeout: cdk.Duration.seconds(29),
       memorySize: 512,
@@ -63,6 +65,7 @@ export class SystemHealthStack extends cdk.Stack {
       const approvalsLambda = new PythonLambdaFunction(this, "SystemApprovalsLambda", {
         codePath: "lambda/functions/system-approvals",
         functionName: "gnome-system-approvals",
+        roleName: SYSTEM_APPROVALS_LAMBDA_ROLE,
         description: "Approve or reject a waiting deploy-pipeline approval from the System page",
         timeout: cdk.Duration.seconds(15),
         environment: {

@@ -48,11 +48,15 @@ export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
 
 // A read-only role in the pipelines account, which the System page in each stage assumes to read deploy pipelines.
 // gnome-shared-infra creates it under this name (SYSTEM_HEALTH_PIPELINES_ROLE in its lib/config.ts), so the two must
-// match; it trusts only roles named like this stage's System Lambda (*SystemHealth*).
+// match; it trusts only SYSTEM_HEALTH_LAMBDA_ROLE.
 export const SYSTEM_HEALTH_PIPELINES_ROLE = "gnome-system-health-pipelines-read";
 // The role the prod System page assumes to approve or reject a waiting pipeline approval; gnome-shared-infra creates
-// it under this name (SYSTEM_HEALTH_APPROVALS_ROLE in its lib/config.ts), trusting only prod.
+// it under this name (SYSTEM_HEALTH_APPROVALS_ROLE in its lib/config.ts), trusting only prod's SYSTEM_APPROVALS_LAMBDA_ROLE.
 export const SYSTEM_HEALTH_APPROVALS_ROLE = "gnome-system-health-pipelines-approve";
+// The System page Lambdas' execution roles. The pipelines account trusts them by exact ARN (gnome-shared-infra's
+// lib/config.ts has the same names), so they're fixed rather than generated: CDK truncates generated role names.
+export const SYSTEM_HEALTH_LAMBDA_ROLE = "gnome-system-health";
+export const SYSTEM_APPROVALS_LAMBDA_ROLE = "gnome-system-approvals";
 
 export const GITHUB_REPO = "gnome-trading-group/gnome-controller";
 export const GITHUB_BRANCH = "main";
