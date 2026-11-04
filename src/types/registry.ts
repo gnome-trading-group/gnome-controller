@@ -4,6 +4,8 @@ export interface Strategy {
   description?: string;
   archived: boolean;
   parameters?: Record<string, unknown>;
+  // Its weight in the share of a venue account's request budget the order gateway guarantees each session.
+  rateWeight: number;
   dateCreated: string;
   dateModified: string;
 }

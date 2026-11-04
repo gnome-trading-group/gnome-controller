@@ -232,6 +232,9 @@ export interface Event {
   // About USD traded over the last 24 hours, as the classifier last read it; null before its first reading.
   volume24h: number | null;
   volumeUpdatedAt: string | null;
+  // The scheduled start as the venue lists it now, kept current through reschedules; null when the venue gives none.
+  startTime: string | null;
+  startTimeUpdatedAt: string | null;
 }
 
 export interface EventContract {

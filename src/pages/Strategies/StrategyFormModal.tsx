@@ -6,6 +6,7 @@ import {
   JsonInput,
   Modal,
   MultiSelect,
+  NumberInput,
   Stack,
   Switch,
   Text,
@@ -29,7 +30,7 @@ import { SimulationSettingsEditor } from '../../components/simulation/Simulation
 import { SessionSimulation, simulationProblem } from '../../utils/simulation';
 
 function defaultForm() {
-  return { name: '', description: '', archived: false };
+  return { name: '', description: '', archived: false, rateWeight: 1 };
 }
 
 // The registry returns a template's top-level keys camelCased; it stores, and the form saves, them in snake_case.
@@ -107,7 +108,10 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
       return;
     }
 
-    setForm({ name: strategy.name ?? '', description: strategy.description ?? '', archived: strategy.archived });
+    setForm({
+      name: strategy.name ?? '', description: strategy.description ?? '', archived: strategy.archived,
+      rateWeight: strategy.rateWeight ?? 1,
+    });
     applyTemplate(templateFormFrom((strategy.parameters ?? {}) as Record<string, unknown>));
     setListingLabels({});
     setListingSearchValue('');
@@ -133,12 +137,14 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
           name: form.name,
           description: form.description || undefined,
           archived: form.archived,
+          rateWeight: form.rateWeight,
           parameters,
         });
       } else {
         await registryApi.createStrategy({
           name: form.name,
           description: form.description || undefined,
+          rateWeight: form.rateWeight,
           parameters,
         });
       }
@@ -155,6 +161,16 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
       <Stack>
         <TextInput label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
         <TextInput label="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+        <NumberInput
+          label="Rate weight"
+          description="Its sessions' share of a venue account's order budget when the account is busy, relative to other strategies (default 1)."
+          value={form.rateWeight}
+          min={1}
+          step={1}
+          allowDecimal={false}
+          allowNegative={false}
+          onChange={(value) => setForm((f) => ({ ...f, rateWeight: typeof value === 'number' && value >= 1 ? value : 1 }))}
+        />
         {strategy && (
           <Switch
             label="Archived"

@@ -122,6 +122,15 @@ function EventsList() {
       Cell: ({ row }) => formatVolume(row.original.volume24h),
     },
     {
+      accessorKey: 'startTime',
+      header: 'Start',
+      enableSorting: true,
+      Cell: ({ row }) =>
+        row.original.startTime ? (
+          <ReactTimeAgo date={new Date(row.original.startTime)} timeStyle="round" />
+        ) : '-',
+    },
+    {
       accessorKey: 'expiry',
       header: 'Expiry',
       enableSorting: true,

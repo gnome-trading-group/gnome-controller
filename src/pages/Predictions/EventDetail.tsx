@@ -547,6 +547,15 @@ function EventDetail() {
             />
             <InfoRow label="24h Volume" value={formatVolume(event.volume24h)} />
             <InfoRow label="Volume Read" value={event.volumeUpdatedAt ? <ReactTimeAgo date={new Date(event.volumeUpdatedAt)} timeStyle="round" /> : '-'} />
+            <InfoRow
+              label="Scheduled Start"
+              value={event.startTime ? (
+                <>
+                  {new Date(event.startTime).toLocaleString()} (<ReactTimeAgo date={new Date(event.startTime)} timeStyle="round" />)
+                </>
+              ) : '-'}
+            />
+            <InfoRow label="Start Changed" value={event.startTimeUpdatedAt ? <ReactTimeAgo date={new Date(event.startTimeUpdatedAt)} timeStyle="round" /> : '-'} />
             <InfoRow label="Expiry" value={event.expiry ? <ReactTimeAgo date={new Date(event.expiry)} timeStyle="round" /> : '-'} />
             <InfoRow label="Resolved At" value={event.resolvedAt ? <ReactTimeAgo date={new Date(event.resolvedAt)} timeStyle="round" /> : '-'} />
             <InfoRow label="Created" value={event.dateCreated ? <ReactTimeAgo date={new Date(event.dateCreated)} timeStyle="round" /> : '-'} />

@@ -6,6 +6,16 @@ export const FLAG_DESCRIPTIONS: Record<string, string> = {
     'can resolve differently. Not safe to trade as the same contract.',
   RESOLUTION_SOURCE_UNKNOWN:
     "At least one contract's resolution source couldn't be read, so they may settle on different sources.",
+  DEADLINE_DIFFERS:
+    'The venues give up waiting for the result at different deadlines (or one deadline is unknown), so they agree ' +
+    "when the contest is decided in time and can differ when it isn't (e.g. a \"No one\" outcome if no government " +
+    'forms).',
+  VOTE_SCOPE_ASSUMED:
+    'A vote margin implies the winner here because neither market names the vote it is counted in, so the race is ' +
+    'taken as decided by one vote. Wrong where a first round can be won without winning (a runoff).',
+  VOID_RULES_DIFFER:
+    'A game on two venues that settle postponed, cancelled or unfinished games differently (a fair price, the Draw, ' +
+    'or waiting for the rescheduled game), so they can differ when the game is not played as scheduled.',
 };
 
 export const STORED_ROWS_NOTE =
@@ -20,7 +30,7 @@ const COMPARATOR_SYMBOLS: Record<string, string> = { GT: '>', GTE: '≥', LT: '<
 
 const FIELD_ORDER = [
   'kind', 'measure', 'comparator', 'value', 'low', 'high', 'low_inclusive', 'high_inclusive', 'unit', 'observation',
-  'window_start', 'window_end', 'entity', 'scope', 'stability', 'resolution_source', 'negated', 'unknown',
+  'window_start', 'window_end', 'entity', 'scores', 'scope', 'stability', 'resolution_source', 'negated', 'unknown',
 ];
 
 function num(v: unknown): string {
