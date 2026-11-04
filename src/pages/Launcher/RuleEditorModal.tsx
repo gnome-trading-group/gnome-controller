@@ -28,7 +28,8 @@ const TYPICAL_LISTINGS = 2;
 
 const EMPTY_RULE: EditableRule = {
   name: '', description: null, rule_type: '', status: 'active', launch_path: 'approval', shutdown_path: 'auto',
-  schedule_enabled: false, max_concurrent_sessions: null, cooldown_minutes: 0, dedup_window_minutes: 60, parameters: {},
+  schedule_enabled: false, max_concurrent_sessions: null, cooldown_minutes: 0, dedup_window_minutes: 60, quiet: false,
+  parameters: {},
 };
 
 interface Props {
@@ -243,6 +244,8 @@ export function RuleEditorModal({ opened, onClose, onSaved, ruleTypes, rule, dup
                 value={form.cooldown_minutes} onChange={v => set('cooldown_minutes', Number(v) || 0)} />
               <NumberInput label="Dedup Window (minutes)" description="Repeats of a trigger inside it are ignored" min={0}
                 allowDecimal={false} value={form.dedup_window_minutes} onChange={v => set('dedup_window_minutes', Number(v) || 0)} />
+              <Switch mt={28} label="Quiet" description="Launches and stops aren't posted to Slack; failures still are"
+                checked={form.quiet} onChange={e => set('quiet', e.currentTarget.checked)} />
             </SimpleGrid>
 
             {takesLaunchSettings && (

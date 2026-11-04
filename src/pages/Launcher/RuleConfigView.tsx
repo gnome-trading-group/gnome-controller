@@ -79,6 +79,7 @@ export function RuleConfigView({ rule, ruleType }: { rule: LaunchRule; ruleType:
                 ['Max concurrent sessions', rule.max_concurrent_sessions ?? 'No cap'],
                 ['Cooldown', rule.cooldown_minutes ? `${rule.cooldown_minutes} min` : 'None'],
                 ['Dedup window', `${rule.dedup_window_minutes} min`],
+                ['Launch and stop alerts', rule.quiet ? 'Alerts page only' : 'Posted to Slack'],
               ]} />
             </Section>
             <Section title="Strategy">

@@ -122,11 +122,11 @@ describe('checking a stored rule', () => {
     const stored = {
       rule_id: 'r1', revision: 3, created_by: 'ui:a', modified_by: 'ui:a', date_created: 'x', date_modified: 'y',
       name: 'n', description: null, rule_type: 'cs2', status: 'active', launch_path: 'auto', shutdown_path: 'auto',
-      schedule_enabled: false, max_concurrent_sessions: null, cooldown_minutes: 0, dedup_window_minutes: 60, parameters: {},
+      schedule_enabled: false, max_concurrent_sessions: null, cooldown_minutes: 0, dedup_window_minutes: 60, quiet: false, parameters: {},
     } as const;
     expect(Object.keys(editable(stored)).sort()).toEqual([
       'cooldown_minutes', 'dedup_window_minutes', 'description', 'launch_path', 'max_concurrent_sessions', 'name',
-      'parameters', 'rule_type', 'schedule_enabled', 'shutdown_path', 'status',
+      'parameters', 'quiet', 'rule_type', 'schedule_enabled', 'shutdown_path', 'status',
     ]);
   });
 });

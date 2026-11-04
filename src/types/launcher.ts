@@ -25,6 +25,8 @@ export interface LaunchRule {
   max_concurrent_sessions: number | null;
   cooldown_minutes: number;
   dedup_window_minutes: number;
+  // Launches and stops go on the Alerts page without being posted; failures are always posted.
+  quiet: boolean;
   parameters: Record<string, unknown>;
   revision: number;
   created_by: string;
@@ -35,7 +37,7 @@ export interface LaunchRule {
 
 export type EditableRule = Pick<LaunchRule,
   'name' | 'description' | 'rule_type' | 'status' | 'launch_path' | 'shutdown_path' | 'schedule_enabled'
-  | 'max_concurrent_sessions' | 'cooldown_minutes' | 'dedup_window_minutes' | 'parameters'>;
+  | 'max_concurrent_sessions' | 'cooldown_minutes' | 'dedup_window_minutes' | 'quiet' | 'parameters'>;
 
 export interface RuleRevision {
   rule_id: string;

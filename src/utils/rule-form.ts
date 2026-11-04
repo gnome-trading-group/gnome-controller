@@ -83,6 +83,8 @@ export function lostInRule(rule: Pick<EditableRule, 'rule_type' | 'parameters'>,
 export function editable(rule: LaunchRule | EditableRule): EditableRule {
   const { name, description, rule_type, status, launch_path, shutdown_path, schedule_enabled, max_concurrent_sessions,
     cooldown_minutes, dedup_window_minutes, parameters } = rule;
+  // A rule saved before the launcher had `quiet` comes back without it.
+  const quiet = rule.quiet ?? false;
   return { name, description, rule_type, status, launch_path, shutdown_path, schedule_enabled, max_concurrent_sessions,
-    cooldown_minutes, dedup_window_minutes, parameters };
+    cooldown_minutes, dedup_window_minutes, quiet, parameters };
 }
