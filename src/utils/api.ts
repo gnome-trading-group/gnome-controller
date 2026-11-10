@@ -822,6 +822,13 @@ export const registryApi = {
     sendApiRequest<MarketDataAccount>('/sources/accounts', 'PATCH', {
       apiUrl: REGISTRY_API_URL, convertToCamelCase: true, body: { accountId, ...change },
     }),
+  // Starts the venue's EmergencyCancel around the order gateway; its outcome comes as an EMERGENCY_CANCEL alert.
+  emergencyCancel: (accountId: number, reason: string, dryRun = false) =>
+    sendApiRequest<{ label: string; exchange: string; region: string; dryRun: boolean; started: boolean }>(
+      '/venue-accounts/emergency-cancel', 'POST', {
+        apiUrl: REGISTRY_API_URL,
+        body: { accountId, reason, dryRun },
+      }),
   deleteAccountSecrets: (accountId: number) =>
     sendApiRequest<DeletedSecrets>('/venue-accounts/delete-secrets', 'POST', {
       apiUrl: REGISTRY_API_URL,

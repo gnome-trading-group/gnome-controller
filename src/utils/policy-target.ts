@@ -13,15 +13,15 @@ export function isActiveSessionStatus(status: StrategySessionStatus): boolean {
   return ACTIVE_SESSION_STATUSES.has(status);
 }
 
-type PolicyTarget = Pick<RiskPolicy, 'sessionId' | 'strategyId' | 'listingId' | 'exchangeId'>;
+type PolicyTarget = Pick<RiskPolicy, 'sessionId' | 'strategyId' | 'listingId' | 'exchangeId' | 'accountId'>;
 
-// Names what a policy applies to, from exactly the ids it carries. A venue-wide row is managed from the treasury
-// page, where its halt lives beside the venue's accounts.
+// Names what a policy applies to, from exactly the ids it carries. A venue-wide or account row is managed from the
+// treasury page, where its halt lives beside the venue's accounts.
 export function targetPageLink(policy: PolicyTarget): string {
   if (policy.sessionId != null) return `/sessions/${policy.sessionId}`;
   if (policy.strategyId != null) return `/strategies/${policy.strategyId}`;
   if (policy.listingId != null) return `/security-master/listings/${policy.listingId}`;
-  if (policy.exchangeId != null) return '/treasury';
+  if (policy.exchangeId != null || policy.accountId != null) return '/treasury';
   return '/risk/policies';
 }
 
@@ -31,6 +31,7 @@ export function describeTarget(
   listingLabel?: (listingId: number) => string | undefined,
   exchangeName?: (exchangeId: number) => string | undefined,
 ): string {
+  if (policy.accountId != null) return `Account ${policy.accountId} (all strategies)`;
   const strategy = policy.strategyId != null
     ? (strategyName?.(policy.strategyId) ?? `Strategy ${policy.strategyId}`)
     : undefined;
@@ -54,7 +55,7 @@ export function withoutEndedSessions(policies: RiskPolicy[], sessions: StrategyS
 }
 
 export interface PolicyLevel {
-  label: 'Global' | 'Exchange' | 'Listing' | 'Strategy' | 'Session';
+  label: 'Global' | 'Account' | 'Exchange' | 'Listing' | 'Strategy' | 'Session';
   color: string;
 }
 
@@ -65,26 +66,28 @@ export function policyLevel(policy: PolicyTarget): PolicyLevel {
   if (policy.strategyId != null) return { label: 'Strategy', color: 'blue' };
   if (policy.listingId != null) return { label: 'Listing', color: 'orange' };
   if (policy.exchangeId != null) return { label: 'Exchange', color: 'cyan' };
+  if (policy.accountId != null) return { label: 'Account', color: 'grape' };
   return { label: 'Global', color: 'gray' };
 }
 
 // Every policy that can restrict this strategy: global, exchange- and listing-wide rows, its own, and its running
-// sessions'. A global kill switch only matters while it's on, so the always-present off row is left out.
+// sessions'. A global kill switch only matters while it's on, so the always-present off row is left out. Account
+// kills are the order gateway's, shown with their accounts on the treasury page.
 export function policiesForStrategy(policies: RiskPolicy[], strategyId: number): RiskPolicy[] {
-  return policies.filter((p) =>
-    (p.strategyId === strategyId || (p.strategyId == null && p.sessionId == null)) && !isIdleGlobalKill(p));
+  return policies.filter((p) => p.accountId == null
+    && (p.strategyId === strategyId || (p.strategyId == null && p.sessionId == null)) && !isIdleGlobalKill(p));
 }
 
 // Every policy that can restrict this session: global, exchange- and listing-wide rows, its strategy's, and its own.
 export function policiesForSession(policies: RiskPolicy[], sessionId: string, strategyId: number): RiskPolicy[] {
-  return policies.filter((p) =>
-    (p.sessionId == null ? p.strategyId == null || p.strategyId === strategyId : p.sessionId === sessionId)
+  return policies.filter((p) => p.accountId == null
+    && (p.sessionId == null ? p.strategyId == null || p.strategyId === strategyId : p.sessionId === sessionId)
     && !isIdleGlobalKill(p));
 }
 
 export function isIdleGlobalKill(policy: RiskPolicy): boolean {
   return policy.policyType === 'KILL_SWITCH' && !policy.enabled && policy.strategyId == null
-    && policy.listingId == null && policy.sessionId == null && policy.exchangeId == null;
+    && policy.listingId == null && policy.sessionId == null && policy.exchangeId == null && policy.accountId == null;
 }
 
 // The listings these sessions trade, as recorded in their launch config.

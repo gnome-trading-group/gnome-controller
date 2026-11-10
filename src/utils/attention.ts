@@ -24,6 +24,6 @@ export function attentionLink(item: AttentionItem, mode: Mode): string {
     const tab = item.kind.endsWith('HALT') ? 'risk' : 'positions';
     return `/strategies/${item.strategyId}?mode=${mode}&tab=${tab}`;
   }
-  if (item.kind === 'EXCHANGE_HALT') return '/treasury';
+  if (item.kind === 'EXCHANGE_HALT' || item.kind === 'ACCOUNT_HALT') return '/treasury';
   return '/risk/policies';
 }

@@ -138,6 +138,11 @@ describe('rule summaries', () => {
       ruleType: 'event_filter',
       parameters: { top_n: 20, min_volume_24h: 5000, exchange_ids: [1, 2], tags: ['nfl'], max_streams: 200 },
     }))).toBe('top 20 by volume · ≥ $5,000 24h · exchanges: 1, 2 · tags: nfl · max 200 streams');
+    expect(ruleCriteria(rule({
+      ruleType: 'event_filter',
+      parameters: { tags: ['cs2'], proposition_kinds: ['WINNER'], proposition_scopes: ['match', 'map:1'],
+        starts_within_hours: 48, max_streams: 50 },
+    }))).toBe('starting within 48h · tags: cs2 · kinds: WINNER · scopes: match, map:1 · max 50 streams');
     expect(ruleCriteria(rule({ parameters: { stream_ids: [1] } }))).toBeNull();
   });
 });

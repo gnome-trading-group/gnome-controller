@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActionIcon, Alert, Badge, Button, Card, Container, Group, Switch, Text, Title, Tooltip,
 } from '@mantine/core';
@@ -9,6 +9,7 @@ import { AccountStatus } from '../../types/treasury';
 import { keys, POLL, useRiskPolicies, useTransfers, useTreasurySummary, useVenueAccounts } from '../../query/hooks';
 import { useExchangeName } from '../../hooks/useExchangeName';
 import { findKillSwitch, KILL_SWITCH_TYPE, setKillSwitch } from '../../utils/kill-switch';
+import { registryApi } from '../../utils/api';
 import { treasuryTotals } from '../../utils/treasury';
 import { LastUpdated } from '../../components/LastUpdated';
 import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
@@ -51,6 +52,9 @@ function Treasury() {
   const [deleteSecretsFor, setDeleteSecretsFor] = useState<AccountRow | null>(null);
   const [credentialsFor, setCredentialsFor] = useState<AccountRow | null>(null);
   const [haltTarget, setHaltTarget] = useState<{ venue: Venue; halt: boolean } | null>(null);
+  const [accountHalt, setAccountHalt] = useState<{ row: AccountRow; halt: boolean } | null>(null);
+  const [emergencyFor, setEmergencyFor] = useState<AccountRow | null>(null);
+  const [emergencyStarted, setEmergencyStarted] = useState<string | null>(null);
 
   const rows = useMemo<AccountRow[]>(() => {
     const money = new Map((summary.data?.accounts ?? []).map((a) => [a.accountId, a]));
@@ -103,6 +107,8 @@ function Treasury() {
     else if (action.kind === 'settings') setSettingsFor(row);
     else if (action.kind === 'deleteSecrets') setDeleteSecretsFor(row);
     else if (action.kind === 'credentials') setCredentialsFor(row);
+    else if (action.kind === 'halt') setAccountHalt({ row, halt: action.halt });
+    else if (action.kind === 'emergencyCancel') setEmergencyFor(row);
     else setSnapshotFor(row);
   };
 
@@ -112,6 +118,26 @@ function Treasury() {
     const { venue, halt } = haltTarget;
     await setKillSwitch(venueKill(venue.exchangeId), { exchangeId: venue.exchangeId }, halt, reason);
     queryClient.invalidateQueries({ queryKey: keys.policies });
+  };
+
+  const accountKill = (accountId: number) => findKillSwitch(policies.data ?? null, { accountId });
+  const accountHalted = useCallback(
+    (accountId: number) => (policies.data ? !!findKillSwitch(policies.data, { accountId })?.enabled : null),
+    [policies.data],
+  );
+  const confirmAccountHalt = async (reason: string | undefined) => {
+    if (!accountHalt) return;
+    const { accountId } = accountHalt.row.account;
+    await setKillSwitch(accountKill(accountId), { accountId }, accountHalt.halt, reason);
+    queryClient.invalidateQueries({ queryKey: keys.policies });
+  };
+
+  const confirmEmergencyCancel = async (reason: string | undefined) => {
+    if (!emergencyFor) return;
+    if (!reason) throw new Error('A reason is required: every emergency cancel is on the record');
+    const started = await registryApi.emergencyCancel(emergencyFor.account.accountId, reason);
+    setEmergencyStarted(`Emergency cancel started on ${started.label} (${started.exchange}, ${started.region}). `
+      + 'Its result comes as an EMERGENCY_CANCEL alert.');
   };
 
   const loadError = accounts.error ?? summary.error;
@@ -136,6 +162,12 @@ function Treasury() {
         </Group>
       </Group>
       <ModeBand mode="live" />
+
+      {emergencyStarted && (
+        <Alert mb="md" color="orange" title="Emergency cancel" withCloseButton onClose={() => setEmergencyStarted(null)}>
+          {emergencyStarted}
+        </Alert>
+      )}
 
       {loadError && (
         <Alert mb="md" color="red" title="Couldn't load the treasury">{loadError.message}</Alert>
@@ -181,7 +213,7 @@ function Treasury() {
                 </Button>
               </Tooltip>
             </Group>
-            <AccountsTable rows={venue.rows} loading={accounts.isLoading} selectedId={selectedId}
+            <AccountsTable rows={venue.rows} loading={accounts.isLoading} selectedId={selectedId} halted={accountHalted}
               onSelect={(id) => select(id)} onAction={onAction} />
           </Card>
         );
@@ -222,6 +254,32 @@ function Treasury() {
       />
       <AccountSettingsModal row={settingsFor} onClose={() => setSettingsFor(null)} onSaved={refresh} />
       <ManualSnapshotModal row={snapshotFor} onClose={() => setSnapshotFor(null)} onRecorded={refresh} />
+      <ReasonConfirmModal
+        opened={emergencyFor !== null}
+        onClose={() => setEmergencyFor(null)}
+        title={`Emergency cancel ${emergencyFor?.account.label ?? ''}`}
+        message={`Cancels every open order on ${emergencyFor?.account.label ?? 'this account'} straight on the venue, around the order gateway: every strategy's, whatever the gateway is doing. For when the gateway is broken or hung. Halt the account too, or a running gateway may place new orders.`}
+        confirmLabel="Cancel every order"
+        reasonDescription="Required; on the EMERGENCY_CANCEL alert"
+        onConfirm={confirmEmergencyCancel}
+      />
+      <ReasonConfirmModal
+        opened={accountHalt?.halt === true}
+        onClose={() => setAccountHalt(null)}
+        title={`Halt ${accountHalt?.row.account.label ?? ''}`}
+        message={`The order gateway cancels every open order on ${accountHalt?.row.account.label ?? 'this account'}, whichever strategy's, and blocks new ones until the account is resumed. Live only; positions are left as they are.`}
+        confirmLabel="Halt account"
+        onConfirm={confirmAccountHalt}
+      />
+      <ReasonConfirmModal
+        opened={accountHalt?.halt === false}
+        onClose={() => setAccountHalt(null)}
+        title={`Resume ${accountHalt?.row.account.label ?? ''}`}
+        message="Orders may go out on this account again. Global, venue, strategy, session and listing kill switches still apply."
+        confirmLabel="Resume account"
+        confirmColor="green"
+        onConfirm={confirmAccountHalt}
+      />
       <ReasonConfirmModal
         opened={haltTarget?.halt === true}
         onClose={() => setHaltTarget(null)}

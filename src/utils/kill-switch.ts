@@ -5,11 +5,13 @@ export const KILL_SWITCH_TYPE = 'KILL_SWITCH';
 
 // A policy applies to exactly the ids it carries: none is global, a strategy covers every session of it, a listing
 // covers every strategy on it, an exchange every listing on it, a session narrows a strategy to one running instance.
+// A venue account stands alone: the order gateway cancels and blocks everything on it, whichever strategy's.
 export interface KillSwitchTarget {
   sessionId?: string;
   strategyId?: number;
   exchangeId?: number;
   listingId?: number;
+  accountId?: number;
 }
 
 export const GLOBAL_TARGET: KillSwitchTarget = {};
@@ -21,6 +23,7 @@ export function isKillSwitch(policy: RiskPolicy, target: KillSwitchTarget): bool
   if ((policy.sessionId ?? undefined) !== target.sessionId) return false;
   if ((policy.listingId ?? undefined) !== target.listingId) return false;
   if ((policy.exchangeId ?? undefined) !== target.exchangeId) return false;
+  if ((policy.accountId ?? undefined) !== target.accountId) return false;
   return target.sessionId != null || (policy.strategyId ?? undefined) === target.strategyId;
 }
 
@@ -59,6 +62,7 @@ export async function setKillSwitch(
     strategyId: target.strategyId,
     exchangeId: target.exchangeId,
     listingId: target.listingId,
+    accountId: target.accountId,
     parameters: {},
     enabled: true,
     reason,

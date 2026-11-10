@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { ActionIcon, Badge, Group, Menu, Text, Tooltip } from '@mantine/core';
 import {
-  IconArrowsExchange, IconDots, IconKey, IconKeyOff, IconPlayerPause, IconPlayerPlay, IconReceipt, IconSettings, IconTrash,
+  IconAlertOctagon, IconArrowsExchange, IconDots, IconHandStop, IconKey, IconKeyOff, IconPlayerPause, IconPlayerPlay, IconReceipt, IconSettings, IconTrash,
 } from '@tabler/icons-react';
 import { MantineReactTable, MRT_ColumnDef, useMantineReactTable } from 'mantine-react-table';
 import ReactTimeAgo from 'react-time-ago';
@@ -17,7 +17,9 @@ export type AccountAction =
   | { kind: 'settings' }
   | { kind: 'snapshot' }
   | { kind: 'deleteSecrets' }
-  | { kind: 'credentials' };
+  | { kind: 'credentials' }
+  | { kind: 'halt'; halt: boolean }
+  | { kind: 'emergencyCancel' };
 
 const RIGHT = { mantineTableHeadCellProps: { align: 'right' as const }, mantineTableBodyCellProps: { align: 'right' as const } };
 
@@ -48,7 +50,11 @@ function retireBlocker(row: AccountRow): string | null {
   return null;
 }
 
-function ActionsMenu({ row, onAction }: { row: AccountRow; onAction: (row: AccountRow, action: AccountAction) => void }) {
+function ActionsMenu({ row, halted, onAction }: {
+  row: AccountRow;
+  halted: boolean | null;
+  onAction: (row: AccountRow, action: AccountAction) => void;
+}) {
   const next = ACCOUNT_TRANSITIONS[row.account.status];
   const retired = row.account.status === 'RETIRED';
   const blocker = retireBlocker(row);
@@ -100,6 +106,16 @@ function ActionsMenu({ row, onAction }: { row: AccountRow; onAction: (row: Accou
             <Menu.Item leftSection={<IconKey size={14} />} onClick={() => onAction(row, { kind: 'credentials' })}>
               Update credentials
             </Menu.Item>
+            <Menu.Divider />
+            <Menu.Item leftSection={halted ? <IconPlayerPlay size={14} /> : <IconAlertOctagon size={14} />}
+              color={halted ? 'teal' : 'red'} disabled={halted === null}
+              onClick={() => onAction(row, { kind: 'halt', halt: !halted })}>
+              {halted ? 'Resume account' : 'Halt account'}
+            </Menu.Item>
+            <Menu.Item leftSection={<IconHandStop size={14} />} color="red"
+              onClick={() => onAction(row, { kind: 'emergencyCancel' })}>
+              Emergency cancel
+            </Menu.Item>
           </>
         )}
       </Menu.Dropdown>
@@ -113,10 +129,12 @@ interface AccountsTableProps {
   selectedId: number | null;
   onSelect: (accountId: number) => void;
   onAction: (row: AccountRow, action: AccountAction) => void;
+  // Whether an account's kill switch is on; null while the policies haven't loaded.
+  halted: (accountId: number) => boolean | null;
 }
 
 // One venue's accounts: what each holds, what is promised out of it, and whether it agrees with the ledger.
-export function AccountsTable({ rows, loading, selectedId, onSelect, onAction }: AccountsTableProps) {
+export function AccountsTable({ rows, loading, selectedId, onSelect, onAction, halted }: AccountsTableProps) {
   const columns = useMemo<MRT_ColumnDef<AccountRow>[]>(() => [
     {
       id: 'label', header: 'Account', size: 170,
@@ -129,7 +147,10 @@ export function AccountsTable({ rows, loading, selectedId, onSelect, onAction }:
     {
       id: 'status', header: 'Status', size: 110,
       Cell: ({ row }) => (
-        <Badge size="sm" variant="light" color={ACCOUNT_STATUS_COLORS[row.original.account.status]}>{row.original.account.status}</Badge>
+        <Group gap={4} wrap="nowrap">
+          <Badge size="sm" variant="light" color={ACCOUNT_STATUS_COLORS[row.original.account.status]}>{row.original.account.status}</Badge>
+          {halted(row.original.account.accountId) && <Badge size="sm" color="red">halted</Badge>}
+        </Group>
       ),
     },
     {
@@ -217,7 +238,7 @@ export function AccountsTable({ rows, loading, selectedId, onSelect, onAction }:
         );
       },
     },
-  ], []);
+  ], [halted]);
 
   const table = useMantineReactTable({
     columns,
@@ -232,7 +253,9 @@ export function AccountsTable({ rows, loading, selectedId, onSelect, onAction }:
     enablePagination: false,
     enableRowActions: true,
     positionActionsColumn: 'last',
-    renderRowActions: ({ row }) => <ActionsMenu row={row.original} onAction={onAction} />,
+    renderRowActions: ({ row }) => (
+      <ActionsMenu row={row.original} halted={halted(row.original.account.accountId)} onAction={onAction} />
+    ),
     initialState: { density: 'xs' },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     mantineTableBodyRowProps: ({ row }) => ({

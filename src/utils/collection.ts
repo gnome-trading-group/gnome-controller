@@ -66,9 +66,14 @@ export function ruleCriteria(rule: CollectionRule): string | null {
   if (p.top_n != null) parts.push(`top ${p.top_n} by volume`);
   if (p.min_volume_24h != null) parts.push(`≥ $${Number(p.min_volume_24h).toLocaleString('en-US')} 24h`);
   if (p.expires_within_hours != null) parts.push(`expiring within ${p.expires_within_hours}h`);
-  for (const key of ['exchange_ids', 'categories', 'tags'] as const) {
+  if (p.starts_within_hours != null) parts.push(`starting within ${p.starts_within_hours}h`);
+  const lists = [
+    ['exchange_ids', 'exchanges'], ['categories', 'categories'], ['tags', 'tags'],
+    ['proposition_kinds', 'kinds'], ['proposition_scopes', 'scopes'],
+  ] as const;
+  for (const [key, label] of lists) {
     const values = p[key] as unknown[] | undefined;
-    if (values?.length) parts.push(`${key.replace('_ids', 's')}: ${values.join(', ')}`);
+    if (values?.length) parts.push(`${label}: ${values.join(', ')}`);
   }
   parts.push(`max ${p.max_streams} streams`);
   return parts.join(' · ');

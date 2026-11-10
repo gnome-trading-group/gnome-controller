@@ -15,6 +15,7 @@ function isHalt(alert: Alert): boolean {
 
 function headline(alert: Alert): string {
   if (alert.type === 'EXCHANGE_HALT') return 'Venue halted';
+  if (alert.type === 'ACCOUNT_HALT') return 'Account halted';
   if (isHalt(alert)) return 'Kill switch turned on';
   return alert.severity === 'CRITICAL' ? 'Critical alert' : alert.severity === 'ERROR' ? 'Error' : 'Warning';
 }

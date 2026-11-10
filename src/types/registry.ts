@@ -32,6 +32,8 @@ export interface RiskPolicy {
   // A listing already implies its exchange, so a row names one or the other.
   exchangeId?: number | null;
   listingId?: number | null;
+  // A kill switch alone may name one venue account: the order gateway's kill of everything on it.
+  accountId?: number | null;
   parameters: Record<string, unknown>;
   enabled: boolean;
   dateCreated: string;

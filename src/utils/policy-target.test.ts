@@ -71,3 +71,23 @@ describe('kill switch targets', () => {
     expect(isKillSwitch(strategyVenueKill, { strategyId: 4, exchangeId: 3 })).toBe(true);
   });
 });
+
+describe('account kills', () => {
+  const accountKill = policy({ policyType: 'KILL_SWITCH', accountId: 2 });
+
+  it('are their own target, never the global kill or a venue halt', () => {
+    expect(isKillSwitch(accountKill, {})).toBe(false);
+    expect(isKillSwitch(accountKill, { exchangeId: 3 })).toBe(false);
+    expect(isKillSwitch(accountKill, { accountId: 2 })).toBe(true);
+    expect(isKillSwitch(accountKill, { accountId: 3 })).toBe(false);
+  });
+
+  it('read as an account, live on the treasury page, and stay off strategy and session pages', () => {
+    expect(describeTarget(accountKill)).toBe('Account 2 (all strategies)');
+    expect(policyLevel(accountKill).label).toBe('Account');
+    expect(targetPageLink(accountKill)).toBe('/treasury');
+    expect(policiesForStrategy([accountKill], 4)).toEqual([]);
+    expect(policiesForSession([accountKill], 's1', 4)).toEqual([]);
+    expect(isIdleGlobalKill({ ...accountKill, enabled: false })).toBe(false);
+  });
+});
