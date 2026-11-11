@@ -10,7 +10,7 @@ import { ID_LIST_PARAMETERS, parseStreamIds, RULE_TYPE_LABELS } from '../../../u
 import { formatVolume } from '../../../utils/format';
 import { errorMessage } from '../../../utils/kill-switch';
 
-const TYPE_ORDER: CollectionRuleType[] = ['static_streams', 'event', 'event_filter'];
+const TYPE_ORDER: CollectionRuleType[] = ['static_streams', 'event', 'event_filter', 'listing_filter'];
 
 // Creates a rule of any type, or changes one's name, parameters and grace (its type, priority and tier are fixed once
 // created). A rule another system manages shows what it selects but only that system changes it. Saving wakes the
@@ -175,24 +175,26 @@ export function RuleModal({ rule, opened, onClose, onSaved }: {
 
 // What the rule would collect if saved now, as the reconciler would select it.
 function PreviewResult({ preview }: { preview: RulePreview }) {
+  const byListing = preview.listings !== undefined;
+  const chosen = byListing ? preview.listings ?? 0 : preview.events;
   return (
     <Paper withBorder p="sm">
       <Text size="sm" fw={600} mb={preview.sample.length ? 'xs' : 0}>
-        {preview.events > 0 && `${preview.events} events · `}{preview.streams} streams
+        {chosen > 0 && `${chosen} ${byListing ? 'listings' : 'events'} · `}{preview.streams} streams
         {preview.capped && <Text span size="sm" c="orange"> · capped by max streams</Text>}
       </Text>
       {preview.sample.length > 0 && (
         <Table fz="xs" verticalSpacing={2}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Event</Table.Th>
+              <Table.Th>{byListing ? 'Listing' : 'Event'}</Table.Th>
               <Table.Th ta="right">24h volume</Table.Th>
               <Table.Th ta="right">Streams</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {preview.sample.map(e => (
-              <Table.Tr key={e.eventId}>
+              <Table.Tr key={e.listingId ?? e.eventId}>
                 <Table.Td>{e.title}</Table.Td>
                 <Table.Td ta="right">{formatVolume(e.volume24h)}</Table.Td>
                 <Table.Td ta="right">{e.streams}</Table.Td>
@@ -201,8 +203,8 @@ function PreviewResult({ preview }: { preview: RulePreview }) {
           </Table.Tbody>
         </Table>
       )}
-      {preview.events > preview.sample.length && (
-        <Text size="xs" c="dimmed" mt={4}>And {preview.events - preview.sample.length} more.</Text>
+      {chosen > preview.sample.length && (
+        <Text size="xs" c="dimmed" mt={4}>And {chosen - preview.sample.length} more.</Text>
       )}
     </Paper>
   );

@@ -23,6 +23,7 @@ import { DenormalizedListing } from '../../types';
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { formatSecurityType } from '../../utils/security-master';
+import { formatVolume } from '../../utils/format';
 import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import { useSecuritySearch } from '../../hooks/useAsyncSearch';
@@ -116,13 +117,22 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
       enableSorting: true,
     },
     {
-      accessorKey: 'securityActive',
-      header: 'Active',
+      // The registry sorts by this column's own name; it puts listings with no reading last either way.
+      id: 'volume_24h',
+      accessorKey: 'volume24h',
+      header: '24h Volume',
       enableSorting: true,
+      size: 110,
+      Cell: ({ row }: { row: MRT_Row<DenormalizedListing> }) => formatVolume(row.original.volume24h),
+    },
+    {
+      accessorKey: 'active',
+      header: 'Active',
+      enableSorting: false,
       size: 80,
       Cell: ({ row }: { row: MRT_Row<DenormalizedListing> }) => (
-        <Badge color={row.original.securityActive ? 'green' : 'gray'} variant="light" size="sm">
-          {row.original.securityActive ? 'Active' : 'Inactive'}
+        <Badge color={row.original.active ? 'green' : 'gray'} variant="light" size="sm">
+          {row.original.active ? 'Active' : 'Inactive'}
         </Badge>
       ),
     },

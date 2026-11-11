@@ -337,7 +337,7 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       body: security,
     }),
-  createListing: (listing: Omit<Listing, 'listingId' | 'dateCreated' | 'dateModified'>) =>
+  createListing: (listing: Omit<Listing, 'listingId' | 'dateCreated' | 'dateModified' | 'active'>) =>
     sendApiRequest<Listing>('/listings', 'POST', {
       apiUrl: REGISTRY_API_URL,
       body: listing,

@@ -116,6 +116,13 @@ export interface Listing {
   // The venue's keys fee schedules target: a coarse group (a Kalshi series) and the venue's own event id.
   feeGroup?: string | null;
   feeEvent?: string | null;
+  // The venue partition whose cash backs the listing's orders (a Kalshi exchange shard); null where unsplit or unknown.
+  venuePartition?: string | null;
+  // Whether the venue still trades it: the exchange sync clears it for a delisted or vanished market.
+  active: boolean;
+  // About USD traded over the last 24 hours as the exchange sync last read it; null where no sync reads volume.
+  volume24h?: number | null;
+  volumeUpdatedAt?: string | null;
 }
 
 export interface DenormalizedListing extends Listing {
@@ -294,7 +301,7 @@ export interface SubjectMergeCandidate {
   aliasKey: string;
   canonicalSubjectId: number;
   canonicalKey: string;
-  hold: 'PRICE' | 'COLLISION';
+  hold: 'PRICE' | 'COLLISION' | 'START';
   reason: string;
   gain: number;
   details: {
@@ -311,6 +318,10 @@ export interface SubjectMergeCandidate {
       midB?: number;
     }[];
     collisions?: Record<string, number[]>;
+    // START: the nearest event starts of the two subjects' contracts.
+    canonicalStart?: string;
+    aliasStart?: string;
+    hoursApart?: number;
     entityMap?: [string, string][];
   };
   status: 'PENDING' | 'MERGED' | 'DISMISSED';

@@ -27,6 +27,7 @@ import { PropositionSubject, SubjectKeyAlias, SubjectKeyAliasOrigin, SubjectMerg
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
+import { SkeletonRows } from '../../components/SkeletonRows';
 import { AliasText, OriginBadge } from './SubjectKeys';
 
 const PAGE_LIMIT = 500;
@@ -39,6 +40,7 @@ const QUEUE_STATUS_OPTIONS = [
 const HOLD_LABELS: Record<SubjectMergeCandidate['hold'], string> = {
   PRICE: 'books cross',
   COLLISION: 'outcomes collide',
+  START: 'start times differ',
 };
 
 export function DerivedStatus({ subject }: { subject: Pick<PropositionSubject, 'derivedAt' | 'dateModified'> }) {
@@ -155,7 +157,7 @@ function SubjectLink({ id, subjectKey }: { id: number; subjectKey: string }) {
 }
 
 function HoldDetails({ candidate }: { candidate: SubjectMergeCandidate }) {
-  const { prices, collisions, entityMap } = candidate.details;
+  const { prices, collisions, entityMap, canonicalStart, aliasStart, hoursApart } = candidate.details;
   return (
     <Stack gap={2}>
       {(prices ?? []).slice(0, 3).map(p => {
@@ -180,6 +182,12 @@ function HoldDetails({ candidate }: { candidate: SubjectMergeCandidate }) {
         );
       })}
       {(prices?.length ?? 0) > 3 && <Text size="xs" c="dimmed">and {prices!.length - 3} more</Text>}
+      {hoursApart !== undefined && (
+        <Text size="xs">
+          starts {hoursApart}h apart: {candidate.canonicalKey} at {canonicalStart && new Date(canonicalStart).toLocaleString()},{' '}
+          {candidate.aliasKey} at {aliasStart && new Date(aliasStart).toLocaleString()}; the same teams may play twice that day
+        </Text>
+      )}
       {Object.entries(collisions ?? {}).map(([eventId, ids]) => (
         <Text key={eventId} size="xs">event {eventId}: securities {ids.join(', ')} would read alike</Text>
       ))}
@@ -248,10 +256,11 @@ function MergeQueue() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {rows.length === 0 && (
+            {loading && rows.length === 0 && <SkeletonRows rows={5} cols={5} />}
+            {!loading && rows.length === 0 && (
               <Table.Tr>
                 <Table.Td colSpan={5}>
-                  <Text size="sm" c="dimmed" ta="center" py="md">{loading ? 'Loading…' : 'Nothing in the queue.'}</Text>
+                  <Text size="sm" c="dimmed" ta="center" py="md">Nothing in the queue.</Text>
                 </Table.Td>
               </Table.Tr>
             )}
@@ -268,7 +277,7 @@ function MergeQueue() {
                 <Table.Td><Text size="sm">{c.reason}</Text></Table.Td>
                 <Table.Td>
                   <Stack gap={4}>
-                    <Badge color={c.hold === 'PRICE' ? 'orange' : 'red'} variant="light" size="sm">{HOLD_LABELS[c.hold]}</Badge>
+                    <Badge color={c.hold === 'PRICE' ? 'orange' : c.hold === 'START' ? 'yellow' : 'red'} variant="light" size="sm">{HOLD_LABELS[c.hold]}</Badge>
                     <HoldDetails candidate={c} />
                   </Stack>
                 </Table.Td>
@@ -369,6 +378,7 @@ function KeyAliases() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
+            {loading && aliases.length === 0 && <SkeletonRows rows={8} cols={6} />}
             {!loading && aliases.length === 0 && (
               <Table.Tr><Table.Td colSpan={6}><Text size="sm" c="dimmed">No aliases.</Text></Table.Td></Table.Tr>
             )}

@@ -21,6 +21,7 @@ import { IconAlertTriangle, IconHistory, IconPlayerPlay, IconPlayerStop } from '
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { DenormalizedListing, Event, EventContract, FeeTimelineEntry, Listing, ListingSpec, RiskPolicy, Security, SecurityType, Stream } from '../../types';
 import { registryApi } from '../../utils/api';
+import { formatVolume } from '../../utils/format';
 import {
   formatAssetClass,
   formatContractType,
@@ -376,6 +377,22 @@ function ListingDetail() {
               />
               <InfoRow label="Fee Group" value={listing.feeGroup ?? '—'} />
               <InfoRow label="Fee Event" value={listing.feeEvent ?? '—'} />
+              <InfoRow label="Venue Partition" value={listing.venuePartition ?? '—'} />
+              <InfoRow
+                label="Status"
+                value={
+                  <Badge color={listing.active ? 'green' : 'gray'} variant="light" size="sm">
+                    {listing.active ? 'Active' : 'Inactive'}
+                  </Badge>
+                }
+              />
+              <InfoRow label="24h Volume" value={formatVolume(listing.volume24h)} />
+              <InfoRow
+                label="Volume Read"
+                value={listing.volumeUpdatedAt
+                  ? <ReactTimeAgo date={new Date(listing.volumeUpdatedAt)} timeStyle="round" />
+                  : '—'}
+              />
               <InfoRow label="Created" value={<ReactTimeAgo date={new Date(listing.dateCreated)} timeStyle="round" />} />
               <InfoRow label="Modified" value={<ReactTimeAgo date={new Date(listing.dateModified)} timeStyle="round" />} />
             </Stack>

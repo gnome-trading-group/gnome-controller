@@ -31,6 +31,7 @@ import { STORED_ROWS_NOTE, summarizeProposition } from '../../utils/propositions
 import { EvidencePanel, FlagBadges, MergeSubjectModal, SubjectRef } from './PropositionParts';
 import SubjectKeys from './SubjectKeys';
 import { DerivedStatus } from './SubjectsList';
+import { SkeletonRows } from '../../components/SkeletonRows';
 import UnitViews from './relationships/UnitViews';
 
 const RELATIONSHIP_COLORS: Record<ContractRelationshipType, string> = {
@@ -46,6 +47,49 @@ interface SubjectData {
   similar: PropositionSubject[];
   history: SubjectMergeLogEntry[];
   aliases: SubjectKeyAlias[];
+}
+
+function SkeletonTableSection({ title, rows, cols }: { title: string; rows: number; cols: number }) {
+  return (
+    <Stack gap="xs">
+      <Title order={4}>{title}</Title>
+      <Paper withBorder>
+        <Table withColumnBorders>
+          <Table.Thead>
+            <Table.Tr>
+              {Array.from({ length: cols }, (_, c) => <Table.Th key={c}><Skeleton h={12} w={c === 0 ? 120 : 70} /></Table.Th>)}
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody><SkeletonRows rows={rows} cols={cols} /></Table.Tbody>
+        </Table>
+      </Paper>
+    </Stack>
+  );
+}
+
+function SubjectDetailSkeleton() {
+  return (
+    <Container size="xl" py="xl">
+      <Stack gap="lg">
+        <Stack gap={4}>
+          <Anchor component={Link} to="/predictions/subjects" size="sm">← Subjects</Anchor>
+          <Group gap="sm">
+            <Skeleton h={30} w="40%" />
+            <Skeleton h={20} w={130} radius="xl" />
+          </Group>
+          <Skeleton h={14} w="30%" mt={4} />
+        </Stack>
+        <SkeletonTableSection title="Keys" rows={3} cols={5} />
+        <SkeletonTableSection title="Contracts" rows={6} cols={5} />
+        <Stack gap="xs">
+          <Title order={4}>Relationships by unit</Title>
+          <Skeleton h={220} radius="md" />
+        </Stack>
+        <SkeletonTableSection title="Stored relationships" rows={4} cols={5} />
+        <SkeletonTableSection title="Merge history" rows={2} cols={4} />
+      </Stack>
+    </Container>
+  );
 }
 
 function SubjectDetail() {
@@ -65,6 +109,8 @@ function SubjectDetail() {
     if (!id) return;
     let cancelled = false;
     setError(null);
+    // Following a link to another subject shows the skeleton, not the last subject; a reload keeps what is shown.
+    setData(prev => (prev?.subject?.subjectId === id ? prev : null));
     Promise.all([
       registryApi.listPropositionSubjects({ subjectIds: [id] }),
       registryApi.listSubjectPropositions(id),
@@ -232,7 +278,7 @@ function SubjectDetail() {
     return <Container size="xl" py="xl"><Alert color="red" title="Error">{error}</Alert></Container>;
   }
   if (!data) {
-    return <Container size="xl" py="xl"><Skeleton h={400} /></Container>;
+    return <SubjectDetailSkeleton />;
   }
   if (!subject || !ref) {
     return <Container size="xl" py="xl"><Alert color="yellow" title="Not found">No subject {subjectId}.</Alert></Container>;

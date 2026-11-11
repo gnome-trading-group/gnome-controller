@@ -5,7 +5,7 @@ import { JsonSchema } from './jsonSchema';
 
 export type Priority = 'PRODUCTION' | 'RESEARCH';
 
-export type CollectionRuleType = 'static_streams' | 'event' | 'event_filter';
+export type CollectionRuleType = 'static_streams' | 'event' | 'event_filter' | 'listing_filter';
 
 // A rule's parameters keep the snake_case names its type's schema gives them (see collection/rule-types).
 export type RuleParameters = Record<string, unknown>;
@@ -25,7 +25,7 @@ export interface CollectionRule {
   createdAt?: string;
   updatedBy?: string;
   updatedAt?: string;
-  // What the reconciler last resolved an event or event_filter rule to.
+  // What the reconciler last resolved an event, event_filter or listing_filter rule to (a listing rule's events are 0).
   resolvedEvents?: number;
   resolvedStreams?: number;
   waitingEvents?: number;
@@ -39,9 +39,11 @@ export interface RuleTypeSchema extends JsonSchema {
 
 export interface RulePreview {
   events: number;
+  // Only a listing_filter preview counts listings; its sample rows carry listingId instead of eventId.
+  listings?: number;
   streams: number;
   capped: boolean;
-  sample: { eventId: number; title: string; volume24h: number | null; streams: number }[];
+  sample: { eventId?: number; listingId?: number; title: string; volume24h: number | null; streams: number }[];
 }
 
 export type TargetState = 'DESIRED' | 'RETIRING' | 'RETIRED';

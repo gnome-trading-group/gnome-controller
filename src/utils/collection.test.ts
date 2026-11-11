@@ -131,6 +131,10 @@ describe('rule summaries', () => {
       .toBe('3 events · 6 streams · 1 waiting');
     expect(ruleSelection(rule({ ruleType: 'event_filter', resolvedEvents: 1, resolvedStreams: 2, capped: true })))
       .toBe('1 event · 2 streams · capped');
+    expect(ruleSelection(rule({ ruleType: 'listing_filter', resolvedEvents: 0, resolvedStreams: 110 })))
+      .toBe('110 listings');
+    expect(ruleSelection(rule({ ruleType: 'listing_filter', resolvedEvents: 0, resolvedStreams: 1, capped: true })))
+      .toBe('1 listing · capped');
   });
 
   it('puts an event filter in a line', () => {
@@ -143,6 +147,10 @@ describe('rule summaries', () => {
       parameters: { tags: ['cs2'], proposition_kinds: ['WINNER'], proposition_scopes: ['match', 'map:1'],
         starts_within_hours: 48, max_streams: 50 },
     }))).toBe('starting within 48h · tags: cs2 · kinds: WINNER · scopes: match, map:1 · max 50 streams');
+    expect(ruleCriteria(rule({
+      ruleType: 'listing_filter',
+      parameters: { exchange_ids: [3, 4], security_types: ['PERPETUAL'], min_volume_24h: 1000000, max_streams: 300 },
+    }))).toBe('≥ $1,000,000 24h · exchanges: 3, 4 · types: PERPETUAL · max 300 streams');
     expect(ruleCriteria(rule({ parameters: { stream_ids: [1] } }))).toBeNull();
   });
 });

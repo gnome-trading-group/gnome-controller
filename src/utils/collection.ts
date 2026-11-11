@@ -36,6 +36,7 @@ export const RULE_TYPE_LABELS: Record<CollectionRule['ruleType'], string> = {
   static_streams: 'Streams',
   event: 'Events',
   event_filter: 'Event filter',
+  listing_filter: 'Listing filter',
 };
 
 /** How many streams a rule selects: its own list, or what the reconciler last resolved it to (null before that). */
@@ -52,15 +53,19 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 export function ruleSelection(rule: CollectionRule): string {
   if (rule.ruleType === 'static_streams') return plural(ruleStreamCount(rule) ?? 0, 'stream');
   if (rule.resolvedStreams == null) return 'not resolved yet';
+  // A listing rule takes one book stream per listing.
+  if (rule.ruleType === 'listing_filter') {
+    return [plural(rule.resolvedStreams, 'listing'), ...(rule.capped ? ['capped'] : [])].join(' · ');
+  }
   const parts = [plural(rule.resolvedEvents ?? 0, 'event'), plural(rule.resolvedStreams, 'stream')];
   if (rule.waitingEvents) parts.push(`${rule.waitingEvents} waiting`);
   if (rule.capped) parts.push('capped');
   return parts.join(' · ');
 }
 
-/** An event_filter rule's parameters in a line: e.g. "top 20 by volume · ≥ $5K · max 200 streams". */
+/** A filter rule's parameters in a line: e.g. "top 20 by volume · ≥ $5K · max 200 streams". */
 export function ruleCriteria(rule: CollectionRule): string | null {
-  if (rule.ruleType !== 'event_filter') return null;
+  if (rule.ruleType !== 'event_filter' && rule.ruleType !== 'listing_filter') return null;
   const p = rule.parameters;
   const parts: string[] = [];
   if (p.top_n != null) parts.push(`top ${p.top_n} by volume`);
@@ -68,7 +73,7 @@ export function ruleCriteria(rule: CollectionRule): string | null {
   if (p.expires_within_hours != null) parts.push(`expiring within ${p.expires_within_hours}h`);
   if (p.starts_within_hours != null) parts.push(`starting within ${p.starts_within_hours}h`);
   const lists = [
-    ['exchange_ids', 'exchanges'], ['categories', 'categories'], ['tags', 'tags'],
+    ['exchange_ids', 'exchanges'], ['security_types', 'types'], ['categories', 'categories'], ['tags', 'tags'],
     ['proposition_kinds', 'kinds'], ['proposition_scopes', 'scopes'],
   ] as const;
   for (const [key, label] of lists) {
