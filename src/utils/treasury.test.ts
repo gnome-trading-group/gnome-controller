@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  credentialsFromFile, dollarsToUnits, formatPartitionThresholds, missingCredentials, parsePartitionThresholds,
+  credentialsFromFile, dollarsToUnits, formatPartitionTargets, formatPartitionThresholds, missingCredentials,
+  parsePartitionTargets, parsePartitionThresholds,
   needsKey, transferAmount, treasuryTotals,
 } from './treasury';
 import { AccountTreasury } from '../types/treasury';
@@ -86,5 +87,14 @@ describe('shard thresholds', () => {
     expect(parsePartitionThresholds('')).toEqual({});
     expect(parsePartitionThresholds('x=1')).toBeNull();
     expect(parsePartitionThresholds('3=-1')).toBeNull();
+  });
+
+  it('reads shard rebalancing targets as whole percents adding up to 100, and writes them back', () => {
+    expect(parsePartitionTargets('3=20, 0 = 80%')).toEqual({ 0: 80, 3: 20 });
+    expect(formatPartitionTargets({ 3: 20, 0: 80, 2: 0 })).toBe('0=80, 3=20');
+    expect(parsePartitionTargets('0=80, 3=10')).toBeNull();
+    expect(parsePartitionTargets('0=150')).toBeNull();
+    expect(parsePartitionTargets('0=50.5, 3=49.5')).toBeNull();
+    expect(parsePartitionTargets('')).toBeNull();
   });
 });

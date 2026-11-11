@@ -76,6 +76,32 @@ export function formatPartitionThresholds(thresholds: Record<string, string>): s
     .join(', ');
 }
 
+/** "0=80, 3=20" as whole percents per shard adding up to 100, or null if it isn't that. */
+export function parsePartitionTargets(text: string): Record<string, number> | null {
+  const targets: Record<string, number> = {};
+  for (const part of text.split(',').map((p) => p.trim()).filter(Boolean)) {
+    const match = /^(\d+)\s*=\s*(\d+)\s*%?$/.exec(part);
+    if (!match || Number(match[2]) > 100) return null;
+    targets[match[1]] = Number(match[2]);
+  }
+  const total = Object.values(targets).reduce((sum, p) => sum + p, 0);
+  return total === 100 ? targets : null;
+}
+
+/** The inverse of {@link parsePartitionTargets}, for prefilling the field. */
+export function formatPartitionTargets(targets: Record<string, number>): string {
+  return Object.entries(targets)
+    .filter(([, percent]) => percent > 0)
+    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+    .map(([shard, percent]) => `${shard}=${percent}`)
+    .join(', ');
+}
+
+/** The targets Kalshi rebalances toward: the account's where it names them, else what Kalshi was found set to. */
+export function rebalancingTargets(t: AccountTreasury): Record<string, number> | null {
+  return t.partitionTargets ?? t.rebalanceTargets?.allocations ?? null;
+}
+
 export interface TreasuryTotals {
   cashTotal: bigint;
   redeemable: bigint;

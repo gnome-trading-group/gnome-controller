@@ -42,6 +42,17 @@ export type CashReconStatus = 'OK' | 'PENDING' | 'BREAK' | 'ERROR' | 'OFF';
 
 // What one account holds and what is promised out of it. base = cash + redeemable + positions at cost; free = base -
 // minBuffer - allocated, where allocated counts each active live session's budget plus positions no session holds.
+// What a rebalance leaves behind for resting orders: nothing, the largest single commitment, or every order's margin.
+export type RebalanceReservation = 'none' | 'max' | 'sum';
+
+export interface PartitionTreasury {
+  cash: string;
+  heldAtCost: string;
+  base: string;
+  allocated: string;
+  free: string;
+}
+
 export interface AccountTreasury {
   accountId: number;
   exchangeId: number;
@@ -68,6 +79,15 @@ export interface AccountTreasury {
   // reading's split (null on venues that don't split), and the low-cash threshold set per shard.
   cashByPartition: Record<string, string> | null;
   partitionLowThresholds: Record<string, string>;
+  // Per shard: its cash, positions at cost, and the full budget of every live session trading its markets (a session
+  // trading several shards counts against each). Null on venues that don't split.
+  partitions: Record<string, PartitionTreasury> | null;
+  // Kalshi moves free cash between shards toward targets (percent per shard). What the latest reading found it set to,
+  // with why it couldn't be read or set (null on venues that don't rebalance), and what the account wants: null leaves
+  // Kalshi's alone, empty turns rebalancing off. The poller sets Kalshi to the account's.
+  rebalanceTargets: { allocations?: Record<string, number>; restingMarginReservation?: string; error?: string } | null;
+  partitionTargets: Record<string, number> | null;
+  rebalanceReservation: RebalanceReservation;
   recon: {
     cashStatus: CashReconStatus;
     cashDiff: string | null;
@@ -146,6 +166,8 @@ export interface AccountConfigUpdate {
   snapshotMaxAgeMinutes?: number;
   settlementGraceMinutes?: number;
   partitionLowThresholds?: Record<string, string>;
+  partitionTargets?: Record<string, number> | null;
+  rebalanceReservation?: RebalanceReservation;
 }
 
 export interface ManualSnapshot {

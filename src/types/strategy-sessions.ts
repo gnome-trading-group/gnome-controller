@@ -35,6 +35,17 @@ export interface StrategySession {
   stoppedAt: string | null;
   dateCreated: string;
   dateModified: string;
+  // The exchanges its listings trade on, and for a live session the venue account it trades each through. Optional
+  // so a registry without them reads as none.
+  exchangeIds?: number[];
+  venueAccounts?: SessionVenueAccount[];
+}
+
+export interface SessionVenueAccount {
+  exchangeId: number;
+  exchangeCode: string;
+  accountId: number;
+  label: string;
 }
 
 export interface CreateStrategySessionRequest {

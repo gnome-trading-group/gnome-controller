@@ -32,7 +32,8 @@ export function SessionRiskPanel({ session, strategyName, policies, policiesLoad
   const [editPolicyTarget, setEditPolicyTarget] = useState<RiskPolicy | null>(null);
   const [showAllListingPolicies, setShowAllListingPolicies] = useState(false);
 
-  const applicablePolicies = policiesForSession(policies, sessionId, session.strategyId);
+  const accounts = session.venueAccounts ?? [];
+  const applicablePolicies = policiesForSession(policies, sessionId, session.strategyId, accounts.map((a) => a.accountId));
   const tradedListings = configuredListings([session]);
   const hiddenListingPolicies = applicablePolicies.filter((p) => isUnrelatedListingPolicy(p, tradedListings)).length;
   const sessionPolicies = showAllListingPolicies
@@ -41,7 +42,8 @@ export function SessionRiskPanel({ session, strategyName, policies, policiesLoad
   const exchangeName = useExchangeName();
   const listingLabels = useListingLabels(sessionPolicies.flatMap((p) => (p.listingId != null ? [p.listingId] : [])));
   const describePolicy = (p: RiskPolicy) =>
-    describeTarget(p, () => strategyName, (listingId) => listingLabels[listingId], exchangeName);
+    describeTarget(p, () => strategyName, (listingId) => listingLabels[listingId], exchangeName,
+      (accountId) => accounts.find((a) => a.accountId === accountId)?.label);
 
   return (
     <>

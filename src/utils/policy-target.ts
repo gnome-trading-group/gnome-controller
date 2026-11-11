@@ -30,8 +30,9 @@ export function describeTarget(
   strategyName?: (strategyId: number) => string | undefined,
   listingLabel?: (listingId: number) => string | undefined,
   exchangeName?: (exchangeId: number) => string | undefined,
+  accountLabel?: (accountId: number) => string | undefined,
 ): string {
-  if (policy.accountId != null) return `Account ${policy.accountId} (all strategies)`;
+  if (policy.accountId != null) return `Account ${accountLabel?.(policy.accountId) ?? policy.accountId} (all strategies)`;
   const strategy = policy.strategyId != null
     ? (strategyName?.(policy.strategyId) ?? `Strategy ${policy.strategyId}`)
     : undefined;
@@ -78,11 +79,15 @@ export function policiesForStrategy(policies: RiskPolicy[], strategyId: number):
     && (p.strategyId === strategyId || (p.strategyId == null && p.sessionId == null)) && !isIdleGlobalKill(p));
 }
 
-// Every policy that can restrict this session: global, exchange- and listing-wide rows, its strategy's, and its own.
-export function policiesForSession(policies: RiskPolicy[], sessionId: string, strategyId: number): RiskPolicy[] {
-  return policies.filter((p) => p.accountId == null
-    && (p.sessionId == null ? p.strategyId == null || p.strategyId === strategyId : p.sessionId === sessionId)
-    && !isIdleGlobalKill(p));
+// Every policy that can restrict this session: global, exchange- and listing-wide rows, its strategy's, its own, and
+// the kills of the venue accounts a live session trades through (the order gateway's).
+export function policiesForSession(
+  policies: RiskPolicy[], sessionId: string, strategyId: number, accountIds: number[] = [],
+): RiskPolicy[] {
+  return policies.filter((p) => (p.accountId != null
+    ? accountIds.includes(p.accountId)
+    : (p.sessionId == null ? p.strategyId == null || p.strategyId === strategyId : p.sessionId === sessionId)
+      && !isIdleGlobalKill(p)));
 }
 
 export function isIdleGlobalKill(policy: RiskPolicy): boolean {

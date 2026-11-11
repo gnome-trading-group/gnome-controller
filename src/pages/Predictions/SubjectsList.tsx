@@ -23,10 +23,11 @@ import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
-import { PropositionSubject, SubjectMergeCandidate } from '../../types';
+import { PropositionSubject, SubjectKeyAlias, SubjectKeyAliasOrigin, SubjectMergeCandidate } from '../../types';
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
+import { AliasText, OriginBadge } from './SubjectKeys';
 
 const PAGE_LIMIT = 500;
 const QUEUE_STATUS_OPTIONS = [
@@ -157,15 +158,27 @@ function HoldDetails({ candidate }: { candidate: SubjectMergeCandidate }) {
   const { prices, collisions, entityMap } = candidate.details;
   return (
     <Stack gap={2}>
-      {(prices ?? []).slice(0, 3).map(p => (
-        <Text key={`${p.securityIdA}-${p.securityIdB}`} size="xs">
-          {p.relationshipType === 'EQUIVALENT' ? '≡' : '⇒'}{' '}
-          <Anchor component={Link} to={`/security-master/securities/${p.bidSecurityId}`} size="xs">{p.bidSecurityId}</Anchor>
-          {' '}bid {p.bid.toFixed(2)} above{' '}
-          <Anchor component={Link} to={`/security-master/securities/${p.askSecurityId}`} size="xs">{p.askSecurityId}</Anchor>
-          {' '}ask {p.ask.toFixed(2)}
-        </Text>
-      ))}
+      {(prices ?? []).slice(0, 3).map(p => {
+        const sign = p.relationshipType === 'EQUIVALENT' ? '≡' : '⇒';
+        const security = (id: number) => (
+          <Anchor component={Link} to={`/security-master/securities/${id}`} size="xs">{id}</Anchor>
+        );
+        // Candidates held before the check compared bid to ask carry each side's mid instead.
+        if (p.bid === undefined || p.ask === undefined || p.bidSecurityId === undefined || p.askSecurityId === undefined) {
+          return (
+            <Text key={`${p.securityIdA}-${p.securityIdB}`} size="xs">
+              {sign} {security(p.securityIdA)} mid {p.midA?.toFixed(2) ?? '?'} vs {security(p.securityIdB)} mid{' '}
+              {p.midB?.toFixed(2) ?? '?'}
+            </Text>
+          );
+        }
+        return (
+          <Text key={`${p.securityIdA}-${p.securityIdB}`} size="xs">
+            {sign} {security(p.bidSecurityId)} bid {p.bid.toFixed(2)} above {security(p.askSecurityId)} ask{' '}
+            {p.ask.toFixed(2)}
+          </Text>
+        );
+      })}
       {(prices?.length ?? 0) > 3 && <Text size="xs" c="dimmed">and {prices!.length - 3} more</Text>}
       {Object.entries(collisions ?? {}).map(([eventId, ids]) => (
         <Text key={eventId} size="xs">event {eventId}: securities {ids.join(', ')} would read alike</Text>
@@ -283,6 +296,108 @@ function MergeQueue() {
   );
 }
 
+const ALIAS_ORIGIN_OPTIONS = [
+  { value: 'ALL', label: 'Any origin' },
+  { value: 'MERGE', label: 'Merge' },
+  { value: 'RECONCILE', label: 'Key reconcile' },
+  { value: 'MANUAL', label: 'Manual' },
+];
+const ALIAS_SINCE_OPTIONS = [
+  { value: '24', label: 'Last 24 hours' },
+  { value: '168', label: 'Last 7 days' },
+  { value: '720', label: 'Last 30 days' },
+  { value: 'ALL', label: 'Any time' },
+];
+
+function KeyAliases() {
+  const urlState = useUrlTableState({});
+  const origin = urlState.getParam('origin') || 'ALL';
+  const since = urlState.getParam('since') || '24';
+  const [aliases, setAliases] = useState<SubjectKeyAlias[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    registryApi.listRecentKeyAliases({
+      origin: origin === 'ALL' ? undefined : origin as SubjectKeyAliasOrigin,
+      since: since === 'ALL' ? undefined : new Date(Date.now() - Number(since) * 3600_000).toISOString(),
+      limit: PAGE_LIMIT,
+    }).then(rows => {
+      if (!cancelled) setAliases(rows);
+    }).catch(e => {
+      if (!cancelled) setError(errorMessage(e, 'Failed to load key aliases'));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [origin, since, reloadKey]);
+
+  return (
+    <Stack gap="sm">
+      <Text size="sm" c="dimmed">
+        The key aliases stored most recently across every subject: the merge pass's (a merged subject's keys read as the
+        kept one's), the key reconcile's (one entity two venues key differently) and people's. Change them on the
+        subject's page.
+      </Text>
+      <Group gap="xs">
+        <Select size="xs" data={ALIAS_ORIGIN_OPTIONS} value={origin} allowDeselect={false}
+          onChange={v => urlState.setParam('origin', v === 'ALL' ? '' : v ?? '')} w={160} />
+        <Select size="xs" data={ALIAS_SINCE_OPTIONS} value={since} allowDeselect={false}
+          onChange={v => urlState.setParam('since', v === '24' ? '' : v ?? '')} w={160} />
+        <Tooltip label="Reload">
+          <ActionIcon variant="subtle" onClick={() => setReloadKey(k => k + 1)} loading={loading}><IconRefresh size={16} /></ActionIcon>
+        </Tooltip>
+        <Text size="xs" c="dimmed">
+          {aliases.length}{aliases.length === PAGE_LIMIT ? '+' : ''} aliases
+        </Text>
+      </Group>
+      {error && <Alert color="red">{error}</Alert>}
+      <Paper withBorder>
+        <Table striped withColumnBorders fz="sm">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th style={{ width: 120 }}>When</Table.Th>
+              <Table.Th>Subject</Table.Th>
+              <Table.Th>Alias</Table.Th>
+              <Table.Th style={{ width: 110 }}>Origin</Table.Th>
+              <Table.Th>Why</Table.Th>
+              <Table.Th style={{ width: 200 }}>By</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {!loading && aliases.length === 0 && (
+              <Table.Tr><Table.Td colSpan={6}><Text size="sm" c="dimmed">No aliases.</Text></Table.Td></Table.Tr>
+            )}
+            {aliases.map(a => (
+              <Table.Tr key={`${a.subjectId}-${a.kind}-${a.key}`}>
+                <Table.Td><ReactTimeAgo date={new Date(a.dateModified)} timeStyle="round" /></Table.Td>
+                <Table.Td>
+                  <SubjectLink id={a.canonicalSubjectId} subjectKey={a.canonicalSubjectKey ?? String(a.canonicalSubjectId)} />
+                </Table.Td>
+                <Table.Td>
+                  <AliasText alias={a} />
+                  {a.kind === 'MEASURE' && <Badge size="xs" variant="outline" ml={6}>measure</Badge>}
+                  {a.flags.map(f => <Badge key={f} size="xs" color="orange" variant="light" ml={6}>{f}</Badge>)}
+                </Table.Td>
+                <Table.Td><OriginBadge origin={a.origin} /></Table.Td>
+                <Table.Td>
+                  {a.mergeLogId !== null && <Text size="xs" c="dimmed">merge #{a.mergeLogId}</Text>}
+                  <Text size="xs">{a.reason || '—'}</Text>
+                </Table.Td>
+                <Table.Td><Text size="xs">{a.actor}</Text></Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Paper>
+    </Stack>
+  );
+}
+
 function SubjectsList() {
   const urlState = useUrlTableState({});
   const tab = urlState.getParam('tab') || 'subjects';
@@ -298,9 +413,11 @@ function SubjectsList() {
         <Tabs.List mb="md">
           <Tabs.Tab value="subjects">Subjects</Tabs.Tab>
           <Tabs.Tab value="queue">Merge queue</Tabs.Tab>
+          <Tabs.Tab value="aliases">Key aliases</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="subjects"><SubjectsTable /></Tabs.Panel>
         <Tabs.Panel value="queue"><MergeQueue /></Tabs.Panel>
+        <Tabs.Panel value="aliases">{tab === 'aliases' && <KeyAliases />}</Tabs.Panel>
       </Tabs>
     </Container>
   );

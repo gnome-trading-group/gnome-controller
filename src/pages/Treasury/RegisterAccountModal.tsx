@@ -180,7 +180,7 @@ export function RegisterAccountModal({ opened, onClose, onCreated, account }: Re
                 <Text size="sm" fw={500}>Key for the balance poller</Text>
                 <Text size="xs" c="dimmed">
                   A separate key, so it can be revoked without breaking trading.
-                  {exchangeCode === 'KALSHI' && ' Create it with only the read scope, so the poller never holds one that can trade.'}
+                  {exchangeCode === 'KALSHI' && ' Create it with the read and write::transfer scopes and never write, so the poller can keep the shard rebalancing targets set but never holds a key that can trade.'}
                 </Text>
                 <CredentialInputs exchangeCode={exchangeCode} values={readCredentials} idPrefix="read" omit={['subaccount']}
                   onChange={(key, value) => setReadCredentials((c) => ({ ...c, [key]: value }))} />

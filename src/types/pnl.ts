@@ -343,7 +343,6 @@ export interface SessionHealth {
   // Older sessions don't report the rest.
   gateways: { name: string; reconnecting: boolean; resyncsLast5m?: number }[];
   risk?: { stale: boolean; unguarded: boolean; unbuildablePolicies: number; droppedLatches: number } | null;
-  rateLimit?: { account: string; throttling: boolean }[];
   // A reading the host can't give (no /proc off Linux, no CPU share before the second sample) is -1.
   host?: {
     cpuBusyPermille: number;

@@ -29,6 +29,9 @@ import { StopSessionModal } from '../Sessions/StopSessionModal';
 import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal';
 import { KillSwitchLatestEntry } from '../../components/KillSwitchLatestEntry';
+import { CoveringKillsAlert } from '../../components/risk/CoveringKillsAlert';
+import { useExchangeName } from '../../hooks/useExchangeName';
+import { killsBeyondStrategy } from '../../utils/kill-coverage';
 import { LastUpdated } from '../../components/LastUpdated';
 import { StrategyRiskPanel } from '../../components/risk/StrategyRiskPanel';
 import { StrategyLimitUsage } from '../../components/risk/LimitUsage';
@@ -120,6 +123,10 @@ function StrategyDetail() {
   const latestKillEntry = useLatestPolicyHistory(killSwitch);
   const activity = strategyActivity(id, sessions, policiesLoaded ? policies : null);
   const listingHalts = listingKills(policies).length;
+  const exchangeName = useExchangeName();
+  const widerKills = useMemo(
+    () => (policiesQuery.data ? killsBeyondStrategy(policiesQuery.data, id, sessions, exchangeName) : []),
+    [policiesQuery.data, id, sessions, exchangeName]);
 
   const modeSessions = useMemo(
     () => sessions.filter(s => s.mode === mode).sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? '')),
@@ -299,6 +306,8 @@ function StrategyDetail() {
           </Group>
         </Alert>
       )}
+
+      <CoveringKillsAlert kills={widerKills} subject="strategy" />
 
       {(reviewCount > 0 || listingHalts > 0) && (
         <Alert mb="md" color="orange" icon={<IconAlertTriangle size={20} />}>

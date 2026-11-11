@@ -82,12 +82,16 @@ describe('account kills', () => {
     expect(isKillSwitch(accountKill, { accountId: 3 })).toBe(false);
   });
 
-  it('read as an account, live on the treasury page, and stay off strategy and session pages', () => {
+  it('read as an account, live on the treasury page, and show only on sessions trading through it', () => {
     expect(describeTarget(accountKill)).toBe('Account 2 (all strategies)');
+    expect(describeTarget(accountKill, undefined, undefined, undefined, (id) => (id === 2 ? 'steady-heron-01' : undefined)))
+      .toBe('Account steady-heron-01 (all strategies)');
     expect(policyLevel(accountKill).label).toBe('Account');
     expect(targetPageLink(accountKill)).toBe('/treasury');
     expect(policiesForStrategy([accountKill], 4)).toEqual([]);
     expect(policiesForSession([accountKill], 's1', 4)).toEqual([]);
+    expect(policiesForSession([accountKill], 's1', 4, [3])).toEqual([]);
+    expect(policiesForSession([accountKill], 's1', 4, [2])).toEqual([accountKill]);
     expect(isIdleGlobalKill({ ...accountKill, enabled: false })).toBe(false);
   });
 });

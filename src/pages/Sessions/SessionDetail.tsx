@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import {
   Alert, Anchor, Badge, Button, Card, Container, Group, SegmentedControl, Stack, Tabs, Text, Tooltip,
 } from '@mantine/core';
-import { IconAB2, IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
+import { IconAB2, IconAlertTriangle, IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isActiveSession, Mode, StrategySession, StrategySessionStatus } from '../../types';
 import { errorMessage, findKillSwitch, isKilled, setKillSwitch } from '../../utils/kill-switch';
+import { killsCoveringSession } from '../../utils/kill-coverage';
 import { registryApi } from '../../utils/api';
 import { SESSION_STATUS_COLORS, stopSummary } from '../../utils/session-status';
 import {
@@ -17,6 +18,8 @@ import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { LastUpdated } from '../../components/LastUpdated';
 import { ContainerLogs } from '../../components/ContainerLogs';
 import { SessionRiskPanel } from '../../components/risk/SessionRiskPanel';
+import { CoveringKillsAlert } from '../../components/risk/CoveringKillsAlert';
+import { useExchangeName } from '../../hooks/useExchangeName';
 import { LimitUsage } from '../../components/risk/LimitUsage';
 import { Heartbeat } from '../../components/trading/Heartbeat';
 import { Kpi, KpiStrip, ModeBadge, ModeBand } from '../../components/trading/layout';
@@ -86,7 +89,12 @@ function SessionDetail() {
   const sessionKillSwitch = findKillSwitch(policies, { sessionId });
   const known = policiesLoaded ? policies : null;
   const sessionKilled = isKilled(known, { sessionId });
-  const strategyKilled = session ? isKilled(known, { strategyId: session.strategyId }) : false;
+  const exchangeName = useExchangeName();
+  const coveringKills = useMemo(
+    () => (session && policiesLoaded ? killsCoveringSession(policies, session, exchangeName) : []),
+    [session, policies, policiesLoaded, exchangeName]);
+  const wholeSessionKills = coveringKills.filter(k => k.wholeSession);
+  const listingHalts = coveringKills.length - wholeSessionKills.length;
 
   const refreshAll = () => {
     queryClient.invalidateQueries({ queryKey: keys.session(sessionId) });
@@ -186,11 +194,11 @@ function SessionDetail() {
           {policiesLoaded ? ' — showing the last state that loaded.' : " — this session's kill switch status is unknown."}
         </Alert>
       )}
-      {canKill && (sessionKilled || strategyKilled) && (
-        <Alert color="red" title={sessionKilled ? 'Session killed' : 'Strategy killed'} mb="md">
-          {sessionKilled
-            ? 'This session cannot send orders and its open orders have been cancelled. Other sessions of the strategy are unaffected.'
-            : 'The strategy is killed, so every session of it, including this one, is blocked from sending orders.'}
+      {canKill && <CoveringKillsAlert kills={wholeSessionKills} subject="session" />}
+      {canKill && listingHalts > 0 && (
+        <Alert color="orange" icon={<IconAlertTriangle size={20} />} mb="md">
+          {listingHalts} listing{listingHalts > 1 ? 's are' : ' is'} halted for this session.{' '}
+          <Anchor size="sm" onClick={() => setTab('risk')}>Risk</Anchor>
         </Alert>
       )}
       {session && stopSummary(session) && (

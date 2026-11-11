@@ -24,7 +24,7 @@ describe('where an attention item is dealt with', () => {
   });
 
   it("sends an account's own problems to that account on the treasury page, even when they name a listing", () => {
-    for (const kind of ['RECON_STALE', 'BALANCE_LOW', 'SHARD_BALANCE_LOW', 'ALLOCATION_EXCEEDS_BALANCE', 'ACCOUNT_DUE_FOR_ROTATION', 'ACCOUNT_READY_TO_RETIRE']) {
+    for (const kind of ['RECON_STALE', 'BALANCE_LOW', 'SHARD_BALANCE_LOW', 'SHARD_FUNDS_REJECTED', 'SHARD_UNTARGETED', 'REBALANCE_DRIFT', 'ALLOCATION_EXCEEDS_BALANCE', 'ACCOUNT_DUE_FOR_ROTATION', 'ACCOUNT_READY_TO_RETIRE']) {
       expect(attentionLink(item({ kind, accountId: 7, exchangeId: 3 }), 'live')).toBe('/treasury?account=7');
     }
     expect(attentionLink(item({ kind: 'RECON_MISMATCH', accountId: 7, listingId: 9 }), 'live')).toBe('/treasury?account=7');

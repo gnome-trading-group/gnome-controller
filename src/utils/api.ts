@@ -3,7 +3,7 @@ import {
   DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
   RuleType, TriggerEvaluation,
 } from '../types/launcher';
-import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractProposition, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PropositionSubject, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope, SubjectMergeCandidate, SubjectMergeLogEntry } from '../types';
+import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractProposition, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PropositionSubject, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope, SubjectMergeCandidate, SubjectMergeLogEntry, SubjectKeyAlias, SetSubjectKeyAlias, SubjectKeyAliasKind, SubjectKeyAliasOrigin } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
 import { BacktestRun } from '../types/backtests';
@@ -1076,6 +1076,30 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
       body: { subjectId },
+    }),
+  listSubjectKeyAliases: (subjectId: number) =>
+    sendApiRequest<SubjectKeyAlias[]>('/proposition-subjects', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: { subjectIds: subjectId, keyAliases: true },
+    }),
+  listRecentKeyAliases: (params: { origin?: SubjectKeyAliasOrigin; since?: string; limit?: number } = {}) => {
+    const queryParams: Record<string, string | number | boolean> = { keyAliases: true };
+    if (params.origin) queryParams.origin = params.origin;
+    if (params.since) queryParams.since = params.since;
+    if (params.limit !== undefined) queryParams.limit = params.limit;
+    return sendApiRequest<SubjectKeyAlias[]>('/proposition-subjects', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams,
+    });
+  },
+  changeSubjectKeyAliases: (subjectId: number, change: {
+    set?: SetSubjectKeyAlias[]; remove?: { kind: SubjectKeyAliasKind; key: string }[] }) =>
+    sendApiRequest<SubjectKeyAlias[]>('/proposition-subjects', 'PATCH', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      body: { subjectId, set: change.set ?? [], remove: change.remove ?? [] },
     }),
   listSubjectPropositions: (subjectId: number) =>
     sendApiRequest<ContractProposition[]>('/contract-propositions', 'GET', {

@@ -2,8 +2,9 @@ import { AttentionItem, Mode } from '../types';
 
 // Problems with a venue account itself (its money or its lifecycle), dealt with on the treasury page.
 const ACCOUNT_KINDS = new Set([
-  'RECON_MISMATCH', 'RECON_STALE', 'BALANCE_LOW', 'SHARD_BALANCE_LOW', 'ALLOCATION_EXCEEDS_BALANCE', 'ACCOUNT_DUE_FOR_ROTATION',
-  'ACCOUNT_READY_TO_RETIRE',
+  'RECON_MISMATCH', 'RECON_STALE', 'BALANCE_LOW', 'SHARD_BALANCE_LOW', 'SHARD_FUNDS_REJECTED', 'SHARD_UNTARGETED',
+  'REBALANCE_DRIFT', 'ALLOCATION_EXCEEDS_BALANCE',
+  'ACCOUNT_DUE_FOR_ROTATION', 'ACCOUNT_READY_TO_RETIRE',
 ]);
 
 export function treasuryLink(accountId: number | null): string {

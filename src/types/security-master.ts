@@ -302,10 +302,13 @@ export interface SubjectMergeCandidate {
       securityIdA: number;
       securityIdB: number;
       relationshipType: string;
-      bidSecurityId: number;
-      bid: number;
-      askSecurityId: number;
-      ask: number;
+      bidSecurityId?: number;
+      bid?: number;
+      askSecurityId?: number;
+      ask?: number;
+      // Candidates held before the check compared bid to ask.
+      midA?: number;
+      midB?: number;
     }[];
     collisions?: Record<string, number[]>;
     entityMap?: [string, string][];
@@ -327,6 +330,37 @@ export interface SubjectMergeLogEntry {
   actor: string;
   propositionsMoved: number;
   dateCreated: string;
+}
+
+export type SubjectKeyAliasKind = 'ENTITY' | 'MEASURE';
+export type SubjectKeyAliasOrigin = 'MERGE' | 'RECONCILE' | 'MANUAL';
+
+// One entity or measure a subject spells two ways: derivation reads `key` as `canonicalKey`. Stored on a subject of the
+// merge tree and read across it; `canonicalSubjectId` is the tree's root.
+export interface SubjectKeyAlias {
+  requestedSubjectId: number;
+  canonicalSubjectId: number;
+  // Only on the cross-subject listing.
+  canonicalSubjectKey?: string;
+  subjectId: number;
+  kind: SubjectKeyAliasKind;
+  key: string;
+  canonicalKey: string;
+  flags: string[];
+  origin: SubjectKeyAliasOrigin;
+  mergeLogId: number | null;
+  reason: string | null;
+  actor: string;
+  dateCreated: string;
+  dateModified: string;
+}
+
+export interface SetSubjectKeyAlias {
+  kind: SubjectKeyAliasKind;
+  key: string;
+  canonicalKey: string;
+  origin: 'MANUAL';
+  reason?: string;
 }
 
 // What one security asks, as the classifier extracted it; `fields` keeps the classifier's snake_case keys.

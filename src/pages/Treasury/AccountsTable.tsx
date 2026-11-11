@@ -7,7 +7,7 @@ import { MantineReactTable, MRT_ColumnDef, useMantineReactTable } from 'mantine-
 import ReactTimeAgo from 'react-time-ago';
 import { AccountStatus, AccountTreasury } from '../../types/treasury';
 import { formatDuration, formatMoney } from '../../utils/format';
-import { ACCOUNT_STATUS_COLORS, ACCOUNT_TRANSITIONS, RECON_COLORS } from '../../utils/treasury';
+import { ACCOUNT_STATUS_COLORS, ACCOUNT_TRANSITIONS, rebalancingTargets, RECON_COLORS } from '../../utils/treasury';
 import { Money } from '../../components/trading/values';
 import { AccountRow } from './types';
 
@@ -23,15 +23,29 @@ export type AccountAction =
 
 const RIGHT = { mantineTableHeadCellProps: { align: 'right' as const }, mantineTableBodyCellProps: { align: 'right' as const } };
 
-// Kalshi's cash only backs orders on its own shard's markets, so where the venue splits it the split is shown too.
+// Kalshi's cash only backs orders on its own shard's markets, so where the venue splits it the split is shown too,
+// with what live sessions trading each shard claim on it and the share rebalancing gives it.
 function cashTooltip(t: AccountTreasury): string {
   const available = `${formatMoney(t.cashAvailable, false).text} available for new orders`;
   if (!t.cashByPartition) return available;
-  const shards = Object.entries(t.cashByPartition)
-    .sort(([a], [b]) => Number(a) - Number(b))
-    .map(([shard, cash]) => `shard ${shard}: ${formatMoney(cash, false).text}`)
+  const targets = rebalancingTargets(t);
+  const rebalancing = targets !== null && Object.values(targets).some((p) => p > 0);
+  const keys = new Set([...Object.keys(t.cashByPartition), ...Object.keys(t.partitions ?? {})]);
+  const shards = [...keys]
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+    .map((shard) => {
+      const cash = `shard ${shard}: ${formatMoney(t.cashByPartition?.[shard] ?? '0', false).text}`;
+      const allocated = t.partitions?.[shard]?.allocated;
+      const notes = [
+        allocated && allocated !== '0' && `${formatMoney(allocated, false).text} allocated`,
+        rebalancing && `target ${targets[shard] ?? 0}%`,
+      ].filter(Boolean);
+      return notes.length > 0 ? `${cash} (${notes.join(', ')})` : cash;
+    })
     .join(', ');
-  return `${available}. By shard: ${shards}`;
+  const state = targets === null ? '' : rebalancing ? '' : '. Rebalancing off';
+  const problem = t.rebalanceTargets?.error ? `. Rebalancing: ${t.rebalanceTargets.error}` : '';
+  return `${available}. By shard: ${shards}${state}${problem}`;
 }
 
 function money(header: string, field: 'cashTotal' | 'redeemable' | 'committed' | 'base' | 'allocated', hint: string): MRT_ColumnDef<AccountRow> {

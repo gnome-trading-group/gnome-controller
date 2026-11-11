@@ -2,13 +2,15 @@ import { ActionIcon, Anchor, Badge, Card, Group, Progress, SimpleGrid, Stack, Te
 import { IconPlayerStop } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import { StrategySession, StrategySessionStatus } from '../../types';
-import { useRiskUsages, useSessionsTotals } from '../../query/hooks';
+import { useRiskPolicies, useRiskUsages, useSessionsTotals } from '../../query/hooks';
 import { formatDuration } from '../../utils/format';
 import { configuredListings } from '../../utils/policy-target';
 import { closestLimit, usageColor } from '../../utils/risk-usage';
 import { SESSION_STATUS_COLORS } from '../../utils/session-status';
 import { Heartbeat } from '../../components/trading/Heartbeat';
 import { Money } from '../../components/trading/values';
+import { SessionKillBadge } from '../../components/risk/SessionKillBadge';
+import { useExchangeName } from '../../hooks/useExchangeName';
 
 // One card per session that's up or on its way up or down: whether it's alive, how it's doing, and how close it is to
 // a limit, with Stop to hand.
@@ -20,6 +22,8 @@ export function RunningSessions({ sessions, strategyName, onStop }: {
   const ids = sessions.map(s => s.sessionId);
   const totals = useSessionsTotals(ids, true);
   const usages = useRiskUsages(ids);
+  const policies = useRiskPolicies();
+  const exchangeName = useExchangeName();
   if (sessions.length === 0) {
     return <Text size="sm" c="dimmed" mb="lg">Nothing running in this mode.</Text>;
   }
@@ -42,6 +46,7 @@ export function RunningSessions({ sessions, strategyName, onStop }: {
                 {session.status !== StrategySessionStatus.RUNNING && (
                   <Badge size="xs" variant="light" color={SESSION_STATUS_COLORS[session.status]}>{session.status}</Badge>
                 )}
+                <SessionKillBadge session={session} policies={policies.data} exchangeName={exchangeName} size="xs" />
                 <Heartbeat session={session} />
                 <Tooltip label="Stop session" withArrow openDelay={400}>
                   <ActionIcon size="sm" variant="subtle" color="red" onClick={() => onStop(session)}

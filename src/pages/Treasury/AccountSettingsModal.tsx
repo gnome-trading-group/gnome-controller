@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Checkbox, Group, Modal, NumberInput, SegmentedControl, Stack, Text, TextInput } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
-import { AccountConfigUpdate } from '../../types/treasury';
+import { AccountConfigUpdate, RebalanceReservation } from '../../types/treasury';
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { plainDecimal } from '../../utils/format';
-import { dollarsToUnits, formatPartitionThresholds, parsePartitionThresholds } from '../../utils/treasury';
+import {
+  dollarsToUnits, formatPartitionTargets, formatPartitionThresholds, parsePartitionTargets, parsePartitionThresholds,
+} from '../../utils/treasury';
 import { AccountRow } from './types';
 
 const MONEY_FIELDS = [
@@ -16,6 +18,14 @@ const MONEY_FIELDS = [
 ] as const;
 
 type MoneyKey = typeof MONEY_FIELDS[number]['key'];
+
+// Leave Kalshi's rebalancing as it is, turn it off, or keep it set to targets (the poller does).
+type RebalanceMode = 'unmanaged' | 'off' | 'targets';
+
+function rebalanceMode(targets: Record<string, number> | null | undefined): RebalanceMode {
+  if (targets === null || targets === undefined) return 'unmanaged';
+  return Object.keys(targets).length === 0 ? 'off' : 'targets';
+}
 
 interface AccountSettingsModalProps {
   row: AccountRow | null;
@@ -34,6 +44,9 @@ export function AccountSettingsModal({ row, onClose, onSaved }: AccountSettingsM
   const [snapshotMaxAge, setSnapshotMaxAge] = useState<number | string>('');
   const [settlementGrace, setSettlementGrace] = useState<number | string>('');
   const [shardThresholds, setShardThresholds] = useState('');
+  const [rebalance, setRebalance] = useState<RebalanceMode>('unmanaged');
+  const [shardTargets, setShardTargets] = useState('');
+  const [reservation, setReservation] = useState<RebalanceReservation>('sum');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +71,9 @@ export function AccountSettingsModal({ row, onClose, onSaved }: AccountSettingsM
     setSnapshotMaxAge('');
     setSettlementGrace('');
     setShardThresholds(treasury ? formatPartitionThresholds(treasury.partitionLowThresholds ?? {}) : '');
+    setRebalance(rebalanceMode(treasury?.partitionTargets));
+    setShardTargets(treasury?.partitionTargets ? formatPartitionTargets(treasury.partitionTargets) : '');
+    setReservation(treasury?.rebalanceReservation ?? 'sum');
     setError(null);
   }, [openFor]);
 
@@ -87,6 +103,12 @@ export function AccountSettingsModal({ row, onClose, onSaved }: AccountSettingsM
   else if (isKalshi && JSON.stringify(thresholds) !== JSON.stringify(row?.treasury?.partitionLowThresholds ?? {})) {
     update.partitionLowThresholds = thresholds;
   }
+  const targets = rebalance === 'targets' ? parsePartitionTargets(shardTargets) : rebalance === 'off' ? {} : null;
+  if (isKalshi && rebalance === 'targets' && targets === null) invalid.push('Shard targets');
+  else if (isKalshi && JSON.stringify(targets) !== JSON.stringify(row?.treasury?.partitionTargets ?? null)) {
+    update.partitionTargets = targets;
+  }
+  if (isKalshi && reservation !== (row?.treasury?.rebalanceReservation ?? 'sum')) update.rebalanceReservation = reservation;
   const changes = Object.keys(update).length - 1;
 
   const save = async () => {
@@ -126,6 +148,30 @@ export function AccountSettingsModal({ row, onClose, onSaved }: AccountSettingsM
             description="Kalshi's cash only backs orders on its own shard's markets. Shards listed as shard=dollars are flagged when their cash falls below that; leave empty for none."
             value={shardThresholds} onChange={(e) => setShardThresholds(e.currentTarget.value)}
             error={thresholds === null ? 'shard=dollars, comma separated' : undefined} />
+        )}
+        {isKalshi && (
+          <Stack gap={4}>
+            <Text size="sm" fw={500}>Shard rebalancing</Text>
+            <Text size="xs" c="dimmed">
+              Kalshi moves free cash between shards every 10 seconds toward these targets; the poller keeps Kalshi set to
+              them with the account&apos;s read key, which needs the write::transfer scope.
+            </Text>
+            <SegmentedControl value={rebalance} onChange={(v) => setRebalance(v as RebalanceMode)}
+              data={[{ value: 'unmanaged', label: "Leave Kalshi's" }, { value: 'off', label: 'Off' }, { value: 'targets', label: 'Targets' }]} />
+            {rebalance === 'targets' && (
+              <Group grow align="flex-start">
+                <TextInput label="Targets (% per shard)" placeholder="e.g. 0=80, 3=20"
+                  description="In proportion to the budgets trading each shard; a shard given nothing is swept empty"
+                  value={shardTargets} onChange={(e) => setShardTargets(e.currentTarget.value)}
+                  error={invalid.includes('Shard targets') ? 'shard=percent, comma separated, adding up to 100' : undefined} />
+                <Stack gap={4}>
+                  <Text size="sm" fw={500}>Left for resting orders</Text>
+                  <SegmentedControl value={reservation} onChange={(v) => setReservation(v as RebalanceReservation)}
+                    data={[{ value: 'sum', label: 'All' }, { value: 'max', label: 'Largest' }, { value: 'none', label: 'None' }]} />
+                </Stack>
+              </Group>
+            )}
+          </Stack>
         )}
         <Group grow align="flex-end">
           <NumberInput label="Rotate after (days active)" description="Flags the account as due for rotation" placeholder="unchanged"

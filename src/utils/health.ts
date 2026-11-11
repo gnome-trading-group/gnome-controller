@@ -45,9 +45,6 @@ export function healthProblems(health: SessionHealth | null): HealthProblem[] {
   if (health.risk && health.risk.droppedLatches > 0) {
     problems.push({ part: 'Risk', detail: `${health.risk.droppedLatches} halts never recorded` });
   }
-  for (const limiter of health.rateLimit ?? []) {
-    if (limiter.throttling) problems.push({ part: limiter.account, detail: 'rate limited' });
-  }
   if (health.ledger?.fenced) problems.push({ part: 'Ledger', detail: 'fenced: writes refused' });
   else if (health.ledger && health.ledger.consecutiveFailures > 0) {
     problems.push({ part: 'Ledger', detail: `${health.ledger.consecutiveFailures} failed writes` });

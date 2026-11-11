@@ -22,12 +22,14 @@ import {
   ContractRelationship,
   ContractRelationshipType,
   PropositionSubject,
+  SubjectKeyAlias,
   SubjectMergeLogEntry,
 } from '../../types';
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { STORED_ROWS_NOTE, summarizeProposition } from '../../utils/propositions';
 import { EvidencePanel, FlagBadges, MergeSubjectModal, SubjectRef } from './PropositionParts';
+import SubjectKeys from './SubjectKeys';
 import { DerivedStatus } from './SubjectsList';
 import UnitViews from './relationships/UnitViews';
 
@@ -43,6 +45,7 @@ interface SubjectData {
   relationships: ContractRelationship[];
   similar: PropositionSubject[];
   history: SubjectMergeLogEntry[];
+  aliases: SubjectKeyAlias[];
 }
 
 function SubjectDetail() {
@@ -68,12 +71,13 @@ function SubjectDetail() {
       registryApi.listContractRelationships({ subjectId: id }),
       registryApi.listSimilarSubjects(id),
       registryApi.listSubjectMergeHistory(id),
-    ]).then(async ([subjects, propositions, relationships, similar, history]) => {
+      registryApi.listSubjectKeyAliases(id),
+    ]).then(async ([subjects, propositions, relationships, similar, history, aliases]) => {
       const subject = subjects[0] ?? null;
       const canonical = subject?.canonicalSubjectId
         ? (await registryApi.listPropositionSubjects({ subjectIds: [subject.canonicalSubjectId] }))[0] ?? null
         : null;
-      if (!cancelled) setData({ subject, canonical, propositions, relationships, similar, history });
+      if (!cancelled) setData({ subject, canonical, propositions, relationships, similar, history, aliases });
     }).catch(e => {
       if (!cancelled) setError(errorMessage(e, 'Failed to load subject'));
     });
@@ -261,6 +265,11 @@ function SubjectDetail() {
               </Button>
             </Group>
           </Alert>
+        )}
+
+        {!data.canonical && (
+          <SubjectKeys subjectId={subject.subjectId} propositions={data.propositions} aliases={data.aliases}
+            history={data.history} onChanged={reload} />
         )}
 
         <Stack gap="xs">

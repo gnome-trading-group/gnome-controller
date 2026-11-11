@@ -28,9 +28,11 @@ import { ModeBand, ModeSwitch } from '../../components/trading/layout';
 import { Money } from '../../components/trading/values';
 import { CollapsibleSection } from '../../components/CollapsibleSection';
 import { useModeParam } from '../../hooks/useModeParam';
-import { keys, useActiveSessions, useRecentSessions, useSessionsTotals, useStrategies } from '../../query/hooks';
+import { keys, useActiveSessions, useRecentSessions, useRiskPolicies, useSessionsTotals, useStrategies } from '../../query/hooks';
 import { formatDuration } from '../../utils/format';
 import { RunningSessions } from './RunningSessions';
+import { SessionKillBadge } from '../../components/risk/SessionKillBadge';
+import { useExchangeName } from '../../hooks/useExchangeName';
 import { SessionTimeline } from './SessionTimeline';
 
 const POLL_INTERVAL_MS = 5000;
@@ -57,6 +59,8 @@ function SessionsList() {
   const strategies = useStrategies();
   const active = useActiveSessions();
   const recent = useRecentSessions();
+  const policies = useRiskPolicies();
+  const exchangeName = useExchangeName();
   const strategyMap = useMemo(
     () => Object.fromEntries((strategies.data ?? []).map(s => [s.strategyId, s.name])) as Record<number, string>,
     [strategies.data],
@@ -137,11 +141,14 @@ function SessionsList() {
       Cell: ({ row }: { row: MRT_Row<StrategySession> }) => {
         const reason = failedReason(row.original) ?? stopSummary(row.original);
         return (
-          <Tooltip label={reason} disabled={!reason} multiline w={320} withArrow>
-            <Badge color={SESSION_STATUS_COLORS[row.original.status] ?? 'gray'} variant="light" size="sm">
-              {row.original.status}
-            </Badge>
-          </Tooltip>
+          <Group gap={4} wrap="nowrap">
+            <Tooltip label={reason} disabled={!reason} multiline w={320} withArrow>
+              <Badge color={SESSION_STATUS_COLORS[row.original.status] ?? 'gray'} variant="light" size="sm">
+                {row.original.status}
+              </Badge>
+            </Tooltip>
+            <SessionKillBadge session={row.original} policies={policies.data} exchangeName={exchangeName} />
+          </Group>
         );
       },
     },
@@ -206,7 +213,7 @@ function SessionsList() {
         <Text span size="xs" ff="monospace">{row.original.orchestratorVersion ?? '—'}</Text>
       ),
     },
-  ], [strategyMap, totalsById]);
+  ], [strategyMap, totalsById, policies.data, exchangeName]);
 
   useEffect(() => {
     const interval = setInterval(silentRefresh, POLL_INTERVAL_MS);
