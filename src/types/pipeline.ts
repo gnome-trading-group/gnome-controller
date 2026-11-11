@@ -1,7 +1,8 @@
 import { JsonSchema } from './jsonSchema';
 
 // A pipeline, its parameters and its schedules are declared in gnome-pipelines' code; only runs and whether a
-// schedule is on change here.
+// schedule is on change here. A polling source (kind "source") is started like a pipeline but its run lasts until
+// stopped: at most one is live, and gnome-pipelines starts its task again whenever it stops unasked.
 
 export interface PipelineSchedule {
   name: string;
@@ -14,7 +15,9 @@ export interface PipelineSchedule {
   nextRun: string | null;
 }
 
-export type RunStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+export type RunStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'STOPPING' | 'STOPPED';
+
+export type PipelineKind = 'pipeline' | 'source';
 
 export interface PipelineRun {
   pipelineName: string;
@@ -30,10 +33,16 @@ export interface PipelineRun {
   outputs?: Record<string, unknown>;
   errorMessage?: string;
   ecsTaskArn?: string;
+  kind?: PipelineKind;
+  // A source's run: how often its task was started again, why the last one stopped, and its recent crashes.
+  restarts?: number;
+  lastStop?: string;
+  crashes?: string[];
 }
 
 export interface Pipeline {
   name: string;
+  kind: PipelineKind;
   description: string;
   paramsSchema: JsonSchema;
   resources: { cpu: number; memory: number };

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ActionIcon, Alert, Anchor, Badge, Button, Container, Group, Text, Title, Tooltip } from '@mantine/core';
-import { IconRefresh, IconPlayerPlay } from '@tabler/icons-react';
+import { IconRefresh, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { Link, useNavigate } from 'react-router-dom';
@@ -8,16 +8,18 @@ import { Pipeline } from '../../../types/pipeline';
 import { controllerApi } from '../../../utils/api';
 import { errorMessage } from '../../../utils/kill-switch';
 import RunPipelineModal from './RunPipelineModal';
-import { RunStatusBadge } from './RunBits';
-import { nextScheduled, utcTime } from './runs';
+import { RunStatusBadge, SourceBadge } from './RunBits';
+import { isSource, liveRun, nextScheduled, utcTime } from './runs';
 
-// Pipelines are declared in gnome-pipelines' code and published with each image; this page only runs them.
+// Pipelines and polling sources are declared in gnome-pipelines' code and published with each image; this page only
+// runs pipelines and starts or stops sources.
 function PipelineList() {
   const navigate = useNavigate();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState<Pipeline | null>(null);
+  const [stopping, setStopping] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -34,15 +36,31 @@ function PipelineList() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  const stop = useCallback(async (pipeline: Pipeline) => {
+    setStopping(pipeline.name);
+    try {
+      await controllerApi.stopSource(pipeline.name);
+      setError(null);
+      await refresh();
+    } catch (e) {
+      setError(errorMessage(e, `Failed to stop ${pipeline.name}`));
+    } finally {
+      setStopping(null);
+    }
+  }, [refresh]);
+
   const columns = useMemo<MRT_ColumnDef<Pipeline>[]>(() => [
     {
       accessorKey: 'name',
       header: 'Name',
       size: 200,
       Cell: ({ row }) => (
-        <Anchor component={Link} to={`/data/pipelines/${row.original.name}`} size="sm" ff="monospace">
-          {row.original.name}
-        </Anchor>
+        <Group gap={6} wrap="nowrap">
+          <Anchor component={Link} to={`/data/pipelines/${row.original.name}`} size="sm" ff="monospace">
+            {row.original.name}
+          </Anchor>
+          {isSource(row.original) && <SourceBadge />}
+        </Group>
       ),
     },
     { accessorKey: 'description', header: 'Description', size: 340 },
@@ -95,14 +113,26 @@ function PipelineList() {
       id: 'actions',
       header: '',
       size: 80,
-      Cell: ({ row }) => (
-        <Button size="compact-xs" variant="light" color="green" leftSection={<IconPlayerPlay size={12} />}
-                onClick={() => setRunning(row.original)}>
-          Run
-        </Button>
-      ),
+      Cell: ({ row }) => {
+        const p = row.original;
+        const live = isSource(p) ? liveRun([p.lastRun]) : null;
+        if (live) {
+          return (
+            <Button size="compact-xs" variant="light" color="red" leftSection={<IconPlayerStop size={12} />}
+                    loading={stopping === p.name} disabled={live.status === 'STOPPING'} onClick={() => stop(p)}>
+              {live.status === 'STOPPING' ? 'Stopping' : 'Stop'}
+            </Button>
+          );
+        }
+        return (
+          <Button size="compact-xs" variant="light" color="green" leftSection={<IconPlayerPlay size={12} />}
+                  onClick={() => setRunning(p)}>
+            {isSource(p) ? 'Start' : 'Run'}
+          </Button>
+        );
+      },
     },
-  ], []);
+  ], [stopping, stop]);
 
   const table = useMantineReactTable({
     columns,
@@ -128,6 +158,7 @@ function PipelineList() {
       </Group>
       <Text size="sm" c="dimmed" mb="md">
         Declared in gnome-pipelines' code; a pipeline or schedule is added there. Schedules start off and are switched on per pipeline.
+        A polling source runs until stopped here and is restarted automatically if its task stops.
       </Text>
       {error && <Alert color="red" mb="md">{error}</Alert>}
       <MantineReactTable table={table} />

@@ -1241,6 +1241,10 @@ export const controllerApi = {
     sendApiRequest<RunLogsResponse>(`/research/pipelines/${pipelineName}/runs/${runId}/logs`, 'GET', {
       apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, queryParams: before ? { before } : undefined,
     }),
+  stopSource: (pipelineName: string) =>
+    sendApiRequest<{ run: PipelineRun }>(`/research/pipelines/${pipelineName}/stop`, 'POST', {
+      apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, preserveKeys: PIPELINE_DATA_KEYS,
+    }),
   cancelRun: (pipelineName: string, runId: string) =>
     sendApiRequest<{ run: PipelineRun }>(`/research/pipelines/${pipelineName}/runs/${runId}/cancel`, 'POST', {
       apiUrl: CONTROLLER_API_URL, convertToCamelCase: true, preserveKeys: PIPELINE_DATA_KEYS,

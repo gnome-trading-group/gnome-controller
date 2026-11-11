@@ -29,8 +29,8 @@ import { LastUpdated } from '../../../components/LastUpdated';
 import RunPipelineModal from './RunPipelineModal';
 import RunLogsDrawer from '../../../components/RunLogsDrawer';
 import ScheduleConfirmModal from './ScheduleConfirmModal';
-import { CodeVersion, RunStatusBadge } from './RunBits';
-import { duration, isActive, nextScheduled, utcTime } from './runs';
+import { CodeVersion, RunStatusBadge, SourceBadge } from './RunBits';
+import { duration, isActive, isSource, liveRun, nextScheduled, utcTime } from './runs';
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -114,11 +114,14 @@ function PipelineDetail() {
       await controllerApi.cancelRun(run.pipelineName, run.runId);
       await refresh(true);
     } catch (e) {
-      setActionError(errorMessage(e, 'Failed to cancel the run'));
+      setActionError(errorMessage(e, isSource(pipeline) ? 'Failed to stop the source' : 'Failed to cancel the run'));
     } finally {
       setCancelling(null);
     }
-  }, [refresh]);
+  }, [refresh, pipeline]);
+
+  const source = isSource(pipeline);
+  const live = source ? liveRun(runs) : null;
 
   const columns = useMemo<MRT_ColumnDef<PipelineRun>[]>(() => [
     {
@@ -155,8 +158,8 @@ function PipelineDetail() {
           <Tooltip label="Logs" withArrow>
             <ActionIcon size="sm" variant="subtle" onClick={() => setLogsFor(row.original)}><IconFileText size={16} /></ActionIcon>
           </Tooltip>
-          {isActive(row.original) && (
-            <Tooltip label="Cancel" withArrow>
+          {isActive(row.original) && row.original.status !== 'STOPPING' && (
+            <Tooltip label={row.original.kind === 'source' ? 'Stop' : 'Cancel'} withArrow>
               <ActionIcon size="sm" variant="subtle" color="red" loading={cancelling === row.original.runId}
                           onClick={() => cancel(row.original)}>
                 <IconPlayerStop size={16} />
@@ -185,6 +188,13 @@ function PipelineDetail() {
     }),
     renderDetailPanel: ({ row }: { row: MRT_Row<PipelineRun> }) => (
       <Stack p="md" gap="xs" style={{ maxWidth: 900 }}>
+        {row.original.kind === 'source' && (row.original.restarts ?? 0) > 0 && (
+          <Text size="xs" c="dimmed">
+            Started again {row.original.restarts} time{row.original.restarts === 1 ? '' : 's'}
+            {row.original.lastStop ? `; last because its ${row.original.lastStop}` : ''}
+            {row.original.crashes?.length ? ` (${row.original.crashes.length} crash${row.original.crashes.length === 1 ? '' : 'es'} in the last 30 min)` : ''}
+          </Text>
+        )}
         {row.original.errorMessage && (
           <>
             <Text size="xs" fw={600} c="red" tt="uppercase">Error</Text>
@@ -223,12 +233,22 @@ function PipelineDetail() {
         <ActionIcon variant="subtle" onClick={() => navigate('/data/pipelines')}>
           <IconArrowLeft size={18} />
         </ActionIcon>
-        <Title order={2} style={{ flex: 1 }}>{pipelineName}</Title>
+        <Group gap="xs" style={{ flex: 1 }}>
+          <Title order={2}>{pipelineName}</Title>
+          {source && <SourceBadge />}
+        </Group>
         {inProgress && <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={failing} />}
-        <Button size="sm" variant="light" color="green" leftSection={<IconPlayerPlay size={14} />}
-                onClick={() => setRunModal(true)} disabled={!pipeline}>
-          Run
-        </Button>
+        {live ? (
+          <Button size="sm" variant="light" color="red" leftSection={<IconPlayerStop size={14} />}
+                  loading={cancelling === live.runId} disabled={live.status === 'STOPPING'} onClick={() => cancel(live)}>
+            {live.status === 'STOPPING' ? 'Stopping' : 'Stop'}
+          </Button>
+        ) : (
+          <Button size="sm" variant="light" color="green" leftSection={<IconPlayerPlay size={14} />}
+                  onClick={() => setRunModal(true)} disabled={!pipeline}>
+            {source ? 'Start' : 'Run'}
+          </Button>
+        )}
         <Tooltip label="Refresh" withArrow openDelay={500}>
           <ActionIcon size="lg" variant="filled" color="green" onClick={() => refresh()} loading={loading}>
             <IconRefresh size={20} />
@@ -251,7 +271,9 @@ function PipelineDetail() {
 
           <Divider my="sm" label="Schedules (UTC)" labelPosition="left" />
           {pipeline.schedules.length === 0 ? (
-            <Text size="sm" c="dimmed">None declared; this pipeline only runs when started here.</Text>
+            <Text size="sm" c="dimmed">
+              {source ? 'None; a polling source is started and stopped here.' : 'None declared; this pipeline only runs when started here.'}
+            </Text>
           ) : (
             <Table withRowBorders={false} verticalSpacing={4}>
               <Table.Tbody>
@@ -317,7 +339,9 @@ function PipelineDetail() {
         </Card>
       )}
       {runs.length === 0 && !loading ? (
-        <Text size="sm" c="dimmed">No runs yet{upcoming ? '' : ' — start one with Run, or switch on a schedule'}.</Text>
+        <Text size="sm" c="dimmed">
+          No runs yet{upcoming ? '' : source ? ' — start it with Start' : ' — start one with Run, or switch on a schedule'}.
+        </Text>
       ) : (
         <MantineReactTable table={table} />
       )}

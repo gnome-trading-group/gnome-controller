@@ -1,4 +1,4 @@
-import { Anchor, Badge } from '@mantine/core';
+import { Anchor, Badge, Tooltip } from '@mantine/core';
 import { Link } from 'react-router-dom';
 import { RunStatus } from '../../../types/pipeline';
 
@@ -8,7 +8,17 @@ const STATUS_COLORS: Record<RunStatus, string> = {
   RUNNING: 'blue',
   PENDING: 'yellow',
   CANCELLED: 'gray',
+  STOPPING: 'orange',
+  STOPPED: 'gray',
 };
+
+export function SourceBadge() {
+  return (
+    <Tooltip label="Polling source: runs until stopped, restarted automatically if its task stops" withArrow>
+      <Badge size="xs" variant="outline" color="grape">source</Badge>
+    </Tooltip>
+  );
+}
 
 export function RunStatusBadge({ status }: { status: RunStatus }) {
   return <Badge size="sm" variant="light" color={STATUS_COLORS[status] ?? 'gray'}>{status}</Badge>;

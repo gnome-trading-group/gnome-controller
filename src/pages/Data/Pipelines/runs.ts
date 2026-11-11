@@ -1,7 +1,17 @@
-import { PipelineRun, PipelineSchedule } from '../../../types/pipeline';
+import { Pipeline, PipelineRun, PipelineSchedule } from '../../../types/pipeline';
 
 export function isActive(run: PipelineRun): boolean {
-  return run.status === 'PENDING' || run.status === 'RUNNING';
+  return run.status === 'PENDING' || run.status === 'RUNNING' || run.status === 'STOPPING';
+}
+
+export function isSource(pipeline: Pipeline | null | undefined): boolean {
+  return pipeline?.kind === 'source';
+}
+
+// A source's live run: the newest run, while it hasn't ended. Stop is offered until it is STOPPING.
+export function liveRun(runs: (PipelineRun | null | undefined)[]): PipelineRun | null {
+  const newest = runs.find(r => r) ?? null;
+  return newest && isActive(newest) ? newest : null;
 }
 
 export function duration(run: PipelineRun): string {

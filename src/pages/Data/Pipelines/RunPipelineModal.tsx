@@ -4,6 +4,7 @@ import { SchemaFormFields } from '../../../components/SchemaFormFields';
 import { Pipeline } from '../../../types/pipeline';
 import { controllerApi } from '../../../utils/api';
 import { errorMessage } from '../../../utils/kill-switch';
+import { isSource } from './runs';
 
 // Fields left empty take the pipeline's defaults; the API checks the rest against its schema before starting a task.
 function RunPipelineModal({ pipeline, opened, onClose, onStarted }: {
@@ -60,9 +61,11 @@ function RunPipelineModal({ pipeline, opened, onClose, onStarted }: {
   };
 
   const schema = pipeline?.paramsSchema;
+  const source = isSource(pipeline);
   const properties = schema?.properties ?? {};
   return (
-    <Modal opened={opened} onClose={onClose} title={pipeline ? `Run ${pipeline.name}` : 'Run'} size="lg">
+    <Modal opened={opened} onClose={onClose} title={pipeline ? `${source ? 'Start' : 'Run'} ${pipeline.name}` : 'Run'}
+           size="lg">
       <Stack>
         <Group justify="space-between">
           <Text size="sm" c="dimmed">
@@ -73,7 +76,7 @@ function RunPipelineModal({ pipeline, opened, onClose, onStarted }: {
         {asJson ? (
           <JsonInput value={json} onChange={setJson} autosize minRows={6} formatOnBlur validationError="Invalid JSON" />
         ) : Object.keys(properties).length === 0 ? (
-          <Text size="sm" c="dimmed">This pipeline takes no parameters.</Text>
+          <Text size="sm" c="dimmed">This {source ? 'source' : 'pipeline'} takes no parameters.</Text>
         ) : (
           <SchemaFormFields
             properties={properties}
@@ -85,7 +88,7 @@ function RunPipelineModal({ pipeline, opened, onClose, onStarted }: {
         {error && <Text c="red" size="sm" style={{ whiteSpace: 'pre-wrap' }}>{error}</Text>}
         <Group justify="flex-end">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={start} loading={starting}>Start run</Button>
+          <Button onClick={start} loading={starting}>{source ? 'Start polling' : 'Start run'}</Button>
         </Group>
       </Stack>
     </Modal>
