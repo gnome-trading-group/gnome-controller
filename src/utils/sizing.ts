@@ -18,6 +18,9 @@ interface InstanceType {
 export const INSTANCE_TYPES: InstanceType[] = [
   // Burstable, for standard-profile sessions that mostly wait (paper): about a quarter of c7i.large's price.
   { value: 't3.small', vcpus: 2, memoryGb: 2, isolatedCpus: 0 },
+  // One whole core, unthrottled, for a busy session: about what a t3.small costs once it spends surplus credits.
+  { value: 'c7a.medium', vcpus: 1, memoryGb: 2, isolatedCpus: 0 },
+  { value: 'c6a.large', vcpus: 2, memoryGb: 4, isolatedCpus: 0 },
   { value: 'c7i.large', vcpus: 2, memoryGb: 4, isolatedCpus: 0 },
   { value: 'c7i.xlarge', vcpus: 4, memoryGb: 8, isolatedCpus: 0 },
   { value: 'c7i.4xlarge', vcpus: 16, memoryGb: 32, isolatedCpus: 12 },

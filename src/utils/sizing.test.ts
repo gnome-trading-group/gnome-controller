@@ -6,6 +6,8 @@ describe('instance types', () => {
     expect(instanceTypeOptions('standard').map(o => o.value)).toContain('t3.small');
     expect(instanceTypeOptions('low_latency').map(o => o.value)).not.toContain('t3.small');
     expect(isInstanceTypeValidFor('low_latency', 't3.small')).toBe(false);
+    expect(instanceTypeOptions('standard').map(o => o.value)).toEqual(expect.arrayContaining(['c7a.medium', 'c6a.large']));
+    expect(isInstanceTypeValidFor('low_latency', 'c7a.medium')).toBe(false);
   });
 
   it('suggests t3.small on the standard profile, paper or live, up to the measured listing count', () => {
