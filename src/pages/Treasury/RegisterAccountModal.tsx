@@ -83,7 +83,9 @@ export function RegisterAccountModal({ opened, onClose, onCreated, account }: Re
   const sendTrading = !account || filled(credentials) || !sendRead;
   const missing = exchangeCode && sendTrading ? missingCredentials(exchangeCode, credentials) : [];
   const missingRead = sendRead && exchangeCode ? missingCredentials(exchangeCode, readCredentials, readOmit) : [];
-  const secretNames = [...(sendTrading ? ['trading'] : []), ...(sendRead || (readKey && !readOptional) ? ['read'] : [])]
+  // An optional poller key left empty is copied from the trading credentials (a Polymarket Intl wallet's CLOB key).
+  const writesRead = sendRead || (readKey && (!readOptional || sendTrading));
+  const secretNames = [...(sendTrading ? ['trading'] : []), ...(writesRead ? ['read'] : [])]
     .map((kind) => `gnome/accounts/${account?.label ?? '<label>'}/${kind}`);
 
   const save = async () => {
@@ -188,10 +190,10 @@ export function RegisterAccountModal({ opened, onClose, onCreated, account }: Re
                 <Text size="sm" fw={500}>Key for the balance poller{readOptional ? ' (optional)' : ''}</Text>
                 <Text size="xs" c="dimmed">
                   {readOptional
-                    ? 'A CLOB API key of the wallet’s own, derived with a new nonce, never the one the gateway trades with and never the private key: it can cancel orders, so it must be revocable on its own. The poller reads the wallet from the chain without it; with it, it splits the wallet’s liquidity rewards by market so the strategies that earned them get them.'
+                    ? 'Leave empty to reuse the trading CLOB key (never the private key): the poller uses it to split the wallet’s liquidity rewards by market. Fill it in only to give the poller a CLOB key of its own.'
                     : 'A separate key, so it can be revoked without breaking trading.'}
                   {exchangeCode === 'KALSHI' && ' Create it with the read and write::transfer scopes and never write, so the poller can keep the shard rebalancing targets set but never holds a key that can trade.'}
-                  {account && readOptional && ' Leave the trading fields empty to add only this key.'}
+                  {account && readOptional && ' To give it its own key without touching trading, leave the trading fields empty.'}
                 </Text>
                 <CredentialInputs exchangeCode={exchangeCode} values={readCredentials} idPrefix="read" omit={readOmit}
                   onChange={(key, value) => setReadCredentials((c) => ({ ...c, [key]: value }))} />
