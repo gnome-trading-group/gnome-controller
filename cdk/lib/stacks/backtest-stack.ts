@@ -308,7 +308,8 @@ export class BacktestStack extends cdk.Stack {
       description: "Assumed by GitHub Actions gnomepy CI to push backtest image to ECR",
     });
 
-    ecrRepo.grantPush(githubEcrRole);
+    // docker push reads the manifest back by digest, which needs BatchGetImage; push-only access fails with a 403.
+    ecrRepo.grantPullPush(githubEcrRole);
     this.githubEcrRole = githubEcrRole;
 
     // ---------------------------------------------------------------------------
