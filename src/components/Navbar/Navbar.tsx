@@ -41,6 +41,7 @@ const routes = [
       { label: 'Fills & Orders', link: '/trading/blotter' },
       { label: 'Risk Policies', link: '/risk/policies' },
       { label: 'Treasury & Accounts', link: '/treasury' },
+      { label: 'Order Gateways', link: '/trading/gateways' },
     ],
   },
   { icon: IconRocket, label: 'Launcher', link: '/launcher' },

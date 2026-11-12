@@ -375,4 +375,7 @@ export interface SessionHealth {
   } | null;
   // Null with the journal off.
   journal?: { pendingSegments: number; oldestPendingMs: number; segmentBytes: number } | null;
+  // Each order gateway link (live:<exchange>:main or paper:<exchange>:main); workingOrders are its orders there not
+  // known to have ended.
+  orderGateways?: { key: string; linked: boolean; unlinkedMs: number; workingOrders: number }[];
 }

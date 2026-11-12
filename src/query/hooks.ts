@@ -16,6 +16,8 @@ export const POLL = {
   attention: 10_000,
   alerts: 30_000,
   treasury: 30_000,
+  // A gateway writes its endpoint every 15 s and its minutes once a minute.
+  gateways: 15_000,
 };
 
 const PAGE_SIZE = 100;
@@ -41,6 +43,7 @@ export const keys = {
   fills: (scope: LedgerScope) => ['ledgerFills', scope] as const,
   orders: (scope: LedgerScope, status: string) => ['ledgerOrders', scope, status] as const,
   venueAccounts: ['venueAccounts'] as const,
+  gatewayStatus: ['gatewayStatus'] as const,
   treasury: ['treasury'] as const,
   marketDataAccounts: ['marketDataAccounts'] as const,
   collectionRules: ['collection', 'rules'] as const,
@@ -513,6 +516,15 @@ export function isLive(session: StrategySession | null | undefined): boolean {
 }
 
 // Alerts, newest first. Open ones (FIRING) are what the System page and the navbar show.
+// Every order gateway, live and paper, as it stands.
+export function useGatewayStatus() {
+  return useQuery({
+    queryKey: keys.gatewayStatus,
+    queryFn: () => registryApi.listGatewayStatus(),
+    refetchInterval: POLL.gateways,
+  });
+}
+
 export function useAlerts(filters: AlertFilters) {
   return useQuery({
     queryKey: keys.alerts(filters),

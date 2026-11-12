@@ -15,6 +15,7 @@ import {
   AccountConfigUpdate, AccountStatus, AccountStatusChange, CreateAccountRequest, CreatedAccount, DeletedSecrets, UpdateCredentialsRequest, ManualSnapshot, ReconDetail, SessionAccount, Transfer, TransferFilters, TransferKind, TransferProgram, TreasurySummary, VenueAccount,
 } from '../types/treasury';
 import { MarketDataAccount } from '../types/credentials';
+import { GatewayStatus } from '../types/gateways';
 import {
   CollectionRule, CollectionRuleType, CollectionShard, CollectionTarget, NewRule, RuleChange, RuleParameters, RulePreview,
   RuleTypeSchema, SessionLease, ShardDetail, ShardLogs, StreamCoverage,
@@ -822,6 +823,9 @@ export const registryApi = {
     sendApiRequest<MarketDataAccount>('/sources/accounts', 'PATCH', {
       apiUrl: REGISTRY_API_URL, convertToCamelCase: true, body: { accountId, ...change },
     }),
+  // Every order gateway, live and paper: its row, its endpoint and its last hour (see types/gateways).
+  listGatewayStatus: () =>
+    sendApiRequest<GatewayStatus[]>('/gateways/status', 'GET', { apiUrl: REGISTRY_API_URL }),
   // Starts the venue's EmergencyCancel around the order gateway; its outcome comes as an EMERGENCY_CANCEL alert.
   emergencyCancel: (accountId: number, reason: string, dryRun = false) =>
     sendApiRequest<{ label: string; exchange: string; region: string; dryRun: boolean; started: boolean }>(

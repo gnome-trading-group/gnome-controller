@@ -26,6 +26,8 @@ const Strategies = lazy(() => import('./pages/Strategies/Strategies'));
 const StrategyDetail = lazy(() => import('./pages/Strategies/StrategyDetail'));
 const PositionDetail = lazy(() => import('./pages/Strategies/PositionDetail'));
 const Blotter = lazy(() => import('./pages/Trading/Blotter'));
+const Gateways = lazy(() => import('./pages/Trading/Gateways/Gateways'));
+const GatewayDetail = lazy(() => import('./pages/Trading/Gateways/GatewayDetail'));
 const SystemHealth = lazy(() => import('./pages/System/SystemHealth'));
 const Alerts = lazy(() => import('./pages/System/Alerts'));
 const RiskPolicies = lazy(() => import('./pages/Risk/RiskPolicies'));
@@ -193,6 +195,8 @@ function AppContent() {
                   <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
                   <Route path="/strategies/:strategyId/listings/:listingId" element={<PositionDetail />} />
                   <Route path="/trading/blotter" element={<Blotter />} />
+                  <Route path="/trading/gateways" element={<Gateways />} />
+                  <Route path="/trading/gateways/:gatewayKey" element={<GatewayDetail />} />
                   <Route path="/system" element={<SystemHealth />} />
                   <Route path="/system/alerts" element={<Alerts />} />
                   <Route path="/risk/policies" element={<RiskPolicies />} />
