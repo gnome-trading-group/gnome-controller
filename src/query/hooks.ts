@@ -54,6 +54,8 @@ export const keys = {
   shardLogs: (shardId: string, taskId: string) => ['collection', 'logs', shardId, taskId] as const,
   sessionLease: (sessionId: string) => ['collection', 'lease', sessionId] as const,
   transfers: (filters: TransferFilters) => ['treasury', 'transfers', filters] as const,
+  rewardAccruals: (params: { sessionId?: string; strategyId?: number; mode?: Mode }) =>
+    ['ledger', 'reward-accruals', params] as const,
   recon: (accountId: number) => ['treasury', 'recon', accountId] as const,
   sessionAccounts: (sessionId: string) => ['sessionAccounts', sessionId] as const,
   // All under one prefix, so recording new parameters refreshes every view of them; each shape has its own key.
@@ -481,6 +483,16 @@ export function useStreamNames(ids: number[]) {
 
 export function useTreasurySummary() {
   return useQuery({ queryKey: keys.treasury, queryFn: () => registryApi.getTreasurySummary(), refetchInterval: POLL.treasury });
+}
+
+/** Paper sessions' latest estimated venue rewards per listing and program; they post every few minutes. */
+export function useRewardAccruals(params: { sessionId?: string; strategyId?: number; mode?: Mode }, enabled = true) {
+  return useQuery({
+    queryKey: keys.rewardAccruals(params),
+    queryFn: () => registryApi.listRewardAccruals(params),
+    refetchInterval: POLL.sessions,
+    enabled,
+  });
 }
 
 export function useTransfers(filters: TransferFilters, enabled = true) {

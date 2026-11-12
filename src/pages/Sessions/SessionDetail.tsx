@@ -33,6 +33,7 @@ import { StopSessionModal } from './StopSessionModal';
 import DeploySessionModal from './DeploySessionModal';
 import { SessionDetailsPanel } from './SessionDetailsPanel';
 import { SessionMarketData } from './SessionMarketData';
+import { RewardEstimates } from '../../components/trading/RewardEstimates';
 
 const RANGES: Record<string, number | null> = { 'Since start': null, '1h': 3_600_000, '6h': 21_600_000, '24h': 86_400_000 };
 const TABS = ['positions', 'open', 'fills', 'orders', 'risk', 'market-data', 'logs', 'details'] as const;
@@ -120,6 +121,7 @@ function SessionDetail() {
 
   const totals = summary.data?.totals;
   const counts = summary.data?.counts;
+  const rewards = summary.data?.rewards;
   const loadError = sessionQuery.error ?? summary.error ?? policiesQuery.error;
   const relaunchable = session && !isActiveSession(session.status);
   const reviewCount = summary.data?.listings.filter(l => l.needsReview).length ?? 0;
@@ -232,6 +234,14 @@ function SessionDetail() {
             <Kpi label="Realized" value={<Money value={totals?.realized} />} />
             <Kpi label="Unrealized" value={<Money value={totals?.unrealized} />} />
             <Kpi label="Fees" value={<Money value={totals?.fees} pnl={false} />} />
+            {session.mode === 'paper' && rewards && (
+              <Kpi
+                label="Rewards (est.)"
+                hint="This session's estimate of the venue liquidity rewards its resting orders earned, outside its trading PnL. An estimate, not a payout; it updates every few minutes."
+                value={<Money value={rewards.estimatedGross} />}
+                footer={rewards.estimatedPaid !== '0' && <span>paid on ended periods <Money value={rewards.estimatedPaid} size="xs" /></span>}
+              />
+            )}
             <Kpi label="Fills" value={counts?.fills ?? '—'} footer={counts && `${counts.orders} orders`} />
             <Kpi
               label="Open orders"
@@ -280,6 +290,7 @@ function SessionDetail() {
               <Tabs.Tab value="orders">Orders</Tabs.Tab>
               <Tabs.Tab value="risk">Risk</Tabs.Tab>
               {session.mode === 'paper' && <Tabs.Tab value="market-data">Market data</Tabs.Tab>}
+              {session.mode === 'paper' && rewards && <Tabs.Tab value="rewards">Rewards (est.)</Tabs.Tab>}
               {session.instanceId && <Tabs.Tab value="logs">Logs</Tabs.Tab>}
               <Tabs.Tab value="details">Config & compute</Tabs.Tab>
             </Tabs.List>
@@ -342,6 +353,9 @@ function SessionDetail() {
                 canKill={canKill}
                 onChanged={refreshAll}
               />
+            </Tabs.Panel>
+            <Tabs.Panel value="rewards">
+              <RewardEstimates accruals={rewards?.programs ?? []} />
             </Tabs.Panel>
             <Tabs.Panel value="market-data">
               <SessionMarketData sessionId={session.sessionId} live={live} />

@@ -21,7 +21,9 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle, IconFileText, IconRefresh, IconX } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
-import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
+import {
+  MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row, type MRT_SortingState,
+} from 'mantine-react-table';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Bar,
@@ -51,6 +53,16 @@ import {
 // Summary keys arrive as gnomepy wrote them (getBacktest preserves them). The missing fraction gets its own column, as a
 // percentage.
 const MISSING_FRACTION_KEY = 'market_data_missing_fraction';
+
+// Estimated venue rewards (gnomepy's summary): shown, and ranked by, only for a run whose jobs earned some.
+const REWARDS_TOTAL_KEY = 'rewardsEstimatedTotal';
+const PNL_WITH_REWARDS_KEY = 'finalPnlWithRewardsEstimated';
+const DEFAULT_METRICS = ['finalPnl', 'sharpe', 'sortino', 'fillCount', 'totalFees'];
+const REWARD_METRICS = [REWARDS_TOTAL_KEY, PNL_WITH_REWARDS_KEY];
+const HEADERS: Record<string, string> = {
+  [REWARDS_TOTAL_KEY]: 'Rewards (est.)',
+  [PNL_WITH_REWARDS_KEY]: 'PnL + rewards (est.)',
+};
 
 const EXPLORABLE = new Set<BacktestStatus>(['COMPLETED', 'PARTIALLY_FAILED']);
 const POLL_INTERVAL_MS = 10000;
@@ -96,6 +108,7 @@ function BacktestDetail() {
   const [logsFor, setLogsFor] = useState<number | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
+  const [sorting, setSorting] = useState<MRT_SortingState>([{ id: 'summary_finalPnl', desc: true }]);
   const [visibilityInitialized, setVisibilityInitialized] = useState(false);
 
   const load = useCallback(() => controllerApi.getBacktest(runId ?? ''), [runId]);
@@ -159,7 +172,7 @@ function BacktestDetail() {
   const metricColumns = useMemo<MRT_ColumnDef<BacktestJob>[]>(() =>
     summaryKeys.map((key) => ({
       id: `summary_${key}`,
-      header: toCamelWords(key),
+      header: HEADERS[key] ?? toCamelWords(key),
       size: 110,
       accessorFn: (row) => row.summary?.[key],
       Cell: ({ cell }) => {
@@ -280,16 +293,21 @@ function BacktestDetail() {
 
   useEffect(() => {
     if (!visibilityInitialized && summaryKeys.length > 0) {
+      const earnedRewards = jobs.some(j => Number(j.summary?.[REWARDS_TOTAL_KEY] ?? 0) !== 0);
+      const shownMetrics = earnedRewards ? [...DEFAULT_METRICS, ...REWARD_METRICS] : DEFAULT_METRICS;
       const hidden: Record<string, boolean> = {};
       for (const key of summaryKeys) {
-        if (!['finalPnl', 'sharpe', 'sortino', 'fillCount', 'totalFees'].includes(key)) {
+        if (!shownMetrics.includes(key)) {
           hidden[`summary_${key}`] = false;
         }
       }
       setColumnVisibility(hidden);
+      if (earnedRewards) {
+        setSorting([{ id: `summary_${PNL_WITH_REWARDS_KEY}`, desc: true }]);
+      }
       setVisibilityInitialized(true);
     }
-  }, [summaryKeys, visibilityInitialized]);
+  }, [summaryKeys, visibilityInitialized, jobs]);
 
   const awaitingRun = !run && !error;
 
@@ -297,8 +315,9 @@ function BacktestDetail() {
     columns,
     data: shown,
     getRowId: j => String(j.arrayIndex),
-    state: { isLoading: awaitingRun, columnVisibility },
+    state: { isLoading: awaitingRun, columnVisibility, sorting },
     onColumnVisibilityChange: setColumnVisibility,
+    onSortingChange: setSorting,
     enableColumnFilters: false,
     enableSorting: true,
     enablePagination: shown.length > 25,
@@ -314,7 +333,7 @@ function BacktestDetail() {
         outline: selected !== null && row.original.arrayIndex === selected ? '1px solid var(--mantine-color-blue-6)' : undefined,
       },
     }),
-    initialState: { sorting: [{ id: 'summary_finalPnl', desc: true }], density: 'xs' },
+    initialState: { density: 'xs' },
     renderDetailPanel: ({ row }: { row: MRT_Row<BacktestJob> }) => runId && (
       <TaskDetailPanel
         task={{ ...row.original, elapsedMs: taskElapsedMs(row.original), hasLogs: !!row.original.logUrl }}

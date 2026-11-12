@@ -82,7 +82,35 @@ export interface SessionSummary {
   };
   counts: { fills: number; orders: number; openOrders: number; refused: number };
   refusals: { listingId: number; reason: string; count: number }[];
+  // A paper session's own estimate of the venue liquidity rewards its orders earned, outside its trading PnL; a live
+  // session has none. Absent from registries that predate it.
+  rewards?: { estimatedGross: string; estimatedPaid: string; programs: RewardAccrual[] };
   listings: SessionListingPnl[];
+}
+
+// A session's latest estimate for one listing and venue program (registry ledger.reward_accrual). Amounts are price
+// units; gross is ours on this listing, marketPaid what the venue would pay the whole market once the period ends
+// (closed: it had ended by asOf).
+export interface RewardAccrual {
+  sessionId: string;
+  strategyId: number;
+  listingId: number;
+  exchangeCode: string;
+  venueMarket: string;
+  venueProgramId: string;
+  program: string;
+  periodStart: string;
+  periodEnd: string | null;
+  asOf: string;
+  closed: boolean;
+  gross: string;
+  marketGross: string;
+  marketPaid: string;
+  countingNanos: string;
+  oneSidedNanos: string;
+  depthUnknownNanos: string;
+  noDataNanos: string;
+  gaps: number;
 }
 
 // One per listing and venue account: a strategy relaunched onto another account holds the listing on each separately.
@@ -106,7 +134,8 @@ export interface StrategySummary {
     realized: string;
     unrealized: string;
     fees: string;
-    // Venue rewards given to the strategy (liquidity rewards, maker and taker rebates), in lifetime and today. Live only.
+    // Venue rewards given to the strategy (liquidity rewards, maker and taker rebates), in lifetime and today; in paper,
+    // its sessions' estimates.
     rewards: string;
     rewardsToday: string;
     // How lifetime differs from the sum of the sessions' PnL; carry is the mark moving on inventory no session held.
@@ -151,6 +180,8 @@ export interface SessionTotals {
   opening: OpeningSource;
   totals: SessionSummary['totals'];
   fills: number;
+  // The session's estimated venue rewards (paper), outside its trading PnL.
+  rewardsEstimated?: string;
 }
 
 // A listing's price history, one point per resolution step; mark is the mid, else the last trade (0 unknown).

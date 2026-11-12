@@ -2,10 +2,11 @@ import { useMemo } from 'react';
 import { Badge, Text } from '@mantine/core';
 import { MantineReactTable, MRT_ColumnDef, useMantineReactTable } from 'mantine-react-table';
 import { Link } from 'react-router-dom';
-import { useTransfers } from '../../query/hooks';
+import { useRewardAccruals, useTransfers } from '../../query/hooks';
 import { Mode } from '../../types';
 import { programLabel } from '../../utils/treasury';
 import { Money, Time } from '../../components/trading/values';
+import { RewardEstimates } from '../../components/trading/RewardEstimates';
 
 interface RewardRow {
   key: string;
@@ -26,8 +27,19 @@ const BASIS: Record<string, string> = {
 };
 
 // The venue rewards this strategy was given: each payout's part it earned, and how that part was worked out. Venue
-// accounts are live, so paper has none.
+// accounts are live, so in paper it shows the sessions' own estimates instead.
 export function StrategyRewards({ strategyId, mode }: { strategyId: number; mode: Mode }) {
+  return mode === 'live'
+    ? <LiveRewards strategyId={strategyId} mode={mode} />
+    : <PaperRewardEstimates strategyId={strategyId} />;
+}
+
+function PaperRewardEstimates({ strategyId }: { strategyId: number }) {
+  const accruals = useRewardAccruals({ strategyId, mode: 'paper' });
+  return <RewardEstimates accruals={accruals.data ?? []} loading={accruals.isLoading} showSession />;
+}
+
+function LiveRewards({ strategyId, mode }: { strategyId: number; mode: Mode }) {
   const transfers = useTransfers({ strategyId }, mode === 'live');
   const rows = useMemo<RewardRow[]>(() => (transfers.data ?? []).flatMap((t) => t.allocations
     .filter((a) => a.strategyId === strategyId)

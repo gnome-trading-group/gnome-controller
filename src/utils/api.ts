@@ -3,7 +3,7 @@ import {
   DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
   RuleType, TriggerEvaluation,
 } from '../types/launcher';
-import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractProposition, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PropositionSubject, PnlSeries, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope, SubjectMergeCandidate, SubjectMergeLogEntry, SubjectKeyAlias, SetSubjectKeyAlias, SubjectKeyAliasKind, SubjectKeyAliasOrigin } from '../types';
+import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractProposition, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PropositionSubject, PnlSeries, RewardAccrual, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope, SubjectMergeCandidate, SubjectMergeLogEntry, SubjectKeyAlias, SetSubjectKeyAlias, SubjectKeyAliasKind, SubjectKeyAliasOrigin } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
 import { BacktestRun } from '../types/backtests';
@@ -847,6 +847,13 @@ export const registryApi = {
     }),
   getTreasurySummary: () =>
     sendApiRequest<TreasurySummary>('/treasury/summary', 'GET', { apiUrl: REGISTRY_API_URL }),
+  // A paper session's (or a strategy's sessions') latest estimated venue rewards per listing and program.
+  listRewardAccruals: (params: { sessionId?: string; strategyId?: number; mode?: Mode }) =>
+    sendApiRequest<{ accruals: RewardAccrual[] }>('/ledger/reward-accruals', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])),
+    }).then(r => r.accruals),
   listTransfers: (filters: TransferFilters = {}) =>
     sendApiRequest<Transfer[]>('/treasury/transfers', 'GET', {
       apiUrl: REGISTRY_API_URL,

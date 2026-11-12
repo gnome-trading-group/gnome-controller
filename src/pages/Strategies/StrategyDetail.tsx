@@ -348,11 +348,13 @@ function StrategyDetail() {
         <Kpi label="Realized" value={<Money value={totals?.realized} />} />
         <Kpi label="Unrealized" value={<Money value={totals?.unrealized} />} />
         <Kpi label="Fees" value={<Money value={totals?.fees} pnl={false} />} />
-        {mode === 'live' && (
-          <Kpi label="Rewards" hint="Venue liquidity rewards and rebates given to this strategy, in lifetime PnL"
-            value={<Money value={totals?.rewards} />}
-            footer={totals && totals.rewardsToday !== '0' && <span>today <Money value={totals.rewardsToday} size="xs" /></span>} />
-        )}
+        <Kpi
+          label={mode === 'live' ? 'Rewards' : 'Rewards (est.)'}
+          hint={mode === 'live'
+            ? 'Venue liquidity rewards and rebates given to this strategy, in lifetime PnL'
+            : "Its paper sessions' estimates of the venue liquidity rewards their resting orders earned, in lifetime PnL. Estimates, not payouts."}
+          value={<Money value={totals?.rewards} />}
+          footer={totals && totals.rewardsToday !== '0' && <span>today <Money value={totals.rewardsToday} size="xs" /></span>} />
         <Kpi label="Open positions" value={summary.data?.openPositions ?? '—'} />
       </KpiStrip>
 
