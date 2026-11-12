@@ -25,6 +25,7 @@ import {
 } from '../../query/hooks';
 import DeploySessionModal from '../Sessions/DeploySessionModal';
 import StrategyFormModal from './StrategyFormModal';
+import { StrategyRewards } from './StrategyRewards';
 import { StopSessionModal } from '../Sessions/StopSessionModal';
 import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { RiskPolicyHistoryModal } from '../../components/RiskPolicyHistoryModal';
@@ -48,7 +49,7 @@ import { AdjustPositionModal } from '../../components/trading/AdjustPositionModa
 import { usePageTitleLabels } from '../../context/PageTitleContext';
 
 const RANGES: Record<string, number | null> = { '1d': 86_400_000, '7d': 7 * 86_400_000, '30d': 30 * 86_400_000, All: null };
-const TABS = ['positions', 'performance', 'sessions', 'fills', 'orders', 'risk'] as const;
+const TABS = ['positions', 'performance', 'sessions', 'fills', 'orders', 'rewards', 'risk'] as const;
 type Tab = typeof TABS[number];
 
 function rangeStart(range: string): string | undefined {
@@ -63,6 +64,7 @@ const OUTSIDE_SESSION_TERMS: [Exclude<keyof OutsideSessionTerms, 'total'>, strin
   ['manual', 'Manual trades', 'trades booked by hand'],
   ['adjustments', 'Adjustments', 'corrections to the ledger'],
   ['resets', 'Resets', 'inventory a session starting flat wrote off'],
+  ['rewards', 'Rewards', 'venue liquidity rewards and rebates this strategy earned'],
   ['carry', 'Carry', 'price moves while no session held the position'],
 ];
 
@@ -70,7 +72,7 @@ function OutsideSessions({ terms }: { terms: OutsideSessionTerms }) {
   return (
     <Stack gap={2}>
       <Text size="xs">Lifetime PnL that no session's PnL includes:</Text>
-      {OUTSIDE_SESSION_TERMS.filter(([key]) => terms[key] !== '0').map(([key, label, why]) => (
+      {OUTSIDE_SESSION_TERMS.filter(([key]) => terms[key] !== undefined && terms[key] !== '0').map(([key, label, why]) => (
         <Text key={key} size="xs">{label} {formatMoney(terms[key]).text}: {why}</Text>
       ))}
     </Stack>
@@ -330,7 +332,7 @@ function StrategyDetail() {
       <KpiStrip>
         <Kpi
           label="Lifetime PnL"
-          hint="Every session's realized PnL and fees, plus the unrealized PnL of what the strategy holds now, valued at the mid (else the last trade)."
+          hint="Every session's realized PnL and fees, plus the unrealized PnL of what the strategy holds now, valued at the mid (else the last trade), plus the venue rewards it was given."
           value={<Money value={totals?.lifetime} arrow />}
           footer={totals && totals.outsideSessions.total !== '0' && (
             <Tooltip label={<OutsideSessions terms={totals.outsideSessions} />} multiline w={320} withArrow>
@@ -346,6 +348,11 @@ function StrategyDetail() {
         <Kpi label="Realized" value={<Money value={totals?.realized} />} />
         <Kpi label="Unrealized" value={<Money value={totals?.unrealized} />} />
         <Kpi label="Fees" value={<Money value={totals?.fees} pnl={false} />} />
+        {mode === 'live' && (
+          <Kpi label="Rewards" hint="Venue liquidity rewards and rebates given to this strategy, in lifetime PnL"
+            value={<Money value={totals?.rewards} />}
+            footer={totals && totals.rewardsToday !== '0' && <span>today <Money value={totals.rewardsToday} size="xs" /></span>} />
+        )}
         <Kpi label="Open positions" value={summary.data?.openPositions ?? '—'} />
       </KpiStrip>
 
@@ -364,6 +371,7 @@ function StrategyDetail() {
           <Tabs.Tab value="sessions">Sessions ({modeSessions.length})</Tabs.Tab>
           <Tabs.Tab value="fills">Fills</Tabs.Tab>
           <Tabs.Tab value="orders">Orders</Tabs.Tab>
+          <Tabs.Tab value="rewards">Rewards</Tabs.Tab>
           <Tabs.Tab value="risk">Risk</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="positions">
@@ -412,6 +420,9 @@ function StrategyDetail() {
             rows={orders.data ?? []} loading={orders.isLoading} showSession
             hasMore={!!orders.hasNextPage} loadingMore={orders.isFetchingNextPage} onLoadMore={() => orders.fetchNextPage()}
           />
+        </Tabs.Panel>
+        <Tabs.Panel value="rewards">
+          <StrategyRewards strategyId={id} mode={mode} />
         </Tabs.Panel>
         <Tabs.Panel value="risk">
           <StrategyLimitUsage sessions={modeSessions.filter(s => s.status === StrategySessionStatus.RUNNING)} />

@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Alert, Anchor, Badge, Box, Card, Container, Grid, Group, SegmentedControl, Text, Title, Tooltip } from '@mantine/core';
+import { Alert, Anchor, Badge, Box, Card, Container, Grid, Group, SegmentedControl, Stack, Text, Title, Tooltip } from '@mantine/core';
 import { IconAlertOctagon } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { Link, useNavigate } from 'react-router-dom';
 import { StrategySession, StrategySessionStatus } from '../../types';
+import { FirmSummary } from '../../types/pnl';
+import { formatMoney } from '../../utils/format';
+import { programLabel } from '../../utils/treasury';
 import { useDayZone } from '../../context/PreferencesContext';
 import {
   POLL, useActiveSessions, useAttention, useFirmSummary, usePnlSeries, useRiskPolicies, useStrategies,
@@ -65,6 +68,20 @@ function HeardCell({ at }: { at: string | null }) {
 }
 
 // The trading overview: is anything wrong, and are we making money? Then the rest of the platform below.
+// The firm's own non-trading PnL by program: what venues paid that no strategy earned.
+function NonTradingBreakdown({ summary }: { summary: FirmSummary | undefined }) {
+  const rows = Object.entries(summary?.nonTrading?.byProgram ?? {});
+  if (rows.length === 0) return <Text size="xs">No non-trading income kept by the firm.</Text>;
+  return (
+    <Stack gap={2}>
+      <Text size="xs">Kept by the firm:</Text>
+      {rows.map(([program, v]) => (
+        <Text key={program} size="xs">{programLabel(program)} {formatMoney(v.lifetime).text}</Text>
+      ))}
+    </Stack>
+  );
+}
+
 function Dashboard() {
   const navigate = useNavigate();
   const tz = useDayZone();
@@ -187,8 +204,24 @@ function Dashboard() {
           hint={firm.data ? `Since ${new Date(firm.data.scope.dayStart).toLocaleString()} (${firm.data.scope.timeZone})` : undefined}
           value={<Money value={totals?.today} arrow />}
         />
-        <Kpi label="Lifetime PnL" value={<Money value={totals?.lifetime} arrow />} />
+        <Kpi
+          label="Lifetime PnL"
+          hint="Every strategy's lifetime PnL, with the venue rewards each was given, plus the firm's own non-trading PnL"
+          value={<Money value={totals?.lifetime} arrow />}
+        />
         <Kpi label="Unrealized" value={<Money value={totals?.unrealized} />} />
+        {mode === 'live' && (
+          <Kpi
+            label="Rewards & non-trading"
+            hint="Venue rewards and rebates given to strategies, plus interest, yield, referral, fee adjustments and rewards no strategy earned, which stay the firm's. All in lifetime PnL."
+            value={<Money value={totals ? String(BigInt(totals.rewards ?? '0') + BigInt(totals.nonTrading ?? '0')) : undefined} />}
+            footer={totals && (
+              <Tooltip withArrow multiline w={300} label={<NonTradingBreakdown summary={firm.data} />}>
+                <span>strategies <Money value={totals.rewards} size="xs" /> · firm <Money value={totals.nonTrading} size="xs" /></span>
+              </Tooltip>
+            )}
+          />
+        )}
         <Kpi label="Fees" value={<Money value={totals?.fees} pnl={false} />} />
         <Kpi label="Open positions" value={openPositions ?? '—'} />
         <Kpi
@@ -202,7 +235,7 @@ function Dashboard() {
         <Grid.Col span={{ base: 12, lg: 8 }}>
           <Card withBorder h="100%">
             <Group justify="space-between" mb="xs">
-              <Tooltip label="Every strategy's lifetime PnL in this mode, added up" withArrow>
+              <Tooltip label="Every strategy's lifetime PnL in this mode, added up, plus the firm's own non-trading PnL" withArrow>
                 <Text fw={600}>Firm PnL</Text>
               </Tooltip>
               <SegmentedControl size="xs" value={range} onChange={next => { setRange(next); setStart(rangeStart(next)); }}

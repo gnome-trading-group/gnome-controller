@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   credentialsFromFile, dollarsToUnits, formatPartitionTargets, formatPartitionThresholds, missingCredentials,
   parsePartitionTargets, parsePartitionThresholds,
-  needsKey, transferAmount, treasuryTotals,
+  keyOptional, needsKey, programLabel, READ_KEY_OMITS, rewardsBreakdown, transferAmount, treasuryTotals,
 } from './treasury';
-import { AccountTreasury } from '../types/treasury';
+import { AccountTreasury, Transfer, TransferAllocation } from '../types/treasury';
 
 describe('transfer amounts', () => {
   it('are typed in dollars and stored in price units', () => {
@@ -74,8 +74,15 @@ describe('account credentials', () => {
     expect(needsKey('KALSHI', 'read')).toBe(true);
     expect(needsKey('POLYMARKET_US', 'read')).toBe(true);
     expect(needsKey('POLYMARKET_US', 'marketData')).toBe(true);
-    expect(needsKey('POLYMARKET_INTL', 'read')).toBe(false);
+    expect(needsKey('POLYMARKET_INTL', 'read')).toBe(true);
+    expect(keyOptional('POLYMARKET_INTL', 'read')).toBe(true);
+    expect(keyOptional('KALSHI', 'read')).toBe(false);
     expect(needsKey('POLYMARKET_INTL', 'marketData')).toBe(false);
+  });
+
+  it('asks a Polymarket Intl poller key for its CLOB API credentials only', () => {
+    expect(missingCredentials('POLYMARKET_INTL', { apiKey: 'k' }, READ_KEY_OMITS.POLYMARKET_INTL))
+      .toEqual(['API secret', 'API passphrase']);
   });
 });
 
@@ -96,5 +103,34 @@ describe('shard thresholds', () => {
     expect(parsePartitionTargets('0=150')).toBeNull();
     expect(parsePartitionTargets('0=50.5, 3=49.5')).toBeNull();
     expect(parsePartitionTargets('')).toBeNull();
+  });
+});
+
+describe('rewards breakdown', () => {
+  const transfer = (fields: Partial<Transfer>): Transfer => ({
+    transferId: '1', accountId: 1, label: 'x', exchangeCode: 'POLYMARKET_INTL', kind: 'REWARD', amount: '0',
+    occurredAt: '2026-11-12T00:45:00Z', externalRef: null, reason: null, actor: 'venue-poller', recordedAt: '2026-11-12T00:46:00Z',
+    program: null, venueMarket: null, asset: 'USD', assetAmount: null, allocationState: null, allocations: [],
+    unallocated: null, ...fields,
+  });
+  const allocation = (strategyId: number, amount: string): TransferAllocation => ({
+    allocationId: strategyId, strategyId, listingId: null, venueMarket: null, amount, basis: 'MAKER_FILLS', strategies: 2,
+    periodStart: null, periodEnd: null,
+  });
+
+  it('sums non-trading money by program, venue and strategy, the unallocated part the firm\'s', () => {
+    const b = rewardsBreakdown([
+      transfer({ program: 'MAKER_REBATE', amount: '400', allocationState: 'DONE', allocations: [allocation(1, '75'), allocation(2, '225')] }),
+      transfer({ program: 'LIQUIDITY', amount: '50', allocationState: 'PENDING' }),
+      transfer({ kind: 'INTEREST', program: 'INTEREST', amount: '30', exchangeCode: 'KALSHI' }),
+      transfer({ kind: 'FEE_ADJUSTMENT', amount: '-5', exchangeCode: 'KALSHI' }),
+      transfer({ kind: 'DEPOSIT', amount: '1000' }),
+    ]);
+    expect(b.total).toBe(475n);
+    expect(Object.fromEntries(b.byProgram)).toEqual({ MAKER_REBATE: 400n, LIQUIDITY: 50n, INTEREST: 30n, FEE_ADJUSTMENT: -5n });
+    expect(Object.fromEntries(b.byExchange)).toEqual({ POLYMARKET_INTL: 450n, KALSHI: 25n });
+    expect([...b.byStrategy]).toEqual([[1, 75n], [2, 225n], [null, 175n]]);
+    expect(b.pending).toBe(1);
+    expect(programLabel('MAKER_REBATE')).toBe('Maker rebates');
   });
 });

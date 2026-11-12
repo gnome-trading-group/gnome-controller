@@ -15,7 +15,8 @@ describe('the money in a position', () => {
   });
 
   it('has no notional without a price', () => {
-    expect(exposure(s(10n * UNIT), s(40n * CENT), '0')?.notional).toBeNull();
+    expect(exposure(s(10n * UNIT), s(40n * CENT), null)?.notional).toBeNull();
+    expect(exposure(s(10n * UNIT), s(40n * CENT), '0')?.notional).toBe(0n);
   });
 
   it('a flat listing holds nothing', () => {

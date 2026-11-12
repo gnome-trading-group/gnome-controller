@@ -131,6 +131,10 @@ function PositionDetail() {
         <Kpi label="Realized" value={<Money value={row?.realized} />} />
         <Kpi label="Lifetime PnL" value={<Money value={row?.total} arrow />} footer={row && <>fees <Money value={row.fees} pnl={false} size="xs" /></>} />
         <Kpi label="Today" value={<Money value={row?.today} arrow />} />
+        {mode === 'live' && (
+          <Kpi label="Rewards" hint="Venue liquidity rewards and maker rebates this strategy earned on this listing; in the strategy's lifetime PnL, not this row's"
+            value={<Money value={summary.data?.listings.reduce((sum, l) => sum + BigInt(l.rewards ?? '0'), 0n).toString()} />} />
+        )}
       </KpiStrip>
       {accountRows.length > 1 && (
         <Card withBorder mb="md" p="sm">

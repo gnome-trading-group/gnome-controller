@@ -10,18 +10,18 @@ export interface Exposure {
   notional: bigint | null;
 }
 
-export function exposure(netQuantity: string, avgEntryPrice: string, markPrice: string): Exposure | null {
+export function exposure(netQuantity: string, avgEntryPrice: string, markPrice: string | null): Exposure | null {
   const net = BigInt(netQuantity);
   if (net === 0n) return null;
   const quantity = net < 0n ? -net : net;
-  const mark = BigInt(markPrice);
-  return { cost: (BigInt(avgEntryPrice) * quantity) / SIZE, notional: mark === 0n ? null : (mark * quantity) / SIZE };
+  const mark = markPrice === null ? null : BigInt(markPrice);
+  return { cost: (BigInt(avgEntryPrice) * quantity) / SIZE, notional: mark === null ? null : (mark * quantity) / SIZE };
 }
 
 // A long ties up what it paid. A short on a binary contract ties up its collateral: $1 a contract less what selling
 // it brought in. The fees paid getting there are spent too.
 export function capital(netQuantity: string, avgEntryPrice: string, fees: string, binary: boolean): bigint | null {
-  const held = exposure(netQuantity, avgEntryPrice, '0');
+  const held = exposure(netQuantity, avgEntryPrice, null);
   if (!held) return null;
   const net = BigInt(netQuantity);
   const quantity = net < 0n ? -net : net;

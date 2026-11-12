@@ -1,16 +1,16 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
-  ActionIcon, Alert, Badge, Button, Card, Container, Group, Switch, Text, Title, Tooltip,
+  ActionIcon, Alert, Badge, Button, Card, Container, Group, Select, Switch, Text, Title, Tooltip,
 } from '@mantine/core';
 import { IconAlertOctagon, IconArrowsExchange, IconPlus, IconRefresh } from '@tabler/icons-react';
 import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { AccountStatus } from '../../types/treasury';
+import { AccountStatus, TRANSFER_KINDS, TRANSFER_PROGRAMS, TransferKind, TransferProgram } from '../../types/treasury';
 import { keys, POLL, useRiskPolicies, useTransfers, useTreasurySummary, useVenueAccounts } from '../../query/hooks';
 import { useExchangeName } from '../../hooks/useExchangeName';
 import { findKillSwitch, KILL_SWITCH_TYPE, setKillSwitch } from '../../utils/kill-switch';
 import { registryApi } from '../../utils/api';
-import { treasuryTotals } from '../../utils/treasury';
+import { programLabel, treasuryTotals } from '../../utils/treasury';
 import { LastUpdated } from '../../components/LastUpdated';
 import { ReasonConfirmModal } from '../../components/ReasonConfirmModal';
 import { Kpi, KpiStrip, ModeBand } from '../../components/trading/layout';
@@ -23,6 +23,7 @@ import { AccountSettingsModal } from './AccountSettingsModal';
 import { DeleteSecretsModal } from './DeleteSecretsModal';
 import { ManualSnapshotModal } from './ManualSnapshotModal';
 import { ReconPanel } from './ReconPanel';
+import { RewardsPanel } from './RewardsPanel';
 import { TransfersTable } from './TransfersTable';
 import { AccountRow } from './types';
 
@@ -86,7 +87,11 @@ function Treasury() {
 
   const totals = treasuryTotals(summary.data?.accounts ?? []);
   const retiredCount = rows.filter((r) => r.account.status === 'RETIRED').length;
-  const transfers = useTransfers(selectedId);
+  const [kindFilter, setKindFilter] = useState<TransferKind | null>(null);
+  const [programFilter, setProgramFilter] = useState<TransferProgram | null>(null);
+  const transfers = useTransfers({
+    accountId: selectedId ?? undefined, kind: kindFilter ?? undefined, program: programFilter ?? undefined,
+  });
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: keys.venueAccounts });
@@ -231,12 +236,22 @@ function Treasury() {
         </Card>
       )}
 
+      <RewardsPanel />
+
       <Card withBorder p="sm">
         <Group justify="space-between" mb="xs">
           <Text fw={600}>
             Transfers{selected ? <>: <Text span ff="monospace" fw={600}>{selected.account.label}</Text></> : ' (every account)'}
           </Text>
-          {selected && <Button size="xs" variant="subtle" onClick={() => select(null)}>Show every account</Button>}
+          <Group gap="xs">
+            <Select size="xs" w={150} placeholder="Every kind" clearable value={kindFilter}
+              data={TRANSFER_KINDS.map((k) => ({ value: k, label: k }))}
+              onChange={(v) => setKindFilter(v as TransferKind | null)} />
+            <Select size="xs" w={170} placeholder="Every program" clearable value={programFilter}
+              data={TRANSFER_PROGRAMS.map((p) => ({ value: p, label: programLabel(p) }))}
+              onChange={(v) => setProgramFilter(v as TransferProgram | null)} />
+            {selected && <Button size="xs" variant="subtle" onClick={() => select(null)}>Show every account</Button>}
+          </Group>
         </Group>
         <TransfersTable rows={transfers.data ?? []} loading={transfers.isLoading} showAccount={!selected} />
       </Card>

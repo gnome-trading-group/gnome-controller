@@ -12,7 +12,7 @@ import { PipelineDetailResponse, PipelineListResponse, PipelineRun, RunLogsRespo
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
 import {
-  AccountConfigUpdate, AccountStatus, AccountStatusChange, CreateAccountRequest, CreatedAccount, DeletedSecrets, UpdateCredentialsRequest, ManualSnapshot, ReconDetail, SessionAccount, Transfer, TransferKind, TreasurySummary, VenueAccount,
+  AccountConfigUpdate, AccountStatus, AccountStatusChange, CreateAccountRequest, CreatedAccount, DeletedSecrets, UpdateCredentialsRequest, ManualSnapshot, ReconDetail, SessionAccount, Transfer, TransferFilters, TransferKind, TransferProgram, TreasurySummary, VenueAccount,
 } from '../types/treasury';
 import { MarketDataAccount } from '../types/credentials';
 import {
@@ -843,15 +843,18 @@ export const registryApi = {
     }),
   getTreasurySummary: () =>
     sendApiRequest<TreasurySummary>('/treasury/summary', 'GET', { apiUrl: REGISTRY_API_URL }),
-  listTransfers: (accountId?: number) =>
+  listTransfers: (filters: TransferFilters = {}) =>
     sendApiRequest<Transfer[]>('/treasury/transfers', 'GET', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
-      queryParams: accountId !== undefined ? { accountId } : undefined,
+      // The venue's own row, as the poller read it.
+      preserveKeys: new Set(['raw']),
+      queryParams: Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined)),
     }),
   // Amounts are signed price-unit strings: money in is positive, a withdrawal negative.
   recordTransfer: (transfer: {
     accountId: number; kind: TransferKind; amount: string; occurredAt?: string; externalRef?: string; reason: string;
+    program?: TransferProgram;
   }) =>
     sendApiRequest<Transfer>('/treasury/transfers', 'POST', {
       apiUrl: REGISTRY_API_URL,

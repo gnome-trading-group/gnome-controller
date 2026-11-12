@@ -1,4 +1,4 @@
-import { AccountStatus, AccountTreasury, CashReconStatus, PositionCheckStatus, TransferKind } from '../types/treasury';
+import { AccountStatus, AccountTreasury, CashReconStatus, PositionCheckStatus, Transfer, TransferKind } from '../types/treasury';
 import { parseScaled, plainDecimal } from './format';
 
 export const ACCOUNT_STATUS_COLORS: Record<AccountStatus, string> = {
@@ -161,15 +161,35 @@ export const CREDENTIAL_FIELDS: Record<string, CredentialField[]> = {
 };
 
 // Every venue takes a trading key, a poller key and a market-data key, each its own so it can be revoked alone; these
-// are the venues with no use for one. Mirrors KEYS_NOT_NEEDED in the registry's venue-account-create, which enforces it.
+// are the venues with no use for one, or for which one is optional. Mirrors KEYS_NOT_NEEDED and KEYS_OPTIONAL in the
+// registry's venue-account-create, which enforces them.
 export type KeyKind = 'read' | 'marketData';
 const KEYS_NOT_NEEDED: Record<string, KeyKind[]> = {
-  POLYMARKET_INTL: ['read', 'marketData'],
+  POLYMARKET_INTL: ['marketData'],
+};
+// A Polymarket Intl wallet is read from the chain; its CLOB API key only lets the poller split its liquidity rewards
+// by market, so its strategies get them.
+const KEYS_OPTIONAL: Record<string, KeyKind[]> = {
+  POLYMARKET_INTL: ['read'],
 };
 
 export function needsKey(exchangeCode: string, kind: KeyKind): boolean {
   return !(KEYS_NOT_NEEDED[exchangeCode] ?? []).includes(kind);
 }
+
+export function keyOptional(exchangeCode: string, kind: KeyKind): boolean {
+  return (KEYS_OPTIONAL[exchangeCode] ?? []).includes(kind);
+}
+
+// Fields the poller's key leaves out: it never holds a Polymarket wallet's private key or addresses.
+export const READ_KEY_OMITS: Record<string, string[]> = {
+  KALSHI: ['subaccount'],
+  POLYMARKET_INTL: ['ethereumPrivateKey', 'signerAddress', 'funderAddress', 'signatureType'],
+};
+
+// Venues whose deposits and withdrawals the venue poller books itself; a person records one it can't see as a
+// CORRECTION. Mirrors POLLED_MOVES in the registry's treasury-api.
+export const POLLED_MOVE_EXCHANGES = ['KALSHI', 'POLYMARKET_INTL', 'POLYMARKET_US'];
 
 export const SECRET_REGIONS = ['us-east-1', 'ap-northeast-1', 'eu-west-1'];
 
@@ -194,8 +214,56 @@ export function credentialsFromFile(exchangeCode: string, text: string): Record<
 }
 
 /** The required fields still empty, by label. */
-export function missingCredentials(exchangeCode: string, values: Record<string, string>): string[] {
+export function missingCredentials(exchangeCode: string, values: Record<string, string>, omit: string[] = []): string[] {
   return (CREDENTIAL_FIELDS[exchangeCode] ?? [])
-    .filter((f) => !f.optional && !(values[f.key] ?? '').trim())
+    .filter((f) => !omit.includes(f.key) && !f.optional && !(values[f.key] ?? '').trim())
     .map((f) => f.label);
+}
+
+// Venue money that is PnL without being trading.
+export const NON_TRADING_KINDS: TransferKind[] = ['REWARD', 'INTEREST', 'FEE_ADJUSTMENT'];
+
+export interface RewardsBreakdown {
+  total: bigint;
+  byProgram: Map<string, bigint>;
+  byExchange: Map<string, bigint>;
+  // What each strategy was given, and (key null) what stays the firm's.
+  byStrategy: Map<number | null, bigint>;
+  pending: number;
+  // Rewards some or all of which no strategy of ours earned, so stay the firm's.
+  failed: number;
+}
+
+/** Non-trading transfers summed by program, venue and the strategy given each part; the rest is the firm's. */
+export function rewardsBreakdown(transfers: Transfer[]): RewardsBreakdown {
+  const add = <K>(map: Map<K, bigint>, key: K, amount: bigint) => map.set(key, (map.get(key) ?? 0n) + amount);
+  const out: RewardsBreakdown = {
+    total: 0n, byProgram: new Map(), byExchange: new Map(), byStrategy: new Map(), pending: 0, failed: 0,
+  };
+  for (const t of transfers) {
+    if (!NON_TRADING_KINDS.includes(t.kind)) continue;
+    const amount = BigInt(t.amount);
+    out.total += amount;
+    add(out.byProgram, t.program ?? t.kind, amount);
+    add(out.byExchange, t.exchangeCode, amount);
+    let given = 0n;
+    for (const a of t.allocations) {
+      add(out.byStrategy, a.strategyId, BigInt(a.amount));
+      given += BigInt(a.amount);
+    }
+    if (amount !== given) add(out.byStrategy, null, amount - given);
+    if (t.allocationState === 'PENDING') out.pending++;
+    if (t.allocationState === 'FAILED' || t.allocationState === 'PARTIAL') out.failed++;
+  }
+  return out;
+}
+
+const PROGRAM_LABELS: Record<string, string> = {
+  LIQUIDITY: 'Liquidity rewards', MAKER_REBATE: 'Maker rebates', TAKER_REBATE: 'Taker rebates', HOLDING: 'Holding yield',
+  REFERRAL: 'Referral', VOLUME: 'Volume rewards', INTEREST: 'Interest', UNCLASSIFIED: 'Unclassified',
+  REWARD: 'Other rewards', FEE_ADJUSTMENT: 'Fee adjustments',
+};
+
+export function programLabel(program: string): string {
+  return PROGRAM_LABELS[program] ?? program;
 }

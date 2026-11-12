@@ -7,7 +7,7 @@ import { CreatedAccount, VenueAccount } from '../../types/treasury';
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import {
-  CREDENTIAL_FIELDS, credentialsFromFile, missingCredentials, needsKey, SECRET_REGIONS,
+  CREDENTIAL_FIELDS, credentialsFromFile, keyOptional, missingCredentials, needsKey, READ_KEY_OMITS, SECRET_REGIONS,
 } from '../../utils/treasury';
 
 const DEFAULT_EXCHANGE = 'POLYMARKET_INTL';
@@ -75,9 +75,15 @@ export function RegisterAccountModal({ opened, onClose, onCreated, account }: Re
 
   const exchange = venues.find((e) => e.exchangeCode === exchangeCode);
   const readKey = exchangeCode !== null && needsKey(exchangeCode, 'read');
-  const missing = exchangeCode ? missingCredentials(exchangeCode, credentials) : [];
-  const missingRead = readKey && exchangeCode ? missingCredentials(exchangeCode, readCredentials) : [];
-  const secretNames = ['trading', ...(readKey ? ['read'] : [])]
+  const readOptional = exchangeCode !== null && keyOptional(exchangeCode, 'read');
+  const readOmit = (exchangeCode && READ_KEY_OMITS[exchangeCode]) || [];
+  const filled = (values: Record<string, string>) => Object.values(values).some((v) => v.trim() !== '');
+  const sendRead = readKey && (!readOptional || filled(readCredentials));
+  // Updating an account may give only the poller's key, leaving the trading key as it is.
+  const sendTrading = !account || filled(credentials) || !sendRead;
+  const missing = exchangeCode && sendTrading ? missingCredentials(exchangeCode, credentials) : [];
+  const missingRead = sendRead && exchangeCode ? missingCredentials(exchangeCode, readCredentials, readOmit) : [];
+  const secretNames = [...(sendTrading ? ['trading'] : []), ...(sendRead || (readKey && !readOptional) ? ['read'] : [])]
     .map((kind) => `gnome/accounts/${account?.label ?? '<label>'}/${kind}`);
 
   const save = async () => {
@@ -85,9 +91,11 @@ export function RegisterAccountModal({ opened, onClose, onCreated, account }: Re
     setSaving(true);
     setError(null);
     try {
-      const readOnly = readKey ? readCredentials : undefined;
+      const readOnly = sendRead ? readCredentials : undefined;
       const result = account
-        ? await registryApi.updateAccountCredentials({ accountId: account.accountId, credentials, readCredentials: readOnly })
+        ? await registryApi.updateAccountCredentials({
+          accountId: account.accountId, credentials: sendTrading ? credentials : undefined, readCredentials: readOnly,
+        })
         : await registryApi.createVenueAccount({
           exchangeId: exchange.exchangeId, credentials, readCredentials: readOnly, note: note.trim() || undefined,
         });
@@ -177,12 +185,15 @@ export function RegisterAccountModal({ opened, onClose, onCreated, account }: Re
               onChange={(key, value) => setCredentials((c) => ({ ...c, [key]: value }))} />
             {readKey && (
               <Stack gap={4}>
-                <Text size="sm" fw={500}>Key for the balance poller</Text>
+                <Text size="sm" fw={500}>Key for the balance poller{readOptional ? ' (optional)' : ''}</Text>
                 <Text size="xs" c="dimmed">
-                  A separate key, so it can be revoked without breaking trading.
+                  {readOptional
+                    ? 'A CLOB API key of the wallet’s own, derived with a new nonce, never the one the gateway trades with and never the private key: it can cancel orders, so it must be revocable on its own. The poller reads the wallet from the chain without it; with it, it splits the wallet’s liquidity rewards by market so the strategies that earned them get them.'
+                    : 'A separate key, so it can be revoked without breaking trading.'}
                   {exchangeCode === 'KALSHI' && ' Create it with the read and write::transfer scopes and never write, so the poller can keep the shard rebalancing targets set but never holds a key that can trade.'}
+                  {account && readOptional && ' Leave the trading fields empty to add only this key.'}
                 </Text>
-                <CredentialInputs exchangeCode={exchangeCode} values={readCredentials} idPrefix="read" omit={['subaccount']}
+                <CredentialInputs exchangeCode={exchangeCode} values={readCredentials} idPrefix="read" omit={readOmit}
                   onChange={(key, value) => setReadCredentials((c) => ({ ...c, [key]: value }))} />
               </Stack>
             )}

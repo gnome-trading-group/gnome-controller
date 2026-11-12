@@ -110,17 +110,66 @@ export const TRANSFER_KINDS = [
 
 export type TransferKind = typeof TRANSFER_KINDS[number];
 
+// The venue program behind a reward or interest payment.
+export const TRANSFER_PROGRAMS = [
+  'LIQUIDITY', 'MAKER_REBATE', 'TAKER_REBATE', 'HOLDING', 'REFERRAL', 'VOLUME', 'INTEREST', 'UNCLASSIFIED',
+] as const;
+
+export type TransferProgram = typeof TRANSFER_PROGRAMS[number];
+
+// Where a reward stands in being given to the strategies that earned it; null when it isn't given out. PARTIAL: some
+// of its markets had no strategy of ours, and that part stays the firm's.
+export type AllocationState = 'PENDING' | 'DONE' | 'PARTIAL' | 'FAILED';
+
+// The part of a reward one strategy earned, on the listing it earned it on (none for a taker rebate), split among
+// `strategies` of ours by `basis`.
+export interface TransferAllocation {
+  allocationId: number;
+  strategyId: number;
+  listingId: number | null;
+  venueMarket: string | null;
+  amount: string;
+  basis: 'ACCRUAL' | 'RESTING_TIME' | 'MAKER_FILLS' | 'TAKER_FEES';
+  strategies: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+}
+
+// A part of a reward left to the firm, and why.
+export interface UnallocatedPart {
+  venueMarket: string | null;
+  amount: string;
+  reason: string;
+}
+
 export interface Transfer {
   transferId: string;
   accountId: number;
   label: string;
+  exchangeCode: string;
   kind: TransferKind;
   amount: string;
   occurredAt: string;
   externalRef: string | null;
   reason: string | null;
+  // 'venue-poller' when the poller booked it from the venue, else the person who recorded it.
   actor: string;
   recordedAt: string;
+  program: TransferProgram | null;
+  venueMarket: string | null;
+  asset: string;
+  assetAmount: string | null;
+  allocationState: AllocationState | null;
+  allocations: TransferAllocation[];
+  unallocated: UnallocatedPart[] | null;
+}
+
+export interface TransferFilters {
+  accountId?: number;
+  kind?: TransferKind;
+  program?: TransferProgram;
+  strategyId?: number;
+  since?: string;
 }
 
 export type PositionCheckStatus = 'OK' | 'PENDING' | 'BREAK' | 'UNKNOWN_VENUE_POSITION';
@@ -202,7 +251,8 @@ export interface CreatedAccount {
 // New credentials for an existing account, written to its own label's secrets.
 export interface UpdateCredentialsRequest {
   accountId: number;
-  credentials: Record<string, string>;
+  // Left out to replace only the poller's key.
+  credentials?: Record<string, string>;
   readCredentials?: Record<string, string>;
 }
 

@@ -1,20 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Group, Modal, Select, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
-import { TRANSFER_KINDS, TransferKind, VenueAccount } from '../../types/treasury';
+import { TRANSFER_KINDS, TRANSFER_PROGRAMS, TransferKind, TransferProgram, VenueAccount } from '../../types/treasury';
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { formatMoney } from '../../utils/format';
-import { isSignedTransferKind, transferAmount } from '../../utils/treasury';
+import { isSignedTransferKind, POLLED_MOVE_EXCHANGES, programLabel, transferAmount } from '../../utils/treasury';
 
 const KIND_HINTS: Record<TransferKind, string> = {
   OPENING: "The account's cash when reconciliation starts; the first one sets where it starts from",
   DEPOSIT: 'Money sent to the account',
   WITHDRAWAL: 'Money taken out; type the amount withdrawn, it is recorded as money out',
-  INTEREST: 'Interest the venue paid',
-  REWARD: 'A venue reward or rebate',
+  INTEREST: 'Interest the venue paid that the venue poller didn’t book',
+  REWARD: 'A venue reward or rebate the venue poller didn’t book; it stays the firm’s',
   FEE_ADJUSTMENT: 'A fee the ledger got wrong; negative when the venue charged more',
-  CORRECTION: 'Anything else that explains a difference; negative for money out',
+  CORRECTION: 'Anything else that explains a difference, such as a deposit the venue poller can’t see; negative for money out',
 };
 
 interface RecordTransferModalProps {
@@ -29,7 +29,8 @@ interface RecordTransferModalProps {
 // recording another one.
 export function RecordTransferModal({ accountId, accounts, onClose, onRecorded }: RecordTransferModalProps) {
   const [account, setAccount] = useState<string | null>(null);
-  const [kind, setKind] = useState<TransferKind>('DEPOSIT');
+  const [kind, setKind] = useState<TransferKind>('CORRECTION');
+  const [program, setProgram] = useState<TransferProgram | null>(null);
   const [dollars, setDollars] = useState('');
   const [occurredAt, setOccurredAt] = useState<Date | null>(null);
   const [externalRef, setExternalRef] = useState('');
@@ -41,7 +42,8 @@ export function RecordTransferModal({ accountId, accounts, onClose, onRecorded }
   useEffect(() => {
     if (!opened) return;
     setAccount(accountId === null ? null : String(accountId));
-    setKind('DEPOSIT');
+    setKind('CORRECTION');
+    setProgram(null);
     setDollars('');
     setOccurredAt(null);
     setExternalRef('');
@@ -51,6 +53,13 @@ export function RecordTransferModal({ accountId, accounts, onClose, onRecorded }
 
   const amount = transferAmount(kind, dollars);
   const chosen = accounts.find((a) => String(a.accountId) === account);
+  // The venue poller books these venues' deposits and withdrawals itself.
+  const polled = chosen !== undefined && POLLED_MOVE_EXCHANGES.includes(chosen.exchangeCode);
+  const kinds = TRANSFER_KINDS.filter((k) => !polled || (k !== 'DEPOSIT' && k !== 'WITHDRAWAL'));
+  useEffect(() => {
+    if (!kinds.includes(kind)) setKind('CORRECTION');
+  }, [polled]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sentProgram = kind === 'INTEREST' ? 'INTEREST' : kind === 'REWARD' ? program ?? undefined : undefined;
   const blocker = !chosen ? 'Pick the account'
     : amount === null ? (dollars === '' ? 'Enter the amount' : 'Not a valid amount for this kind')
     : reason.trim() === '' ? 'Add a reason' : null;
@@ -67,6 +76,7 @@ export function RecordTransferModal({ accountId, accounts, onClose, onRecorded }
         occurredAt: occurredAt?.toISOString(),
         externalRef: externalRef.trim() || undefined,
         reason: reason.trim(),
+        program: sentProgram,
       });
       onRecorded();
       onClose();
@@ -91,11 +101,26 @@ export function RecordTransferModal({ accountId, accounts, onClose, onRecorded }
         />
         <Select
           label="Kind"
-          data={TRANSFER_KINDS.map((k) => ({ value: k, label: k }))}
+          data={kinds.map((k) => ({ value: k, label: k }))}
           value={kind}
-          onChange={(v) => setKind((v ?? 'DEPOSIT') as TransferKind)}
+          onChange={(v) => setKind((v ?? 'CORRECTION') as TransferKind)}
           description={KIND_HINTS[kind]}
         />
+        {polled && (
+          <Text size="xs" c="dimmed">
+            The venue poller books this venue’s deposits, withdrawals, rewards and interest itself.
+          </Text>
+        )}
+        {kind === 'REWARD' && (
+          <Select
+            label="Program"
+            description="Which venue program paid it"
+            data={TRANSFER_PROGRAMS.filter((p) => p !== 'INTEREST').map((p) => ({ value: p, label: programLabel(p) }))}
+            value={program}
+            onChange={(v) => setProgram(v as TransferProgram | null)}
+            clearable
+          />
+        )}
         <Group grow align="flex-start">
           <TextInput
             label="Amount ($)"

@@ -3,6 +3,7 @@ import { keepPreviousData, useInfiniteQuery, useQueries, useQuery, useQueryClien
 import { collectionApi, controllerApi, registryApi, EventScope, LedgerFilters, LedgerScope } from '../utils/api';
 import { ACTIVE_SESSION_STATUSES, AlertFilters, isActiveSession, LedgerFill, LedgerOrder, Mode, PnlSeries, StrategySession } from '../types';
 import { mergeSeries } from './series';
+import { TransferFilters } from '../types/treasury';
 
 // How often each kind of data is re-read while it can still change; nothing polls once a session has ended.
 export const POLL = {
@@ -49,7 +50,7 @@ export const keys = {
   collectionShard: (shardId: string) => ['collection', 'shard', shardId] as const,
   shardLogs: (shardId: string, taskId: string) => ['collection', 'logs', shardId, taskId] as const,
   sessionLease: (sessionId: string) => ['collection', 'lease', sessionId] as const,
-  transfers: (accountId: number | null) => ['treasury', 'transfers', accountId] as const,
+  transfers: (filters: TransferFilters) => ['treasury', 'transfers', filters] as const,
   recon: (accountId: number) => ['treasury', 'recon', accountId] as const,
   sessionAccounts: (sessionId: string) => ['sessionAccounts', sessionId] as const,
   // All under one prefix, so recording new parameters refreshes every view of them; each shape has its own key.
@@ -479,11 +480,12 @@ export function useTreasurySummary() {
   return useQuery({ queryKey: keys.treasury, queryFn: () => registryApi.getTreasurySummary(), refetchInterval: POLL.treasury });
 }
 
-export function useTransfers(accountId: number | null) {
+export function useTransfers(filters: TransferFilters, enabled = true) {
   return useQuery({
-    queryKey: keys.transfers(accountId),
-    queryFn: () => registryApi.listTransfers(accountId ?? undefined),
+    queryKey: keys.transfers(filters),
+    queryFn: () => registryApi.listTransfers(filters),
     refetchInterval: POLL.treasury,
+    enabled,
   });
 }
 

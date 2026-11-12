@@ -16,7 +16,7 @@ export interface ListingRef {
 interface ValuedListing extends ListingRef {
   netQuantity: string;
   avgEntryPrice: string;
-  markPrice: string;
+  markPrice: string | null;
   bid: string | null;
   ask: string | null;
   markTime: string | null;
@@ -53,7 +53,7 @@ export interface SessionListingPnl extends ValuedListing {
     source: OpeningSource;
     netQuantity: string;
     avgEntryPrice: string;
-    markPrice: string;
+    markPrice: string | null;
     unrealized: string;
     markMissing: boolean;
   };
@@ -91,6 +91,9 @@ export interface StrategyListingPnl extends ValuedListing {
   accountId: number | null;
   accountLabel: string | null;
   today: string;
+  // Venue rewards given to the strategy on this listing (on its first row when it's held on several accounts); not in
+  // total, which is trading PnL. Live only.
+  rewards: string;
 }
 
 export interface StrategySummary {
@@ -103,6 +106,9 @@ export interface StrategySummary {
     realized: string;
     unrealized: string;
     fees: string;
+    // Venue rewards given to the strategy (liquidity rewards, maker and taker rebates), in lifetime and today. Live only.
+    rewards: string;
+    rewardsToday: string;
     // How lifetime differs from the sum of the sessions' PnL; carry is the mark moving on inventory no session held.
     outsideSessions: {
       total: string;
@@ -110,6 +116,7 @@ export interface StrategySummary {
       manual: string;
       adjustments: string;
       resets: string;
+      rewards: string;
       carry: string;
     };
   };
@@ -123,8 +130,20 @@ export interface StrategySummary {
 export interface FirmSummary {
   scope: { kind: 'firm'; mode: Mode; timeZone: string; dayStart: string };
   asOf: string;
-  totals: { lifetime: string; today: string; realized: string; unrealized: string; fees: string };
-  strategies: { strategyId: number; lifetime: string; today: string; unrealized: string; openPositions: number }[];
+  // lifetime and today are the firm's all in: every strategy's (with its rewards) plus the firm's own non-trading PnL.
+  totals: {
+    lifetime: string; today: string; realized: string; unrealized: string; fees: string;
+    rewards: string; rewardsToday: string; nonTrading: string; nonTradingToday: string;
+  };
+  // Non-trading money no strategy earned: interest, holding yield, referral, fee adjustments, and rewards that couldn't
+  // be given out; by program (or kind, where there's no program) and by exchange. Live only.
+  nonTrading: {
+    lifetime: string;
+    today: string;
+    byProgram: Record<string, { lifetime: string; today: string }>;
+    byExchange: Record<string, { lifetime: string; today: string }>;
+  };
+  strategies: { strategyId: number; lifetime: string; today: string; unrealized: string; rewards: string; openPositions: number }[];
 }
 
 export interface SessionTotals {
@@ -141,7 +160,7 @@ export interface PriceHistory {
   bid: string[];
   ask: string[];
   lastTrade: string[];
-  mark: string[];
+  mark: (string | null)[];
 }
 
 // PnL per day in a time zone: the change in lifetime PnL over each local day, oldest first (today's so far).
@@ -183,7 +202,7 @@ export interface HeldPosition {
   lotSize: string | null;
   netQuantity: string;
   avgEntryPrice: string;
-  markPrice: string;
+  markPrice: string | null;
   unrealized: string;
   total: string;
 }
