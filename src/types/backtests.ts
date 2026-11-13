@@ -47,6 +47,10 @@ export interface BacktestRun {
   sweepParams?: Record<string, string[]>;
   scenarios?: string[];
   researchCommit?: string;
+  // A Java strategy's gnome-strategies commit (a full SHA), compiled for the run.
+  strategyCommit?: string;
+  // The gnome-backtest release the run used in place of the image's engine.
+  engineVersion?: string;
   configYaml?: string;
   jobs?: BacktestJob[];
 }

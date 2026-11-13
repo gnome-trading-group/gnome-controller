@@ -35,6 +35,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { CommitLink } from '../../../components/launch/CommitLink';
 import { BacktestJob, BacktestRun, BacktestStatus } from '../../../types/backtests';
 import { controllerApi } from '../../../utils/api';
 import { formatDuration } from '../../../utils/format';
@@ -398,8 +399,20 @@ function BacktestDetail() {
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
               <Stack gap={4}>
                 <InfoRow label="Strategy"><Text span ff="monospace" size="sm">{run.strategy}</Text></InfoRow>
-                <InfoRow label="Commit">
-                  <Text span ff="monospace" size="xs">{run.researchCommit ?? 'main'}</Text>
+                {(run.researchCommit || !run.strategyCommit) && (
+                  <InfoRow label="Research commit">
+                    <CommitLink strategyType="python" commit={run.researchCommit ?? 'main'} />
+                  </InfoRow>
+                )}
+                {run.strategyCommit && (
+                  <InfoRow label="Strategy commit">
+                    <CommitLink strategyType="java" commit={run.strategyCommit} />
+                  </InfoRow>
+                )}
+                <InfoRow label="Engine">
+                  {run.engineVersion
+                    ? <Text span ff="monospace" size="xs">gnome-backtest {run.engineVersion}</Text>
+                    : <Text span size="sm" c="dimmed">the image's</Text>}
                 </InfoRow>
               </Stack>
               <Stack gap={4}>

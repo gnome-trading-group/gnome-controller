@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 
@@ -23,6 +24,10 @@ _s3 = boto3.client("s3")
 _batch = boto3.client("batch")
 
 TTL_DAYS = 90
+# A strategy commit is resolved to its SHA by the submitter, so every job of a run, and a rerun, compiles the same tree.
+FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
+# gnome-backtest publishes only releases to GitHub Packages, where the job fetches an engine version from.
+RELEASE_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def _run_id() -> str:
@@ -59,11 +64,19 @@ def handler(event: dict, context) -> dict:
         body = event  # direct Lambda invoke (CLI)
 
     config_yaml = body.get("config")
-    research_commit = body.get("research_commit", "main")
+    research_commit = body.get("research_commit")
+    strategy_commit = body.get("strategy_commit")
+    engine_version = body.get("engine_version")
     submitted_by = _submitted_by(event)
 
     if not config_yaml:
         return create_response(400, {"error": "config is required"})
+    if strategy_commit is not None and not (isinstance(strategy_commit, str) and FULL_SHA.match(strategy_commit)):
+        return create_response(400, {"error": "strategy_commit must be a full 40-character commit SHA"})
+    if engine_version is not None and not (isinstance(engine_version, str) and RELEASE_VERSION.match(engine_version)):
+        return create_response(400, {"error": "engine_version must be a gnome-backtest release (X.Y.Z)"})
+    if not research_commit and not strategy_commit:
+        research_commit = "main"
 
     try:
         config = yaml.safe_load(config_yaml)
@@ -101,11 +114,17 @@ def handler(event: dict, context) -> dict:
             k: [json.dumps(v, sort_keys=True) if isinstance(v, dict) else str(v) for v in vals]
             for k, vals in params.items()
         },
-        "research_commit": research_commit,
         "ttl": _ttl(),
     }
+    sources = {
+        "research_commit": research_commit,
+        "strategy_commit": strategy_commit,
+        "engine_version": engine_version,
+    }
+    meta_item.update({k: v for k, v in sources.items() if v})
     if scenarios:
         meta_item["scenarios"] = scenarios
+    environment = [{"name": k.upper(), "value": v} for k, v in sources.items() if v]
     _table.put_item(Item=meta_item)
 
     # Submit individual Batch jobs and write JOB# records
@@ -119,7 +138,7 @@ def handler(event: dict, context) -> dict:
                 "environment": [
                     {"name": "RUN_ID", "value": run_id},
                     {"name": "S3_BUCKET", "value": S3_BUCKET},
-                    {"name": "RESEARCH_COMMIT", "value": research_commit},
+                    *environment,
                     {"name": "JOB_INDEX", "value": str(i)},
                 ]
             },
