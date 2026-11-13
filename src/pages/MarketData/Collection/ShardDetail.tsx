@@ -14,6 +14,8 @@ import { ShardConnectionsTab } from './shard/ShardConnectionsTab';
 import { ShardActivityTab } from './shard/ShardActivityTab';
 import { ShardLogsTab } from './shard/ShardLogsTab';
 import { ShardTasksTab } from './shard/ShardTasksTab';
+import { ShardPerformanceTab } from './shard/ShardPerformanceTab';
+import { samplesConfigured } from '../../../utils/api';
 
 function ecsUrl(region: string, shardId: string): string {
   return `https://${region}.console.aws.amazon.com/ecs/v2/clusters/CollectionCluster-${region}/services/shard-${shardId}/health?region=${region}`;
@@ -110,6 +112,7 @@ function ShardDetail() {
               <Tabs.Tab value="streams">Streams</Tabs.Tab>
               <Tabs.Tab value="connections">Connections</Tabs.Tab>
               <Tabs.Tab value="activity">Activity</Tabs.Tab>
+              {samplesConfigured && <Tabs.Tab value="performance">Performance</Tabs.Tab>}
               <Tabs.Tab value="logs">Logs</Tabs.Tab>
               <Tabs.Tab value="tasks">Tasks{statuses.length > 1 ? ` (${statuses.length})` : ''}</Tabs.Tab>
             </Tabs.List>
@@ -118,6 +121,9 @@ function ShardDetail() {
             <Tabs.Panel value="activity">
               <ShardActivityTab transitions={status?.transitions ?? []} recorded={status?.transitionsRecorded ?? 0} names={names.data} />
             </Tabs.Panel>
+            {samplesConfigured && (
+              <Tabs.Panel value="performance"><ShardPerformanceTab shardId={shard.shardId} /></Tabs.Panel>
+            )}
             <Tabs.Panel value="logs"><ShardLogsTab shard={shard} status={status} /></Tabs.Panel>
             <Tabs.Panel value="tasks"><ShardTasksTab statuses={statuses} generation={shard.generation} /></Tabs.Panel>
           </Tabs>

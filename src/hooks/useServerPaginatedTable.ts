@@ -72,6 +72,9 @@ export function useServerPaginatedTable<T>({
 
   // Stable serialization of extraParams so object identity doesn't cause spurious re-fetches
   const extraParamsKey = JSON.stringify(extraParams);
+  // A count can cost far more than a page, so paging and sorting reuse it; filters, search and refreshes count again.
+  const countKey = JSON.stringify([extraParamsKey, globalFilter, refreshKey, externalRefreshKey]);
+  const lastCount = useRef<{ key: string; total: number } | null>(null);
 
   useEffect(() => {
     const params: PaginationParams = {
@@ -97,9 +100,11 @@ export function useServerPaginatedTable<T>({
 
     // A slower response for an earlier page, sort or search must not overwrite the one the table now shows.
     let cancelled = false;
-    Promise.all([fetchFn(params), countFn(filterParams)])
+    const known = lastCount.current?.key === countKey ? lastCount.current.total : null;
+    Promise.all([fetchFn(params), known ?? countFn(filterParams)])
       .then(([rows, count]) => {
         if (cancelled) return;
+        lastCount.current = { key: countKey, total: count };
         setData(rows);
         setTotal(count);
         setLastUpdated(new Date());

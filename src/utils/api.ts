@@ -16,6 +16,7 @@ import {
 } from '../types/treasury';
 import { MarketDataAccount } from '../types/credentials';
 import { GatewayStatus } from '../types/gateways';
+import { Sample, SamplePage } from '../types/samples';
 import {
   CollectionRule, CollectionRuleType, CollectionShard, CollectionTarget, NewRule, RuleChange, RuleParameters, RulePreview,
   RuleTypeSchema, SessionLease, ShardDetail, ShardLogs, StreamCoverage,
@@ -91,6 +92,9 @@ const REGISTRY_API_URL = import.meta.env.VITE_REGISTRY_API_URL;
 const MARKET_DATA_API_URL = import.meta.env.VITE_MARKET_DATA_API_URL;
 const LAUNCHER_API_URL = import.meta.env.VITE_LAUNCHER_API_URL;
 const BOT_API_URL = import.meta.env.VITE_BOT_API_URL;
+// The registry's samples API (SamplesApiStack): processes' readings over time. A build without it hides what reads it.
+const SAMPLES_API_URL = import.meta.env.VITE_SAMPLES_API_URL as string | undefined;
+export const samplesConfigured = !!SAMPLES_API_URL;
 
 export class ApiError extends Error {
   // Validation failures some APIs itemise (the launcher's {message, problems}), one message per problem.
@@ -1357,4 +1361,56 @@ export const botApi = {
   editNote: (id: string, changes: { note?: string; scope?: string }) =>
     sendApiRequest<BotNote>(`/notes/${id}`, 'PATCH', { apiUrl: BOT_API_URL, body: changes }),
   deleteNote: (id: string) => sendApiRequest<{ id: string }>(`/notes/${id}`, 'DELETE', { apiUrl: BOT_API_URL }),
+};
+
+export interface SampleQuery {
+  subjectKind: 'session' | 'gateway' | 'shard';
+  subjectId: string;
+  kind?: string;
+  kinds?: string[];
+  kindPrefix?: string;
+  everyMs?: number;
+}
+
+export interface SampleWindow {
+  fromMs: number;
+  toMs: number;
+}
+
+export interface SampleRead {
+  samples: Sample[];
+  // The page cap ended the read before the window did: the newest part is missing.
+  truncated: boolean;
+}
+
+// Enough pages for a thinned range of every kind; a page stops at 4 MB.
+const MAX_SAMPLE_PAGES = 20;
+
+export const samplesApi = {
+  /** Every sample the query names in the window, oldest first, following the API's pages up to a cap. */
+  listSamples: async (query: SampleQuery, window: SampleWindow): Promise<SampleRead> => {
+    const samples: Sample[] = [];
+    let after: string | null = null;
+    for (let page = 0; page < MAX_SAMPLE_PAGES; page++) {
+      const result: SamplePage = await sendApiRequest<SamplePage>('/samples', 'GET', {
+        apiUrl: SAMPLES_API_URL!,
+        queryParams: definedParams({
+          subjectKind: query.subjectKind,
+          subjectId: query.subjectId,
+          kind: query.kind,
+          kinds: query.kinds?.join(','),
+          kindPrefix: query.kindPrefix,
+          from: window.fromMs,
+          to: window.toMs,
+          everyMs: query.everyMs,
+          after: after ?? undefined,
+          limit: 2_000,
+        }),
+      });
+      samples.push(...result.samples);
+      if (!result.next) return { samples, truncated: false };
+      after = result.next;
+    }
+    return { samples, truncated: true };
+  },
 };

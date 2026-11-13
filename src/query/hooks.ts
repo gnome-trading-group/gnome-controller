@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { collectionApi, controllerApi, registryApi, EventScope, LedgerFilters, LedgerScope } from '../utils/api';
+import { collectionApi, controllerApi, registryApi, samplesApi, samplesConfigured, EventScope, LedgerFilters, LedgerScope, SampleQuery, SampleWindow } from '../utils/api';
 import { ACTIVE_SESSION_STATUSES, AlertFilters, isActiveSession, LedgerFill, LedgerOrder, Mode, PnlSeries, StrategySession } from '../types';
 import { mergeSeries } from './series';
 import { TransferFilters } from '../types/treasury';
@@ -18,11 +18,14 @@ export const POLL = {
   treasury: 30_000,
   // A gateway writes its endpoint every 15 s and its minutes once a minute.
   gateways: 15_000,
+  // Most sample kinds arrive once a minute; runtime every 10 s, read thinned anyway past an hour.
+  samples: 30_000,
 };
 
 const PAGE_SIZE = 100;
 
 export const keys = {
+  samples: (query: SampleQuery, span: string) => ['samples', query, span] as const,
   strategies: ['strategies'] as const,
   activeSessions: ['activeSessions'] as const,
   attention: (mode: Mode) => ['attention', mode] as const,
@@ -572,4 +575,19 @@ export function useAcknowledgeAlerts() {
     if (failed.length === 1 && alertIds.length === 1) throw failed[0].reason;
     if (failed.length > 0) throw new Error(`${failed.length} of ${alertIds.length} failed`);
   }, [client]);
+}
+
+/**
+ * A subject's samples over a window; re-read while it can still change. Disabled in a build without the samples API.
+ * The window is worked out when each read runs (a live one moves with time), so it isn't part of the query key: `span`
+ * names it instead (the chosen range), and the key changes only when that or the query does.
+ */
+export function useSamples(query: SampleQuery | null, span: string, window: () => SampleWindow, live: boolean) {
+  return useQuery({
+    queryKey: keys.samples(query ?? { subjectKind: 'session', subjectId: '' }, span),
+    queryFn: () => samplesApi.listSamples(query!, window()),
+    enabled: samplesConfigured && !!query?.subjectId,
+    refetchInterval: live ? POLL.samples : false,
+    placeholderData: keepPreviousData,
+  });
 }

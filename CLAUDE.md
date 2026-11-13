@@ -25,7 +25,22 @@ Python Lambda tests (`cd cdk`; `pip install -r requirements-dev.txt` first). Run
 
 ## Layout
 - `src/pages/*` - one folder per nav area: Dashboard, Trading (Fills & Orders; Order Gateways: every live and paper gateway from the registry's `gateways/status`, its linked sessions from heartbeats, per-account last hour and session shares or a paper gateway's books' lag, and its alerts; logic in `src/utils/gateways.ts`), Strategies, Sessions, Launcher, Risk, Treasury, Predictions, SecurityMaster, MarketData (Collection: shards, rules, stream targets and each stream's coverage history from the market-data `collection/*` routes; Credentials), Data (pipelines/datasets/artifacts), Research (Backtests, Jobs, Sessions), System (health, alerts), Tools (ServiceConfig, LatencyProbe, BotNotes: gnome-bot's team notes through its own API). Routes are in `src/App.tsx`.
-- `src/utils/api.ts` - every HTTP call. `sendApiRequest` plus `registryApi`, `collectionApi` (market data), `controllerApi`, `launcherApi`, `botApi` (gnome-bot's `notes` routes), one per `VITE_*_API_URL`. Other files in `src/utils` are pure logic with colocated tests.
+- `src/utils/api.ts` - every HTTP call. `sendApiRequest` plus `registryApi`, `collectionApi` (market data), `controllerApi`, `launcherApi`, `botApi` (gnome-bot's `notes` routes), `samplesApi` (the registry's samples API, `VITE_SAMPLES_API_URL`; `samplesConfigured` is false in a build without it, which hides what reads it), one per `VITE_*_API_URL`. Other files in `src/utils` are pure logic with colocated tests.
+- Session Performance tab (`src/pages/Sessions/SessionPerformance.tsx`): a session's samples over 1h-7d (latency by
+  metric with exchange/action/trigger filters and the latest minute's table, activity, runtime, rings, market data,
+  ledger, journal), read through `useSamples` (thinned with `everyMs` past an hour, re-read every 30 s while live).
+  Transforms are pure, in `src/utils/samples.ts` with tests. A session that sent no samples (an orchestrator before
+  them, or past their 7 days) shows a note; the other tabs don't depend on it.
+- Gateway and shard Performance tabs (`src/pages/Trading/Gateways/GatewayPerformance.tsx`,
+  `src/pages/MarketData/Collection/shard/ShardPerformanceTab.tsx`): the same samples view for subjects `gateway`
+  (its key) and `shard` (its id). Each opens with a stage table (`components/samples/PathTable`): a record's or an
+  order's path in order, each stage's newest minute, p99 against the slowest stage. Then latency, a paper gateway's
+  market data (`feed.shards`, `gateway.rings`, the lane's and reader's loops), orders in and reports out
+  (`gateway.transport`, `gateway.drops`), each live account's lane (`gateway.lanes`), a shard's streams
+  (`shard.streams`, `shard.agents`) and runtime (UDP drops included). All three tabs draw with the shared
+  `src/components/samples/` (`SampleCharts`: chart, latency picker, runtime, range control; `sampleFormat`); gateway
+  and shard transforms in
+  `src/utils/processSamples.ts` with tests.
 - Collection UI: pure logic (health, hand-off steps, counts, rule summaries) in `src/utils/collection.ts` with tests; widgets in `src/components/collection/`; queries in `src/query/hooks.ts` (`COLLECTION_POLL`). The rule form renders market-data's `collection/rule-types` schemas with `SchemaFormFields` (id lists as pasted text), previews through `collection/rule-preview`, and keeps rule `parameters` snake_case (`RULE_DATA_KEYS`).
 - `src/components`, `src/hooks`, `src/query` (TanStack Query client and hooks), `src/types`, `src/context`. `src/amplify-config.ts` configures Cognito from `VITE_COGNITO_*`.
 - `.env.dev` / `.env.prod` - per-stage build config (Cognito ids, API URLs, `VITE_STAGE`); the deploy builds with `vite build --mode <stage>`.

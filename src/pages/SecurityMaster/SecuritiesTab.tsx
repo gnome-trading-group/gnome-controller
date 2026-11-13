@@ -99,6 +99,8 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
       Cell: ({ row }: { row: MRT_Row<Security> }) => formatSecurityType(row.original.type),
     },
     {
+      // Sortable columns carry the registry's column name.
+      id: 'asset_class',
       accessorKey: 'assetClass',
       header: 'Asset Class',
       enableSorting: true,
@@ -108,7 +110,7 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
     {
       accessorKey: 'quoteCurrency',
       header: 'Quote Currency',
-      enableSorting: true,
+      enableSorting: false,
       enableGrouping: true,
       Cell: ({ row }: { row: MRT_Row<Security> }) => row.original.quoteCurrency ?? '-',
     },
@@ -125,6 +127,7 @@ function SecuritiesTab({ onDelete, externalRefreshKey }: SecuritiesTabProps) {
       ),
     },
     {
+      id: 'date_created',
       accessorKey: 'dateCreated',
       header: 'Created',
       enableSorting: true,

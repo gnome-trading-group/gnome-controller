@@ -9,6 +9,7 @@ import {
   Modal,
   Select,
   Stack,
+  Switch,
   Text,
   TextInput,
   Tooltip,
@@ -50,7 +51,13 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
   const [securitySearch, setSecuritySearch] = useState('');
   const { options: securityOptions, isLoading: securitySearchLoading } = useSecuritySearch(securitySearch);
 
-  const urlState = useUrlTableState();
+  const urlState = useUrlTableState({ defaultSort: { id: 'date_created', desc: true } });
+  // Most listings are expired prediction-market contracts, so the table starts at the live ones.
+  const showInactive = urlState.getParam('inactive') === 'true';
+  const extraParams = useMemo(
+    () => (showInactive ? {} : { active: true }) as Record<string, string | number | boolean>,
+    [showInactive],
+  );
 
   const {
     data: listings,
@@ -67,6 +74,7 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
   } = useServerPaginatedTable<DenormalizedListing>({
     fetchFn: registryApi.listListingsPaginated,
     countFn: registryApi.countListings,
+    extraParams,
     externalRefreshKey,
     controlledState: {
       pagination: urlState.pagination,
@@ -97,27 +105,28 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
     {
       accessorKey: 'securitySymbol',
       header: 'Security',
-      enableSorting: true,
+      enableSorting: false,
     },
     {
       accessorKey: 'exchangeName',
       header: 'Exchange',
-      enableSorting: true,
+      enableSorting: false,
     },
     {
       accessorKey: 'securityType',
       header: 'Type',
-      enableSorting: true,
+      enableSorting: false,
       Cell: ({ row }: { row: MRT_Row<DenormalizedListing> }) =>
         formatSecurityType(row.original.securityType),
     },
     {
+      id: 'exchange_security_symbol',
       accessorKey: 'exchangeSecuritySymbol',
       header: 'Exchange Symbol',
       enableSorting: true,
     },
     {
-      // The registry sorts by this column's own name; it puts listings with no reading last either way.
+      // Sortable columns carry the registry's column name; it puts listings with no volume reading last either way.
       id: 'volume_24h',
       accessorKey: 'volume24h',
       header: '24h Volume',
@@ -137,6 +146,7 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
       ),
     },
     {
+      id: 'date_created',
       accessorKey: 'dateCreated',
       header: 'Created',
       enableSorting: true,
@@ -194,16 +204,23 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
       </ActionIcon>
     ),
     renderTopToolbarCustomActions: () => (
-      <Tooltip label="Add Listing" position="bottom" withArrow openDelay={500}>
-        <ActionIcon
-          size="lg"
-          variant="filled"
-          color="green"
-          onClick={() => { setCreateError(null); setCreateListingOpen(true); }}
-        >
-          <IconPlus size={20} />
-        </ActionIcon>
-      </Tooltip>
+      <Group gap="md">
+        <Tooltip label="Add Listing" position="bottom" withArrow openDelay={500}>
+          <ActionIcon
+            size="lg"
+            variant="filled"
+            color="green"
+            onClick={() => { setCreateError(null); setCreateListingOpen(true); }}
+          >
+            <IconPlus size={20} />
+          </ActionIcon>
+        </Tooltip>
+        <Switch
+          label="Show Inactive"
+          checked={showInactive}
+          onChange={e => urlState.setParam('inactive', e.currentTarget.checked ? 'true' : '')}
+        />
+      </Group>
     ),
   });
 

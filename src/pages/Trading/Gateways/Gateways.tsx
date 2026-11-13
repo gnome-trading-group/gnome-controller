@@ -1,9 +1,13 @@
 import { Alert as MantineAlert, Badge, Card, Container, Group, Stack, Table, Text, Title, Tooltip } from '@mantine/core';
+import { useMemo } from 'react';
 import ReactTimeAgo from 'react-time-ago';
 import { useNavigate } from 'react-router-dom';
-import { POLL, useActiveSessions, useAlerts, useGatewayStatus } from '../../../query/hooks';
+import { POLL, useActiveSessions, useAlerts, useGatewayStatus, useSamples } from '../../../query/hooks';
+import { SkeletonRows } from '../../../components/SkeletonRows';
+import { RuntimeData } from '../../../types/samples';
+import { samplesConfigured } from '../../../utils/api';
 import { LastUpdated } from '../../../components/LastUpdated';
-import { ModeBadge } from '../../../components/trading/layout';
+import { Kpi, KpiStrip, ModeBadge } from '../../../components/trading/layout';
 import { GatewayStatus } from '../../../types/gateways';
 import { StrategySession } from '../../../types/strategy-sessions';
 import { Alert } from '../../../types/alerts';
@@ -40,15 +44,48 @@ function lastMinute(g: GatewayStatus) {
   );
 }
 
-function GatewayTable({ gateways, sessions, alerts }: {
+const HOST_WINDOW_MS = 2 * 60_000;
+const COLUMNS = 10;
+
+/** A running gateway's host from its newest runtime sample: CPU busy, and the process's memory. */
+function HostCell({ gatewayKey }: { gatewayKey: string }) {
+  const span = () => ({ fromMs: Date.now() - HOST_WINDOW_MS, toMs: Date.now() + 60_000 });
+  const runtime = useSamples({ subjectKind: 'gateway', subjectId: gatewayKey, kind: 'runtime' }, 'host', span, true);
+  const samples = runtime.data?.samples ?? [];
+  const latest = samples[samples.length - 1]?.data as unknown as RuntimeData | undefined;
+  const busy = latest?.host?.cpuBusyPermille;
+  if (busy === undefined || busy < 0) return <Text size="sm" c="dimmed">—</Text>;
+  const rss = latest?.host?.processRssBytes;
+  return (
+    <Tooltip label="Host CPU busy over the newest 10 s runtime sample, and the gateway process's resident memory" withArrow>
+      <Group gap={6} wrap="nowrap">
+        <Text size="sm" c={busy >= 800 ? 'red' : busy >= 600 ? 'orange' : undefined}>{(busy / 10).toFixed(0)}%</Text>
+        {rss !== undefined && rss > 0 && <Text size="xs" c="dimmed">{(rss / 1024 / 1024).toFixed(0)} MiB</Text>}
+      </Group>
+    </Tooltip>
+  );
+}
+
+// Running gateways first, then those still wanted, then the stopped; by key within each.
+function byActivity(nowMs: number) {
+  const rank = (g: GatewayStatus) => {
+    const health = gatewayHealth(g, nowMs);
+    return health.running ? 0 : health.label === 'starting' ? 1 : 2;
+  };
+  return (a: GatewayStatus, b: GatewayStatus) => rank(a) - rank(b) || a.gatewayKey.localeCompare(b.gatewayKey);
+}
+
+function GatewayTable({ gateways, sessions, alerts, loading }: {
   gateways: GatewayStatus[];
   sessions: StrategySession[];
   alerts: Alert[];
+  loading: boolean;
 }) {
   const navigate = useNavigate();
   const now = Date.now();
-  if (gateways.length === 0) {
-    return <Text size="sm" c="dimmed">None yet.</Text>;
+  const sorted = useMemo(() => [...gateways].sort(byActivity(Date.now())), [gateways]);
+  if (!loading && gateways.length === 0) {
+    return <Text size="sm" c="dimmed">None yet: a gateway appears once a session first asks for it.</Text>;
   }
   return (
     <Table highlightOnHover verticalSpacing="xs">
@@ -60,19 +97,21 @@ function GatewayTable({ gateways, sessions, alerts }: {
           <Table.Th>Sessions</Table.Th>
           <Table.Th>Working orders</Table.Th>
           <Table.Th>Last minute</Table.Th>
+          <Table.Th>Host</Table.Th>
           <Table.Th>Release</Table.Th>
           <Table.Th>Last wanted</Table.Th>
           <Table.Th>Alerts</Table.Th>
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
-        {gateways.map((g) => {
+        {loading && <SkeletonRows rows={2} cols={COLUMNS} />}
+        {sorted.map((g) => {
           const health = gatewayHealth(g, now);
           const links = linkedSessions(g.gatewayKey, sessions);
           const unlinked = links.filter((l) => !l.linked).length;
           const open = alerts.filter((a) => isGatewayAlert(a, g.gatewayKey)).length;
           return (
-            <Table.Tr key={g.gatewayKey} style={{ cursor: 'pointer' }}
+            <Table.Tr key={g.gatewayKey} style={{ cursor: 'pointer', opacity: health.running ? 1 : 0.6 }}
               onClick={() => navigate(`/trading/gateways/${encodeURIComponent(g.gatewayKey)}`)}>
               <Table.Td><Text ff="monospace" size="sm">{g.gatewayKey}</Text></Table.Td>
               <Table.Td><Text size="sm">{g.region}</Text></Table.Td>
@@ -89,6 +128,9 @@ function GatewayTable({ gateways, sessions, alerts }: {
               </Table.Td>
               <Table.Td><Text size="sm">{g.endpoint?.workingOrders ?? '—'}</Text></Table.Td>
               <Table.Td>{lastMinute(g)}</Table.Td>
+              <Table.Td>
+                {health.running && samplesConfigured ? <HostCell gatewayKey={g.gatewayKey} /> : <Text size="sm" c="dimmed">—</Text>}
+              </Table.Td>
               <Table.Td>
                 <Text size="sm" ff="monospace">{g.endpoint?.version ?? '—'}</Text>
                 {g.pinnedVersion && <Text size="xs" c="dimmed">pinned {g.pinnedVersion}</Text>}
@@ -114,6 +156,12 @@ function Gateways() {
   const all = status.data ?? [];
   const live = all.filter((g) => g.mode === 'live');
   const paper = all.filter((g) => g.mode === 'paper');
+  const loading = status.isLoading;
+  const now = Date.now();
+  const running = all.filter((g) => gatewayHealth(g, now).running);
+  const openAlerts = (alerts.data ?? []).filter((a) => all.some((g) => isGatewayAlert(a, g.gatewayKey))).length;
+  const unlinked = (sessions.data ?? []).filter((s) => s.health?.orderGateways?.some((l) => !l.linked)).length;
+  const value = (v: number) => (loading ? '—' : v.toLocaleString());
 
   return (
     <Container size="xl" py="xl">
@@ -123,6 +171,16 @@ function Gateways() {
           failing={status.isError} />
       </Group>
       {status.error && <MantineAlert color="red" mb="md">{status.error.message}</MantineAlert>}
+      <KpiStrip>
+        <Kpi label="Running" value={value(running.length)} footer={loading ? undefined : `of ${all.length} gateways`}
+          hint="Gateways whose endpoint was written in the last minute. The reconciler starts one when a session asks for it and stops it 30 minutes after the last ask, once it holds nothing." />
+        <Kpi label="Sessions linked" value={value(running.reduce((sum, g) => sum + (g.endpoint?.linkedSessions ?? 0), 0))}
+          footer={unlinked > 0 ? <Text span size="xs" c="red">{unlinked} session{unlinked === 1 ? '' : 's'} with a link down</Text> : undefined} />
+        <Kpi label="Working orders" value={value(running.reduce((sum, g) => sum + (g.endpoint?.workingOrders ?? 0), 0))} />
+        <Kpi label="Live running" value={value(running.filter((g) => g.mode === 'live').length)} />
+        <Kpi label="Paper running" value={value(running.filter((g) => g.mode === 'paper').length)} />
+        <Kpi label="Open alerts" value={<Text span inherit c={openAlerts ? 'red' : undefined}>{alerts.isLoading ? '—' : openAlerts}</Text>} />
+      </KpiStrip>
       <Stack gap="lg">
         {[{ mode: 'live', list: live }, { mode: 'paper', list: paper }].map(({ mode, list }) => (
           <Card withBorder key={mode}>
@@ -130,7 +188,7 @@ function Gateways() {
               <ModeBadge mode={mode} />
               <Text fw={600}>{mode === 'live' ? 'Live gateways' : 'Paper gateways'}</Text>
             </Group>
-            <GatewayTable gateways={list} sessions={sessions.data ?? []} alerts={alerts.data ?? []} />
+            <GatewayTable gateways={list} sessions={sessions.data ?? []} alerts={alerts.data ?? []} loading={loading} />
           </Card>
         ))}
       </Stack>

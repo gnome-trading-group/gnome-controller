@@ -1,4 +1,6 @@
-import { Alert as MantineAlert, Anchor, Badge, Card, Container, Group, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import {
+  Alert as MantineAlert, Anchor, Badge, Card, Container, Group, SimpleGrid, Skeleton, Stack, Table, Tabs, Text,
+} from '@mantine/core';
 import { IconExternalLink } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -11,6 +13,8 @@ import { LastUpdated } from '../../../components/LastUpdated';
 import { Kpi, ModeBadge } from '../../../components/trading/layout';
 import { GatewayAccountMinutes, GatewayPaperMinute } from '../../../types/gateways';
 import { formatDuration } from '../../../utils/format';
+import { samplesConfigured } from '../../../utils/api';
+import { GatewayPerformance } from './GatewayPerformance';
 import {
   accountTotals, ecsServiceUrl, formatMicros, GATEWAY_ALERT_TYPES, gatewayHealth, isGatewayAlert, lastOf, linkedSessions,
   logGroupUrl, shares,
@@ -175,6 +179,8 @@ function GatewayDetail() {
   const links = linkedSessions(gatewayKey, sessions.data ?? []);
   const own = (alerts.data ?? []).filter((a) => isGatewayAlert(a, gatewayKey)).slice(0, 50);
   const lastMinutes = g?.minutes?.writtenAt;
+  const unlinked = links.filter((l) => !l.linked).length;
+  const firing = own.filter((a) => a.status !== 'RESOLVED').length;
 
   return (
     <Container size="xl" py="xl">
@@ -204,6 +210,15 @@ function GatewayDetail() {
       />
       {status.error && <MantineAlert color="red" mb="md">{status.error.message}</MantineAlert>}
       {status.data && !g && <MantineAlert color="gray" mt="md">No gateway {gatewayKey}.</MantineAlert>}
+      {status.isLoading && (
+        <Stack gap="lg" mt="md">
+          <SimpleGrid cols={{ base: 2, sm: 4 }}>
+            {[0, 1, 2, 3].map((i) => <Skeleton key={i} h={84} radius="md" />)}
+          </SimpleGrid>
+          <Skeleton h={36} w={360} />
+          <Skeleton h={320} radius="md" />
+        </Stack>
+      )}
       {g && (
         <Stack gap="lg" mt="md">
           <SimpleGrid cols={{ base: 2, sm: 4 }}>
@@ -222,61 +237,87 @@ function GatewayDetail() {
             </MantineAlert>
           )}
 
-          {g.mode === 'paper'
-            ? g.minutes?.paper && <PaperCard minutes={g.minutes.paper.minutes} />
-            : g.minutes?.accounts.map((a) => <AccountCard key={a.accountId} account={a} />)}
+          <Tabs defaultValue="overview" keepMounted={false}>
+            <Tabs.List mb="md">
+              <Tabs.Tab value="overview">Last hour</Tabs.Tab>
+              {samplesConfigured && <Tabs.Tab value="performance">Performance</Tabs.Tab>}
+              <Tabs.Tab value="sessions">
+                Sessions ({links.length}){unlinked > 0 && <Badge ml={6} size="xs" color="red" variant="light">{unlinked} unlinked</Badge>}
+              </Tabs.Tab>
+              <Tabs.Tab value="alerts">
+                Alerts{firing > 0 && <Badge ml={6} size="xs" color="red">{firing}</Badge>}
+              </Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value="overview">
+              <Stack gap="lg">
+                {g.mode === 'paper'
+                  ? g.minutes?.paper && <PaperCard minutes={g.minutes.paper.minutes} />
+                  : g.minutes?.accounts.map((a) => <AccountCard key={a.accountId} account={a} />)}
+                {!g.minutes && (
+                  <Text size="sm" c="dimmed">
+                    No minutes in the last 10 minutes: a gateway writes its last hour once a minute while it runs.
+                    {samplesConfigured && ' Its Performance tab reaches back 7 days.'}
+                  </Text>
+                )}
+              </Stack>
+            </Tabs.Panel>
+            {samplesConfigured && <Tabs.Panel value="performance"><GatewayPerformance gateway={g} /></Tabs.Panel>}
+            <Tabs.Panel value="sessions">
+              <Card withBorder>
+                <Text fw={600} mb="sm">Sessions linked</Text>
+                {links.length === 0 ? <Text size="sm" c="dimmed">No running session names it in its heartbeat.</Text> : (
+                  <Table verticalSpacing={4}>
+                    <Table.Thead>
+                      <Table.Tr><Table.Th>Session</Table.Th><Table.Th>Strategy</Table.Th><Table.Th>Link</Table.Th><Table.Th>Working orders</Table.Th></Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {links.map((l) => (
+                        <Table.Tr key={l.sessionId}>
+                          <Table.Td><Anchor component={Link} to={`/sessions/${l.sessionId}`} size="sm" ff="monospace">{l.sessionId.slice(0, 8)}</Anchor></Table.Td>
+                          <Table.Td><Anchor component={Link} to={`/strategies/${l.strategyId}`} size="sm">{l.strategyId}</Anchor></Table.Td>
+                          <Table.Td>
+                            {l.linked
+                              ? <Badge size="sm" color="teal" variant="light">linked</Badge>
+                              : <Badge size="sm" color="red" variant="light">unlinked {formatDuration(l.unlinkedMs)}</Badge>}
+                          </Table.Td>
+                          <Table.Td><Text size="sm">{l.workingOrders}</Text></Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                )}
+              </Card>
 
-          <Card withBorder>
-            <Text fw={600} mb="sm">Sessions linked</Text>
-            {links.length === 0 ? <Text size="sm" c="dimmed">No running session names it in its heartbeat.</Text> : (
-              <Table verticalSpacing={4}>
-                <Table.Thead>
-                  <Table.Tr><Table.Th>Session</Table.Th><Table.Th>Strategy</Table.Th><Table.Th>Link</Table.Th><Table.Th>Working orders</Table.Th></Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {links.map((l) => (
-                    <Table.Tr key={l.sessionId}>
-                      <Table.Td><Anchor component={Link} to={`/sessions/${l.sessionId}`} size="sm" ff="monospace">{l.sessionId.slice(0, 8)}</Anchor></Table.Td>
-                      <Table.Td><Anchor component={Link} to={`/strategies/${l.strategyId}`} size="sm">{l.strategyId}</Anchor></Table.Td>
-                      <Table.Td>
-                        {l.linked
-                          ? <Badge size="sm" color="teal" variant="light">linked</Badge>
-                          : <Badge size="sm" color="red" variant="light">unlinked {formatDuration(l.unlinkedMs)}</Badge>}
-                      </Table.Td>
-                      <Table.Td><Text size="sm">{l.workingOrders}</Text></Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            )}
-          </Card>
-
-          <Card withBorder>
-            <Group justify="space-between" mb="sm">
-              <Text fw={600}>Alerts</Text>
-              <Anchor component={Link} to="/system/alerts" size="sm">All alerts</Anchor>
-            </Group>
-            {own.length === 0 ? <Text size="sm" c="dimmed">None recorded.</Text> : (
-              <Table verticalSpacing={4}>
-                <Table.Thead>
-                  <Table.Tr><Table.Th>Status</Table.Th><Table.Th>Severity</Table.Th><Table.Th>Type</Table.Th><Table.Th>Title</Table.Th><Table.Th>Last seen</Table.Th></Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {own.map((a) => (
-                    <Table.Tr key={a.alertId}>
-                      <Table.Td><Badge size="sm" variant="light" color={a.status === 'RESOLVED' ? 'gray' : 'red'}>{a.status.toLowerCase()}</Badge></Table.Td>
-                      <Table.Td><Text size="sm">{a.severity.toLowerCase()}</Text></Table.Td>
-                      <Table.Td><Text size="sm" ff="monospace">{a.type}</Text></Table.Td>
-                      <Table.Td>
-                        {a.runbookUrl ? <Anchor href={a.runbookUrl} target="_blank" size="sm">{a.title}</Anchor> : <Text size="sm">{a.title}</Text>}
-                      </Table.Td>
-                      <Table.Td><Text size="sm"><ReactTimeAgo date={new Date(a.lastSeen)} timeStyle="round" /></Text></Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            )}
-          </Card>
+            </Tabs.Panel>
+            <Tabs.Panel value="alerts">
+              <Card withBorder>
+                <Group justify="space-between" mb="sm">
+                  <Text fw={600}>Alerts</Text>
+                  <Anchor component={Link} to="/system/alerts" size="sm">All alerts</Anchor>
+                </Group>
+                {own.length === 0 ? <Text size="sm" c="dimmed">None recorded.</Text> : (
+                  <Table verticalSpacing={4}>
+                    <Table.Thead>
+                      <Table.Tr><Table.Th>Status</Table.Th><Table.Th>Severity</Table.Th><Table.Th>Type</Table.Th><Table.Th>Title</Table.Th><Table.Th>Last seen</Table.Th></Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {own.map((a) => (
+                        <Table.Tr key={a.alertId}>
+                          <Table.Td><Badge size="sm" variant="light" color={a.status === 'RESOLVED' ? 'gray' : 'red'}>{a.status.toLowerCase()}</Badge></Table.Td>
+                          <Table.Td><Text size="sm">{a.severity.toLowerCase()}</Text></Table.Td>
+                          <Table.Td><Text size="sm" ff="monospace">{a.type}</Text></Table.Td>
+                          <Table.Td>
+                            {a.runbookUrl ? <Anchor href={a.runbookUrl} target="_blank" size="sm">{a.title}</Anchor> : <Text size="sm">{a.title}</Text>}
+                          </Table.Td>
+                          <Table.Td><Text size="sm"><ReactTimeAgo date={new Date(a.lastSeen)} timeStyle="round" /></Text></Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                )}
+              </Card>
+            </Tabs.Panel>
+          </Tabs>
         </Stack>
       )}
     </Container>
