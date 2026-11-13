@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Badge, Text, Tooltip } from '@mantine/core';
+import { Anchor, Badge, Text, Tooltip } from '@mantine/core';
 import { MantineReactTable, MRT_ColumnDef, useMantineReactTable } from 'mantine-react-table';
 import { Link } from 'react-router-dom';
 import { RewardAccrual } from '../../types';
@@ -24,19 +24,23 @@ export function RewardEstimates(
     ...(showSession ? [{
       id: 'session', header: 'Session', size: 150,
       Cell: ({ row }: { row: { original: RewardAccrual } }) =>
-        <Link to={`/sessions/${row.original.sessionId}`}>{row.original.sessionId}</Link>,
+        <Anchor component={Link} size="sm" to={`/sessions/${row.original.sessionId}`}>{row.original.sessionId}</Anchor>,
     }] : []),
     {
       id: 'market', header: 'Market', size: 190,
       Cell: ({ row }) => (
-        <Link to={`/strategies/${row.original.strategyId}/listings/${row.original.listingId}`}>
+        <Anchor component={Link} size="sm" to={`/strategies/${row.original.strategyId}/listings/${row.original.listingId}`}>
           {row.original.venueMarket}
-        </Link>
+        </Anchor>
       ),
     },
     {
       id: 'program', header: 'Program', size: 110,
-      Cell: ({ row }) => <Badge size="sm" variant="light">{row.original.exchangeCode} {row.original.program.toLowerCase()}</Badge>,
+      Cell: ({ row }) => (
+        <Tooltip label={`${row.original.exchangeCode} ${row.original.program.toLowerCase()} program ${row.original.venueProgramId}`} withArrow>
+          <Badge size="sm" variant="light">{row.original.exchangeCode} {row.original.program.toLowerCase()}</Badge>
+        </Tooltip>
+      ),
     },
     {
       id: 'period', header: 'Period', size: 230,

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Badge, Text } from '@mantine/core';
+import { Anchor, Badge, Text } from '@mantine/core';
 import { MantineReactTable, MRT_ColumnDef, useMantineReactTable } from 'mantine-react-table';
 import { Link } from 'react-router-dom';
 import { useRewardAccruals, useTransfers } from '../../query/hooks';
@@ -55,7 +55,7 @@ function LiveRewards({ strategyId, mode }: { strategyId: number; mode: Mode }) {
     {
       id: 'market', header: 'Market', size: 180,
       Cell: ({ row }) => (row.original.listingId !== null
-        ? <Link to={`/strategies/${strategyId}/listings/${row.original.listingId}`}>{row.original.venueMarket ?? row.original.listingId}</Link>
+        ? <Anchor component={Link} size="sm" to={`/strategies/${strategyId}/listings/${row.original.listingId}`}>{row.original.venueMarket ?? row.original.listingId}</Anchor>
         : <Text span size="sm" c="dimmed">{row.original.venueMarket ?? 'account-wide'}</Text>),
     },
     {

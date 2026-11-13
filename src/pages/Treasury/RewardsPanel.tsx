@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Badge, Card, Group, SegmentedControl, SimpleGrid, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { Anchor, Badge, Card, Group, SegmentedControl, SimpleGrid, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { Link } from 'react-router-dom';
 import { useStrategies, useTransfers } from '../../query/hooks';
 import { programLabel, rewardsBreakdown } from '../../utils/treasury';
@@ -69,7 +69,7 @@ export function RewardsPanel() {
         <Breakdown title="By venue" rows={sorted(b.byExchange).map(([k, v]) => ({ key: k, label: k, amount: v }))} />
         <Breakdown title="By strategy" rows={sorted(b.byStrategy).map(([k, v]) => ({
           key: String(k),
-          label: k === null ? <Text span size="sm" c="dimmed">Firm (no strategy)</Text> : <Link to={`/strategies/${k}`}>{name(k)}</Link>,
+          label: k === null ? <Text span size="sm" c="dimmed">Firm (no strategy)</Text> : <Anchor component={Link} size="sm" to={`/strategies/${k}`}>{name(k)}</Anchor>,
           amount: v,
         }))} />
       </SimpleGrid>

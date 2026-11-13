@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Badge, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { Anchor, Badge, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { MantineReactTable, MRT_ColumnDef, useMantineReactTable } from 'mantine-react-table';
 import { Link } from 'react-router-dom';
 import { AllocationState, Transfer } from '../../types/treasury';
@@ -105,7 +105,7 @@ export function TransfersTable({ rows, loading, showAccount }: { rows: Transfer[
           <Table.Tbody>
             {row.original.allocations.map((a) => (
               <Table.Tr key={a.allocationId}>
-                <Table.Td><Link to={`/strategies/${a.strategyId}`}>{strategyName(a.strategyId)}</Link></Table.Td>
+                <Table.Td><Anchor component={Link} size="sm" to={`/strategies/${a.strategyId}`}>{strategyName(a.strategyId)}</Anchor></Table.Td>
                 <Table.Td><Text span size="sm" ff="monospace">{a.venueMarket ?? 'account-wide'}</Text></Table.Td>
                 <Table.Td><Text span size="sm" c="dimmed">{splitBy(a.basis, a.strategies)}</Text></Table.Td>
                 <Table.Td ta="right"><Money value={a.amount} size="sm" /></Table.Td>
