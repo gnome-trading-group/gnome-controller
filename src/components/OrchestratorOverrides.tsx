@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useDebouncedValue } from '@mantine/hooks';
 import { ActionIcon, Alert, Badge, Group, NumberInput, Select, Stack, Switch, Text, TextInput, Title } from '@mantine/core';
 import { IconTrash } from '@tabler/icons-react';
 import { registryApi } from '../utils/api';
@@ -23,26 +22,23 @@ const isNumber = (v: string | undefined) => v !== undefined && v !== '' && /^-?\
 interface OrchestratorOverridesEditorProps {
   value: Overrides;
   onChange: (value: Overrides) => void;
-  // The orchestrator release the session will run; blank means latest.
-  version?: string;
 }
 
 // Per-session overrides of orchestrator properties. Only properties the latest orchestrator release publishes can be
-// picked, and the strategy launcher rejects anything else, so a typo can't silently do nothing.
-export function OrchestratorOverridesEditor({ value, onChange, version }: OrchestratorOverridesEditorProps) {
+// picked. The release a session runs comes from its commit, known only at launch, where the strategy launcher rejects
+// anything that release doesn't publish, so a typo can't silently do nothing.
+export function OrchestratorOverridesEditor({ value, onChange }: OrchestratorOverridesEditorProps) {
   const [catalog, setCatalog] = useState<PropertyCatalog | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // Debounced because the version is typed into a text field.
-  const [debouncedVersion] = useDebouncedValue(version?.trim() || undefined, 400);
 
   useEffect(() => {
     let cancelled = false;
     setLoadError(null);
-    registryApi.getOrchestratorProperties(debouncedVersion)
+    registryApi.getOrchestratorProperties()
       .then((c) => { if (!cancelled) setCatalog(c); })
       .catch((e) => { if (!cancelled) setLoadError(errorMessage(e, 'Failed to load orchestrator properties')); });
     return () => { cancelled = true; };
-  }, [debouncedVersion]);
+  }, []);
 
   const properties = useMemo(() => catalog?.properties ?? {}, [catalog]);
 
@@ -117,11 +113,8 @@ export function OrchestratorOverridesEditor({ value, onChange, version }: Orches
         )}
         {catalog && (
           <Text size="xs" c="dimmed">
-            Properties and defaults from orchestrator {catalog.version}
-            {debouncedVersion && catalog.version !== debouncedVersion
-              ? ` (${debouncedVersion} predates per-version lists, so the latest list is shown)`
-              : ''}
-            .
+            Properties and defaults from orchestrator {catalog.version}, the latest release. A session is checked
+            against the release its commit pins when it launches.
           </Text>
         )}
 

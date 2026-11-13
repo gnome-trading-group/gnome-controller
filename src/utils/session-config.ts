@@ -1,6 +1,8 @@
 import { ConfigValue, StrategySession } from '../types';
 import { Overrides } from './orchestrator-overrides';
-import { ArgRow, argsToRows, defaultLaunchSettings, LaunchSettings, launchSettingsFrom, rowsToArgs } from './launch-settings';
+import {
+  ArgRow, argsToRows, defaultLaunchSettings, launchCommit, LaunchSettings, launchSettingsFrom, rowsToArgs,
+} from './launch-settings';
 import { compactSimulation, SessionSimulation, toSessionSimulation } from './simulation';
 import { LostField, lostFields } from './round-trip';
 
@@ -30,7 +32,8 @@ export function sessionConfigFrom(form: SessionForm, asOf?: string | null): Reco
     config['strategy.type'] = launch.strategyType;
     if (launch.strategyClass.trim()) config['strategy.class'] = launch.strategyClass.trim();
   }
-  if (launch.researchCommit.trim()) config['research_commit'] = launch.researchCommit.trim();
+  const commit = launchCommit(launch);
+  if (commit) config[commit.key] = commit.value;
   if (launch.region.trim()) config['region'] = launch.region.trim();
   config['latency.profile'] = launch.latencyProfile;
   if (launch.mode === 'live' && Object.keys(form.accountPins).length > 0) config.accounts = form.accountPins;
@@ -53,7 +56,7 @@ export function sessionListingIds(session: StrategySession): number[] {
   return Array.isArray(listings) ? listings.map(Number) : [];
 }
 
-// Relaunching reruns the exact versions the previous session ran; clearing a field takes the latest.
+// Relaunching reruns the commit the previous session was given, which pins its releases.
 export function sessionFormFrom(session: StrategySession): SessionForm {
   const config = session.config;
   const pinned = config['accounts'];
@@ -69,11 +72,10 @@ export function sessionFormFrom(session: StrategySession): SessionForm {
         strategyType: config['strategy.type'],
         strategyClass: config['strategy.class'],
         researchCommit: config['research_commit'],
+        strategyCommit: config['strategy_commit'],
         region: config['region'],
         latencyProfile: config['latency.profile'],
         instanceType: session.instanceType,
-        orchestratorVersion: session.orchestratorVersion,
-        gnomepyVersion: session.gnomepyVersion,
       }),
     },
     args: argsToRows(Object.fromEntries(Object.entries(config)

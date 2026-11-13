@@ -294,7 +294,7 @@ export interface AttentionItem {
 }
 
 export type SeriesEventKind = 'SESSION_START' | 'SESSION_STOP' | 'RESET' | 'ADJUSTMENT' | 'MANUAL' | 'SETTLEMENT' | 'GAP'
-  | 'RECOVERY';
+  | 'RECOVERY' | 'REWARD' | 'NON_TRADING';
 
 export interface PnlSeries {
   resolutionMs: number;

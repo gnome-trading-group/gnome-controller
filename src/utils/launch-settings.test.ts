@@ -14,17 +14,31 @@ describe('launch settings', () => {
   it('round-trips through rule parameters', () => {
     const settings = { ...defaultLaunchSettings(), ...launchSettingsFrom({
       mode: 'paper', strategy_type: 'python', strategy_class: 'a.b:C', research_commit: 'abc', latency_profile: 'standard',
-      instance_type: 'c7i.large', gnomepy_version: '1.2.3',
+      instance_type: 'c7i.large',
     }) };
     expect(launchSettingsToParams(settings, { region: false })).toEqual({
       mode: 'paper', strategy_type: 'python', strategy_class: 'a.b:C', research_commit: 'abc', latency_profile: 'standard',
-      instance_type: 'c7i.large', gnomepy_version: '1.2.3',
+      instance_type: 'c7i.large',
     });
   });
 
-  it('drops python-only settings from a java strategy', () => {
-    const params = launchSettingsToParams({ ...defaultLaunchSettings(), strategyType: 'java', strategyClass: 'x.Y', researchCommit: 'abc' });
-    expect(params.research_commit).toBeUndefined();
+  it("keeps only the commit of the strategy's own language", () => {
+    const both = { ...defaultLaunchSettings(), strategyClass: 'x.Y', researchCommit: 'abc', strategyCommit: 'def' };
+    const java = launchSettingsToParams({ ...both, strategyType: 'java' });
+    expect(java.strategy_commit).toBe('def');
+    expect(java.research_commit).toBeUndefined();
+    const python = launchSettingsToParams({ ...both, strategyType: 'python' });
+    expect(python.research_commit).toBe('abc');
+    expect(python.strategy_commit).toBeUndefined();
+  });
+
+  it('carries no pinned versions: the commit pins them', () => {
+    const settings = { ...defaultLaunchSettings(), ...launchSettingsFrom({
+      strategy_type: 'python', strategy_class: 'a.b:C', orchestrator_version: '1.2.3', gnomepy_version: '2.28.0',
+    }) };
+    const params = launchSettingsToParams(settings);
+    expect(params.orchestrator_version).toBeUndefined();
+    expect(params.gnomepy_version).toBeUndefined();
   });
 
   it('keeps arg types', () => {

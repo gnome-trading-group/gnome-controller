@@ -218,7 +218,7 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
               </>
             )}
 
-            <OrchestratorOverridesEditor value={overrides} onChange={setOverrides} version={launch.orchestratorVersion} />
+            <OrchestratorOverridesEditor value={overrides} onChange={setOverrides} />
           </>
         )}
 

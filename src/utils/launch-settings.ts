@@ -15,9 +15,10 @@ export interface LaunchSettings {
   latencyProfileChosen: boolean;
   instanceType: string;
   instanceTypeChosen: boolean;
-  orchestratorVersion: string;
-  gnomepyVersion: string;
+  // The commit the session runs, by language: gnomepy-research for python, gnome-strategies for java. It also pins
+  // the orchestrator and gnomepy releases, which the registry reads from it at launch.
   researchCommit: string;
+  strategyCommit: string;
 }
 
 export function defaultLaunchSettings(): LaunchSettings {
@@ -26,7 +27,7 @@ export function defaultLaunchSettings(): LaunchSettings {
     mode: 'paper', strategyType: null, strategyClass: '', region: '', availabilityZone: '',
     latencyProfile, latencyProfileChosen: false,
     instanceType: suggestInstanceType(latencyProfile, 'paper', 1), instanceTypeChosen: false,
-    orchestratorVersion: '', gnomepyVersion: '', researchCommit: '',
+    researchCommit: '', strategyCommit: '',
   };
 }
 
@@ -47,9 +48,8 @@ export function launchSettingsFrom(raw: Record<string, unknown>): Partial<Launch
   set('strategyClass', str(get('strategyClass', 'strategy_class')));
   set('region', str(get('region', 'region')));
   set('availabilityZone', str(get('availabilityZone', 'availability_zone')));
-  set('orchestratorVersion', str(get('orchestratorVersion', 'orchestrator_version')));
-  set('gnomepyVersion', str(get('gnomepyVersion', 'gnomepy_version')));
   set('researchCommit', str(get('researchCommit', 'research_commit')));
+  set('strategyCommit', str(get('strategyCommit', 'strategy_commit')));
   const profile = str(get('latencyProfile', 'latency_profile'));
   if (profile) {
     out.latencyProfile = profile === 'standard' ? 'standard' : 'low_latency';
@@ -71,13 +71,16 @@ export function launchSettingsToParams(s: LaunchSettings, opts: { region?: boole
   if (s.latencyProfileChosen) out.latency_profile = s.latencyProfile;
   if (opts.region !== false && s.region.trim()) out.region = s.region.trim();
   if (s.availabilityZone.trim()) out.availability_zone = s.availabilityZone.trim();
-  if (s.orchestratorVersion.trim()) out.orchestrator_version = s.orchestratorVersion.trim();
-  // Only Python sessions install gnomepy and clone research; Java ones would carry them for nothing.
-  if (s.strategyType === 'python') {
-    if (s.researchCommit.trim()) out.research_commit = s.researchCommit.trim();
-    if (s.gnomepyVersion.trim()) out.gnomepy_version = s.gnomepyVersion.trim();
-  }
+  const commit = launchCommit(s);
+  if (commit) out[commit.key] = commit.value;
   return out;
+}
+
+// Only the commit of the session's own language: the other names code it never runs.
+export function launchCommit(s: LaunchSettings): { key: 'research_commit' | 'strategy_commit'; value: string } | null {
+  const value = (s.strategyType === 'python' ? s.researchCommit : s.strategyType === 'java' ? s.strategyCommit : '').trim();
+  if (!value) return null;
+  return { key: s.strategyType === 'python' ? 'research_commit' : 'strategy_commit', value };
 }
 
 export type ArgType = 'string' | 'number' | 'boolean' | 'json';

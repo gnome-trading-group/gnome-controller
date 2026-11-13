@@ -6,11 +6,10 @@ import { useStrategyName } from '../../query/hooks';
 import { SimulationSummary } from '../../components/simulation/SimulationSummary';
 import { toSessionSimulation } from '../../utils/simulation';
 import { ModeBadge } from '../../components/trading/layout';
+import { CommitLink, commitLabel } from '../../components/launch/CommitLink';
 
-const OWN = new Set(['strategy_id', 'strategy_type', 'strategy_class', 'mode', 'research_commit', 'instance_type',
-  'latency_profile', 'orchestrator_version', 'gnomepy_version', 'availability_zone', 'strategy_args', 'simulation',
-  'overrides']);
-const RESEARCH_REPO = 'https://github.com/gnome-trading-group/gnomepy-research';
+const OWN = new Set(['strategy_id', 'strategy_type', 'strategy_class', 'mode', 'research_commit', 'strategy_commit',
+  'instance_type', 'latency_profile', 'availability_zone', 'strategy_args', 'simulation', 'overrides']);
 
 function Facts({ rows }: { rows: [string, ReactNode][] }) {
   return (
@@ -59,7 +58,7 @@ export function RuleConfigView({ rule, ruleType }: { rule: LaunchRule; ruleType:
   const strategyId = p.strategy_id as number | undefined;
   const strategyName = useStrategyName(strategyId);
   const typeKeys = Object.keys(ruleType?.parameter_schema.properties ?? {}).filter(k => !OWN.has(k));
-  const commit = p.research_commit as string | undefined;
+  const commit = (p.strategy_type === 'java' ? p.strategy_commit : p.research_commit) as string | undefined;
 
   return (
     <Stack gap="sm">
@@ -89,9 +88,7 @@ export function RuleConfigView({ rule, ruleType }: { rule: LaunchRule; ruleType:
                 ['Mode', p.mode ? <ModeBadge mode={String(p.mode)} size="sm" /> : null],
                 ['Class', p.strategy_class ? <Code>{String(p.strategy_class)}</Code> : null],
                 ['Type', show(p.strategy_type)],
-                ['Research commit', commit
-                  ? <Anchor href={`${RESEARCH_REPO}/commit/${commit}`} target="_blank" size="sm" ff="monospace">{commit.slice(0, 10)}</Anchor>
-                  : <Text span size="sm" c="orange">main at launch time</Text>],
+                [commitLabel(p.strategy_type), <CommitLink strategyType={p.strategy_type} commit={commit} />],
               ]} />
             </Section>
             <Section title="Compute">
@@ -99,8 +96,6 @@ export function RuleConfigView({ rule, ruleType }: { rule: LaunchRule; ruleType:
                 ['Instance type', show(p.instance_type) ?? 'Default'],
                 ['Latency profile', show(p.latency_profile) ?? 'Default'],
                 ['Availability zone', show(p.availability_zone) ?? 'Any'],
-                ['Orchestrator', show(p.orchestrator_version) ?? 'Latest'],
-                ['gnomepy', show(p.gnomepy_version) ?? 'Latest'],
               ]} />
             </Section>
           </SimpleGrid>

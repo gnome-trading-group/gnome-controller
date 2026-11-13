@@ -56,8 +56,7 @@ export function DirectLaunchFields({ value, onChange }: { value: DirectLaunchFor
         <SimulationSettingsEditor value={value.simulation} onChange={simulation => set({ simulation })}
           listingIds={value.listingIds.map(Number)} />
       )}
-      <OrchestratorOverridesEditor value={value.overrides} onChange={overrides => set({ overrides })}
-        version={value.launch.orchestratorVersion} />
+      <OrchestratorOverridesEditor value={value.overrides} onChange={overrides => set({ overrides })} />
       {!paper && (
         <Alert color="red" title="LIVE session — trades real money" icon={<IconAlertTriangle size={18} />}>
           <Text size="sm" mb="xs">Type the strategy name to confirm.</Text>

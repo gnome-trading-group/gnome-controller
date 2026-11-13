@@ -17,7 +17,7 @@ const SIMULATION: SessionSimulation = {
 
 const TEMPLATE = {
   mode: 'paper', strategy_type: 'python', strategy_class: 'a.b:C', instance_type: 'c7i.large',
-  latency_profile: 'standard', availability_zone: 'us-east-1a', orchestrator_version: '1.2.3', gnomepy_version: '2.28.0',
+  latency_profile: 'standard', availability_zone: 'us-east-1a',
   research_commit: 'abc123', region: 'us-east-1', listings: [48211, 48212],
   args: { edge: 0.05, dry: false, name: 'x', legs: [1, 2] }, overrides: { 'oms.max.orders': '5' }, simulation: SIMULATION,
 };
@@ -47,6 +47,11 @@ describe('strategy templates', () => {
   it('catch settings the form only keeps for some strategies', () => {
     const java = { mode: 'paper', strategy_type: 'java', strategy_class: 'x.Y', research_commit: 'abc' };
     expect(paths(templateLostFields(java))).toEqual(['research_commit']);
+  });
+
+  it('catch pinned versions, which a commit now decides', () => {
+    const pinned = { ...TEMPLATE, orchestrator_version: '1.2.3', gnomepy_version: '2.28.0' };
+    expect(paths(templateLostFields(pinned)).sort()).toEqual(['gnomepy_version', 'orchestrator_version']);
   });
 });
 
@@ -79,6 +84,16 @@ describe('session relaunches', () => {
     expect(relaunchLostFields(session(config))).toEqual([]);
   });
 
+  it('round-trip a java session run from a strategy commit', () => {
+    const config = {
+      'strategy.id': '5', mode: 'paper', listings: [6], 'recovery.inherit': true, 'strategy.type': 'java',
+      'strategy.class': 'x.Y', strategy_commit: 'strategy/maker', 'latency.profile': 'standard',
+      simulation: { as_of: '2026-11-12T00:00:00.000Z' },
+    };
+    expect(relaunchLostFields(session(config))).toEqual([]);
+    expect(sessionFormFrom(session(config)).launch.strategyCommit).toBe('strategy/maker');
+  });
+
   it('catch a session from before simulation parameters', () => {
     const config = {
       'strategy.id': '5', mode: 'paper', listings: [6], 'strategy.type': 'java', 'strategy.class': 'x.Y',
@@ -92,8 +107,7 @@ describe('session relaunches', () => {
 });
 
 const CS2_DECLARED = ['market', 'venues', 'strategy_id', 'strategy_type', 'strategy_class', 'mode', 'research_commit',
-  'instance_type', 'latency_profile', 'orchestrator_version', 'gnomepy_version', 'availability_zone', 'strategy_args',
-  'simulation', 'overrides'];
+  'strategy_commit', 'instance_type', 'latency_profile', 'availability_zone', 'strategy_args', 'simulation', 'overrides'];
 
 describe('launch rules', () => {
   it('round-trip in the current format', () => {

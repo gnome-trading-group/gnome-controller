@@ -18,6 +18,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { LastUpdated } from '../../components/LastUpdated';
 import { ContainerLogs } from '../../components/ContainerLogs';
 import { Heartbeat } from '../../components/trading/Heartbeat';
+import { CommitLink, commitLabel } from '../../components/launch/CommitLink';
 import { Kpi, KpiStrip, ModeBadge, ModeBand } from '../../components/trading/layout';
 import { Money, Time } from '../../components/trading/values';
 import { SessionDetailsPanel } from '../Sessions/SessionDetailsPanel';
@@ -323,7 +324,8 @@ function LaunchConfig({ config, links }: { config: ResolvedStrategyConfig; links
       : <Anchor key="s" component={Link} to={`/strategies/${config.strategy_id}`} size="sm">#{config.strategy_id}</Anchor>],
     ['Class', <Code key="c">{config.strategy_class}</Code>],
     ['Listings', <Group key="l" gap="sm">{listingLinks.map(l => <LinkAnchor key={l.url} link={l} />)}</Group>],
-    ['Research commit', config.research_commit ? <Code key="r">{config.research_commit.slice(0, 10)}</Code> : 'main'],
+    [commitLabel(config.strategy_type), <CommitLink key="r" strategyType={config.strategy_type}
+      commit={config.strategy_type === 'java' ? config.strategy_commit : config.research_commit} />],
     ['Instance type', config.instance_type ?? 'default'],
     ['Latency profile', config.latency_profile ?? 'default'],
     ...Object.entries(config.strategy_args ?? {}).map(([k, v]) => [`arg ${k}`, <Code key={k}>{JSON.stringify(v)}</Code>] as [string, ReactNode]),

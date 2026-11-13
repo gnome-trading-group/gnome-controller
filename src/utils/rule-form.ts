@@ -9,8 +9,7 @@ import { EditableRule, LaunchRule, RuleType } from '../types/launcher';
 // The launch settings every rule type shares (gnome-launcher's STRATEGY_PARAMS_SCHEMA): edited with the same fields as a
 // strategy's defaults and a deploy, rather than as generic schema fields.
 export const SHARED_KEYS = new Set(['strategy_id', 'strategy_type', 'strategy_class', 'mode', 'research_commit',
-  'instance_type', 'latency_profile', 'orchestrator_version', 'gnomepy_version', 'availability_zone', 'strategy_args',
-  'simulation', 'overrides']);
+  'strategy_commit', 'instance_type', 'latency_profile', 'availability_zone', 'strategy_args', 'simulation', 'overrides']);
 
 // A rule's parameters as the rule editor edits them: its type's own, and the shared launch settings.
 export interface RuleParamsForm {

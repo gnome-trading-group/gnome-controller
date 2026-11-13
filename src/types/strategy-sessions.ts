@@ -18,10 +18,12 @@ export interface StrategySession {
   mode: string;
   config: Record<string, ConfigValue>;
   researchCommit: string | null;
+  strategyCommit: string | null;
   instanceId: string | null;
   instanceType: string | null;
   launchRegion: string | null;
   availabilityZone: string | null;
+  // What the session ran on, read from its commit at launch.
   orchestratorVersion: string | null;
   gnomepyVersion: string | null;
   failureReason: string | null;
@@ -53,14 +55,13 @@ export interface CreateStrategySessionRequest {
   strategyId: number;
   mode: string;
   config: Record<string, ConfigValue>;
+  // The commit of the session's language (default main); it pins the orchestrator and gnomepy releases.
   researchCommit?: string;
+  strategyCommit?: string;
   region?: string;
   availabilityZone?: string;
   // Left out, the registry picks the instance type for the session's latency profile.
   instanceType?: string;
-  // Blank means the latest release; the launcher records the exact version it resolved.
-  orchestratorVersion?: string;
-  gnomepyVersion?: string;
 }
 
 // A session holds its strategy's slot from the moment it is requested until its stop finishes, so it can be listed,

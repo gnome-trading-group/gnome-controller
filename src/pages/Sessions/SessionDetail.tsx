@@ -36,7 +36,7 @@ import { SessionMarketData } from './SessionMarketData';
 import { RewardEstimates } from '../../components/trading/RewardEstimates';
 
 const RANGES: Record<string, number | null> = { 'Since start': null, '1h': 3_600_000, '6h': 21_600_000, '24h': 86_400_000 };
-const TABS = ['positions', 'open', 'fills', 'orders', 'risk', 'market-data', 'logs', 'details'] as const;
+const TABS = ['positions', 'open', 'fills', 'orders', 'risk', 'market-data', 'rewards', 'logs', 'details'] as const;
 type Tab = typeof TABS[number];
 // The chart's views drawn per listing, which need the series' per-listing lines (asked for with byListing).
 const LISTING_VIEWS: ChartView[] = ['listings', 'position'];

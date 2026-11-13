@@ -6,6 +6,7 @@ import { strategyClassHint } from '../../utils/strategy-class';
 
 const MODE_OPTIONS = [{ value: 'paper', label: 'Paper' }, { value: 'live', label: 'Live' }];
 const STRATEGY_TYPE_OPTIONS = [{ value: 'java', label: 'Java' }, { value: 'python', label: 'Python' }];
+const COMMIT_DESCRIPTION = 'Also fixes the orchestrator and gnomepy releases the session runs on';
 
 interface Props {
   value: LaunchSettings;
@@ -46,19 +47,16 @@ export function LaunchSettingsFields({ value, onChange, listingCount, showRegion
         <Select label="Instance Type" data={instanceTypeOptions(value.latencyProfile)} value={value.instanceType}
           onChange={v => v && onChange({ instanceType: v, instanceTypeChosen: true })} />
       </Group>
-      {/* Python strategies run inside the orchestrator JVM too, so they take its version as well. */}
-      <Group grow>
-        <TextInput label="Orchestrator Version (optional)" placeholder="Latest" value={value.orchestratorVersion}
-          onChange={e => onChange({ orchestratorVersion: e.currentTarget.value })} />
-        {value.strategyType === 'python' && (
-          <>
-            <TextInput label="Gnomepy Version (optional)" placeholder="Latest" value={value.gnomepyVersion}
-              onChange={e => onChange({ gnomepyVersion: e.currentTarget.value })} />
-            <TextInput label="Research Commit (optional)" placeholder="git SHA or branch (default main)" value={value.researchCommit}
-              onChange={e => onChange({ researchCommit: e.currentTarget.value })} />
-          </>
-        )}
-      </Group>
+      {value.strategyType === 'python' && (
+        <TextInput label="Research Commit (optional)" placeholder="git SHA or branch (default main)"
+          description={COMMIT_DESCRIPTION} value={value.researchCommit}
+          onChange={e => onChange({ researchCommit: e.currentTarget.value })} />
+      )}
+      {value.strategyType === 'java' && (
+        <TextInput label="Strategy Commit (optional)" placeholder="gnome-strategies SHA or branch (default main)"
+          description={COMMIT_DESCRIPTION} value={value.strategyCommit}
+          onChange={e => onChange({ strategyCommit: e.currentTarget.value })} />
+      )}
     </>
   );
 }

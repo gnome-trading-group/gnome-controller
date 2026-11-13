@@ -36,7 +36,7 @@ import { useListingSearch } from '../../hooks/useAsyncSearch';
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { findKillSwitch, formatActor } from '../../utils/kill-switch';
-import { ArgRow, defaultLaunchSettings, LaunchSettings, launchSettingsFrom } from '../../utils/launch-settings';
+import { ArgRow, defaultLaunchSettings, launchCommit, LaunchSettings, launchSettingsFrom } from '../../utils/launch-settings';
 import { LaunchSettingsFields } from '../../components/launch/LaunchSettingsFields';
 import { StrategyArgsEditor } from '../../components/launch/StrategyArgsEditor';
 import { SimulationSettingsEditor } from '../../components/simulation/SimulationSettingsEditor';
@@ -252,15 +252,15 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
         setError(`Type the strategy name "${selectedStrategyName}" to confirm a live deploy`);
         return;
       }
-      // An older orchestrator or gnomepy may not read today's config, so a JSON relaunch takes the latest of each and
-      // the instance type the registry picks for the latency profile.
+      // The commit in the config pins the releases; the registry picks the instance type for the latency profile.
       await launchSession(String(config.mode), config, {
         researchCommit: config.research_commit ? String(config.research_commit) : undefined,
+        strategyCommit: config.strategy_commit ? String(config.strategy_commit) : undefined,
         region: config.region ? String(config.region) : undefined,
       });
       return;
     }
-    const { strategyType, strategyClass, researchCommit, region, availabilityZone, instanceType, orchestratorVersion, gnomepyVersion } = launch;
+    const { strategyType, strategyClass, region, availabilityZone, instanceType } = launch;
     if (!strategyType) { setError('Strategy type is required'); return; }
     if (!strategyClass.trim()) { setError('Strategy class is required'); return; }
     const classError = strategyClassError(strategyType, strategyClass.trim());
@@ -287,20 +287,18 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
       setError(e instanceof Error ? e.message : 'Invalid session config');
       return;
     }
-    const isPython = strategyType === 'python';
+    const commit = launchCommit(launch);
     await launchSession(mode, config, {
-      researchCommit: isPython ? researchCommit.trim() || undefined : undefined,
+      researchCommit: commit?.key === 'research_commit' ? commit.value : undefined,
+      strategyCommit: commit?.key === 'strategy_commit' ? commit.value : undefined,
       region: region.trim() || undefined,
       availabilityZone: availabilityZone.trim() || undefined,
       instanceType,
-      orchestratorVersion: orchestratorVersion.trim() || undefined,
-      gnomepyVersion: isPython ? gnomepyVersion.trim() || undefined : undefined,
     });
   };
 
   const launchSession = async (launchMode: string, config: Record<string, ConfigValue>, fields: {
-    researchCommit?: string; region?: string; availabilityZone?: string; instanceType?: string;
-    orchestratorVersion?: string; gnomepyVersion?: string;
+    researchCommit?: string; strategyCommit?: string; region?: string; availabilityZone?: string; instanceType?: string;
   }) => {
     setSubmitting(true);
     const newSessionId = sessionIdRef.current ?? crypto.randomUUID();
@@ -371,10 +369,9 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
             <StaleConfigAlert what="This session" lost={relaunch.remaining}
               onBackToForm={() => relaunchBackToForm(false)} onDropAndUseForm={() => relaunchBackToForm(true)}>
               <Text size="sm" mt="xs">
-                Relaunching from this JSON takes the latest orchestrator and gnomepy
-                {initialSession.orchestratorVersion ? ` (the original ran orchestrator ${initialSession.orchestratorVersion})` : ''}:
-                an older version may not read today's config. Remove <Code>simulation.as_of</Code> to simulate with the
-                parameters recorded now rather than when the original launched.
+                Relaunching from this JSON runs the orchestrator and gnomepy its commit pins (main's, when it names
+                none). Remove <Code>simulation.as_of</Code> to simulate with the parameters recorded now rather than when
+                the original launched.
               </Text>
             </StaleConfigAlert>
             <JsonInput label="Session config" value={relaunch.json} onChange={relaunch.setJson} autosize minRows={12}
@@ -460,7 +457,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
               </>
             )}
 
-            <OrchestratorOverridesEditor value={overrides} onChange={setOverrides} version={launch.orchestratorVersion} />
+            <OrchestratorOverridesEditor value={overrides} onChange={setOverrides} />
           </>
         )}
 

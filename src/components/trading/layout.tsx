@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { Children, ReactNode } from 'react';
 import { Badge, Box, Card, Group, SegmentedControl, SimpleGrid, Text, Tooltip } from '@mantine/core';
 import { IconInfoCircle } from '@tabler/icons-react';
 import { Mode } from '../../types';
@@ -58,6 +58,14 @@ export function Kpi({ label, value, hint, footer }: KpiProps) {
   );
 }
 
+// On a wide screen the strip has room for at least six cards, and widens to fit up to eight; a page with more wraps.
+const MIN_KPI_COLUMNS = 6;
+const MAX_KPI_COLUMNS = 8;
+
 export function KpiStrip({ children }: { children: ReactNode }) {
-  return <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing="sm" mb="md">{children}</SimpleGrid>;
+  // One column per card actually shown (a card behind a false condition doesn't count), so an optional card such
+  // as Rewards (est.) doesn't push the last one onto a row of its own.
+  const shown = Children.toArray(children).length;
+  const lg = Math.min(Math.max(shown, MIN_KPI_COLUMNS), MAX_KPI_COLUMNS);
+  return <SimpleGrid cols={{ base: 2, sm: 3, lg }} spacing="sm" mb="md">{children}</SimpleGrid>;
 }

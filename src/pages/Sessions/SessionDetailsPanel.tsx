@@ -14,6 +14,7 @@ import { BLOCK_LABELS, describeBlock, SimulationBlocks, toSessionSimulation } fr
 import { useExchangeName } from '../../hooks/useExchangeName';
 import { ACCOUNT_STATUS_COLORS } from '../../utils/treasury';
 import { treasuryLink } from '../../utils/attention';
+import { CommitLink, commitLabel } from '../../components/launch/CommitLink';
 
 const STAGE = import.meta.env.VITE_STAGE;
 
@@ -280,6 +281,7 @@ export function SessionDetailsPanel({ session }: { session: StrategySession }) {
                   <Table.Th>Type</Table.Th>
                   <Table.Th>Latency profile</Table.Th>
                   <Table.Th>Region / AZ</Table.Th>
+                  <Table.Th>{commitLabel(session.config['strategy.type'])}</Table.Th>
                   <Table.Th>Orchestrator</Table.Th>
                   <Table.Th>Gnomepy</Table.Th>
                 </Table.Tr>
@@ -298,6 +300,11 @@ export function SessionDetailsPanel({ session }: { session: StrategySession }) {
                   <Table.Td><Code>{session.instanceType ?? '—'}</Code></Table.Td>
                   <Table.Td><Code>{String(session.config['latency.profile'] ?? '—')}</Code></Table.Td>
                   <Table.Td><Code>{session.launchRegion ?? '—'} / {session.availabilityZone ?? '—'}</Code></Table.Td>
+                  <Table.Td>
+                    <CommitLink strategyType={session.config['strategy.type']}
+                      commit={session.config['strategy.type'] === 'java' ? session.strategyCommit : session.researchCommit}
+                      ifUnset="—" />
+                  </Table.Td>
                   <Table.Td><Code>{session.orchestratorVersion ?? '—'}</Code></Table.Td>
                   <Table.Td><Code>{session.gnomepyVersion ?? '—'}</Code></Table.Td>
                 </Table.Tr>

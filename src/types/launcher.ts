@@ -64,13 +64,12 @@ export interface ResolvedStrategyConfig {
   mode: string;
   listings: number[];
   research_commit?: string | null;
+  strategy_commit?: string | null;
   region?: string | null;
   strategy_args: Record<string, ConfigValue>;
   simulation?: Record<string, unknown>;
   instance_type?: string | null;
   latency_profile?: string | null;
-  orchestrator_version?: string | null;
-  gnomepy_version?: string | null;
   availability_zone?: string | null;
   overrides?: Record<string, string>;
 }

@@ -581,12 +581,11 @@ export const registryApi = {
       convertToCamelCase: true,
       queryParams: { search, limit },
     }),
-  getOrchestratorProperties: (version?: string) =>
+  getOrchestratorProperties: () =>
     sendApiRequest<{ version: string; properties: Record<string, string> }>('/orchestrator/properties', 'GET', {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
       preserveKeys: new Set(['properties']),
-      queryParams: version ? { version } : undefined,
     }),
   listListingsByIds: (listingIds: number[]) =>
     sendApiRequest<DenormalizedListing[]>('/listings', 'GET', {

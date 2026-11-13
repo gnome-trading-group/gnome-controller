@@ -282,8 +282,7 @@ export function RuleEditorModal({ opened, onClose, onSaved, ruleTypes, rule, dup
             )}
 
             {takesLaunchSettings && (
-              <OrchestratorOverridesEditor value={overrides} onChange={o => { changed(); setOverrides(o); }}
-                version={launch.orchestratorVersion} />
+              <OrchestratorOverridesEditor value={overrides} onChange={o => { changed(); setOverrides(o); }} />
             )}
           </>
         )}

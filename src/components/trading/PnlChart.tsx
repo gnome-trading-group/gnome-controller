@@ -30,6 +30,8 @@ const EVENT_STYLE: Record<SeriesEventKind, { color: string; shape: MarkerKind['s
   SETTLEMENT: { color: '#7950f2', shape: 'square', text: 'settled' },
   GAP: { color: '#fa5252', shape: 'circle', text: 'gap' },
   RECOVERY: { color: '#4dabf7', shape: 'circle', text: 'recovered' },
+  REWARD: { color: '#12b886', shape: 'circle', text: 'reward' },
+  NON_TRADING: { color: '#15aabf', shape: 'circle', text: 'non-trading' },
 };
 
 interface Line {
@@ -212,6 +214,8 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
         const time = snapToPoint(lines[0].points, chartTime(Date.parse(event.time)));
         if (time === null) continue;
         const style = EVENT_STYLE[event.kind];
+        // The registry can add event kinds before the controller ships styles for them.
+        if (style === undefined) continue;
         const impact = event.pnlImpact && event.pnlImpact !== '0' ? ` ${formatMoney(event.pnlImpact).text}` : '';
         markers.push({ time: time as UTCTimestamp, position: 'aboveBar', color: style.color, shape: style.shape, text: `${style.text}${impact}` });
       }
