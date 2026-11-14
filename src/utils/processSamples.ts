@@ -13,7 +13,9 @@ const MICROS_PER_MILLI = 1_000;
 /** A market-data record's path through a shard and a paper gateway, as the samples measure it, in order. */
 export const MARKET_DATA_PATH: { metric: string; label: string; where: string }[] = [
   { metric: 'shard.venue_to_recv', label: 'Venue → shard', where: 'shard (venue clock: a trend, not a level)' },
-  { metric: 'shard.wait', label: 'Inside the shard', where: 'shard publisher, held records included' },
+  { metric: 'shard.decode', label: 'Venue reader', where: 'shard reader: raw capture, decode, book and encode, receipt to ring' },
+  { metric: 'shard.wait', label: 'Waiting to send', where: 'shard publisher: ring to its pass, held records included' },
+  { metric: 'shard.send', label: 'Send within the pass', where: 'shard publisher: offer return minus the pass start (the send stamp)' },
   { metric: 'feed.shard_wait', label: 'Inside the shard (as the gateway saw it)', where: 'gateway reader' },
   { metric: 'feed.network', label: 'Network + Aeron', where: 'gateway reader, against the shard\'s send stamp' },
   { metric: 'paper.queue', label: 'Gateway queue → books', where: 'paper lane' },

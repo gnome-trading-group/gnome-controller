@@ -1,14 +1,29 @@
 import { useMemo, useState } from 'react';
 import {
   Badge, Card, Group, SegmentedControl, Select, SimpleGrid, Skeleton, Stack, Table, Text, Title,
+  Tooltip as HoverTip,
 } from '@mantine/core';
+import { IconInfoCircle } from '@tabler/icons-react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { RuntimeData, Sample } from '../../types/samples';
 import { COLORS, RANGES, number, time } from './sampleFormat';
 import {
-  ALL, LatencyFilter, MINUTE_MS, Point, everyMsFor, latencyOptions, latencySeries, latestLatency, runtimeSeries,
-  threadCpuSeries,
+  ALL, LatencyFilter, METRIC_DESCRIPTIONS, MINUTE_MS, Point, everyMsFor, latencyOptions, latencySeries, latestLatency,
+  runtimeSeries, threadCpuSeries,
 } from '../../utils/samples';
+
+/** A metric's name, explained on hover where there's an explanation; plain text otherwise. */
+function MetricName({ metric }: { metric: string }) {
+  const description = METRIC_DESCRIPTIONS[metric];
+  if (!description) {
+    return <>{metric}</>;
+  }
+  return (
+    <HoverTip label={description} withArrow multiline w={320} openDelay={200}>
+      <Text span size="xs" style={{ cursor: 'help', textDecoration: 'underline dotted' }}>{metric}</Text>
+    </HoverTip>
+  );
+}
 
 // What every samples page (sessions, order gateways, shards) draws: line charts over a window, the latency picker and
 // table, and a process's runtime.
@@ -76,6 +91,12 @@ export function LatencySection({ samples, rangeMs, loading }: { samples: Sample[
       <Group gap="xs">
         <Select size="xs" w={200} data={metrics} value={metric || null} placeholder="Metric"
           onChange={v => setChosen(c => ({ ...c, metric: v ?? '' }))} allowDeselect={false} />
+        {METRIC_DESCRIPTIONS[metric] && (
+          <HoverTip label={METRIC_DESCRIPTIONS[metric]} withArrow multiline w={320} openDelay={200}>
+            <IconInfoCircle size={16} color="var(--mantine-color-dimmed)" style={{ cursor: 'help' }}
+              aria-label={`What ${metric} measures`} />
+          </HoverTip>
+        )}
         <Select size="xs" w={180} data={choice(options.exchanges, 'exchange')} value={filter.exchange}
           onChange={v => setChosen(c => ({ ...c, exchange: v ?? ALL }))} allowDeselect={false} />
         {options.actions.length > 0 && (
@@ -109,7 +130,7 @@ export function LatencySection({ samples, rangeMs, loading }: { samples: Sample[
           <Table.Tbody>
             {latest.map(k => (
               <Table.Tr key={`${k.m}|${k.ex}|${k.act}|${k.kind}`}>
-                <Table.Td>{k.m}</Table.Td><Table.Td>{k.ex || '—'}</Table.Td><Table.Td>{k.act || '—'}</Table.Td>
+                <Table.Td><MetricName metric={k.m} /></Table.Td><Table.Td>{k.ex || '—'}</Table.Td><Table.Td>{k.act || '—'}</Table.Td>
                 <Table.Td>{k.kind || '—'}</Table.Td><Table.Td ta="right">{k.n}</Table.Td>
                 {[k.p50, k.p90, k.p99, k.p999, k.max].map((v, i) => <Table.Td key={i} ta="right">{number(v / 1_000)}</Table.Td>)}
               </Table.Tr>

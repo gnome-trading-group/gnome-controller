@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ActivityData, LatencyKey, RuntimeData, Sample } from '../types/samples';
 import {
+  METRIC_DESCRIPTIONS, METRIC_ORDER,
   ALL, activitySeries, everyMsFor, feedSeries, latencyOptions, latencySeries, latestLatency, rejectionTotals,
   ringSeries, runtimeSeries, threadCpuSeries,
 } from './samples';
@@ -168,5 +169,11 @@ describe('pipeline', () => {
     expect(names).toEqual(['KX-A']);
     expect(points).toEqual([{ t: 60_000, 'KX-A': 900 }]);
     expect(resyncs.get('KX-A')).toBe(1);
+  });
+});
+
+describe('metric descriptions', () => {
+  it('explain every metric the pages order', () => {
+    expect(METRIC_ORDER.filter(metric => !METRIC_DESCRIPTIONS[metric])).toEqual([]);
   });
 });

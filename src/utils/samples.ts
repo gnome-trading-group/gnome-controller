@@ -44,13 +44,45 @@ export interface LatencyOptions {
   kinds: string[];
 }
 
-// Each pipeline's metrics in the order a record or order passes through them.
-const METRIC_ORDER = [
-  'strat.transit', 'strat.queue', 'strat.decision', 'oms.process', 'session.tick_to_order', 'order_to_ack',
-  'cancel_to_ack',
-  'shard.venue_to_recv', 'shard.wait', 'feed.shard_wait', 'feed.network', 'paper.queue', 'paper.lag',
+// The order path's end-to-end measures first, then each pipeline's metrics in the order a record or order passes
+// through them.
+export const METRIC_ORDER = [
+  'tick_to_trade', 'cancel_race.lost', 'cancel_race.late',
+  'strat.transit', 'strat.queue', 'strat.decision', 'oms.process', 'session.tick_to_order', 'gw.to_wire',
+  'order_to_ack', 'cancel_to_ack',
+  'shard.venue_to_recv', 'shard.decode', 'shard.wait', 'shard.send', 'feed.shard_wait', 'feed.network', 'paper.queue', 'paper.lag',
   'gw.transit', 'gw.queue', 'gw.budget_wait', 'gw.sign_send', 'venue.answer', 'gw.report_out',
 ];
+
+// What each latency metric measures, for a tooltip: what the name alone doesn't say. Times on different hosts' clocks
+// carry both clocks' error.
+export const METRIC_DESCRIPTIONS: Record<string, string> = {
+  'tick_to_trade': 'The platform receiving the trigger (a shard\'s market data, a gateway\'s report) to the request written to the venue. Crosses hosts.',
+  'cancel_race.lost': 'A fill the venue made after our cancel was already written to it: how long after. Lost in flight.',
+  'cancel_race.late': 'A fill the venue made before our cancel was written: how much sooner the cancel needed to go.',
+  'strat.transit': 'The platform receiving the event to it reaching the strategy\'s ring. Crosses hosts.',
+  'strat.queue': 'The event waiting on the strategy\'s ring before the strategy took it.',
+  'strat.decision': 'The strategy handling the event until it emitted its intent.',
+  'oms.process': 'The OMS turning an intent (or a report) into the order, cancel or amend it sent.',
+  'session.tick_to_order': 'The event reaching the session to the order handed to its gateway link.',
+  'gw.to_wire': 'The session handing the request off to the gateway writing it to the venue: transit, queue, budget and signing.',
+  'order_to_ack': 'An order handed off to its first report back.',
+  'cancel_to_ack': 'A cancel handed off to the report answering it.',
+  'shard.venue_to_recv': 'The venue\'s event time to the shard receiving it. On the venue\'s clock: watch the trend, not the level.',
+  'shard.decode': 'The shard\'s reader: raw capture, decode, book update and encode, from receipt to its ring.',
+  'shard.wait': 'A record waiting in the shard for the publisher\'s pass, held records included.',
+  'shard.send': 'The publisher sending within its pass: the offer\'s return minus the pass start.',
+  'feed.shard_wait': 'Time inside the shard, as a gateway reading it saw it.',
+  'feed.network': 'Network and Aeron from the shard\'s send to the gateway reading it.',
+  'paper.queue': 'A record from the paper gateway\'s reader to its simulated books.',
+  'paper.lag': 'The venue\'s receipt of a record to the paper books taking it: the whole market-data lag.',
+  'gw.transit': 'The session\'s OMS sending a request to the gateway reading it. Crosses hosts.',
+  'gw.queue': 'A request waiting on the lane\'s ring after ingress put it there.',
+  'gw.budget_wait': 'A request waiting for the account\'s rate budget.',
+  'gw.sign_send': 'Encoding, signing and writing the request to the venue\'s socket.',
+  'venue.answer': 'The request written to the venue to its answer read: network both ways plus the venue\'s own processing.',
+  'gw.report_out': 'A report made to the gateway sending it to its session.',
+};
 
 function keysOf(samples: Sample[]): LatencyKey[] {
   return samples.flatMap(s => ((s.data as unknown as LatencyData).keys ?? []));
