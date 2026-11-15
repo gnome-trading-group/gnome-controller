@@ -191,7 +191,7 @@ export const READ_KEY_OMITS: Record<string, string[]> = {
 // CORRECTION. Mirrors POLLED_MOVES in the registry's treasury-api.
 export const POLLED_MOVE_EXCHANGES = ['KALSHI', 'POLYMARKET_INTL', 'POLYMARKET_US'];
 
-export const SECRET_REGIONS = ['us-east-1', 'ap-northeast-1', 'eu-west-1'];
+export const SECRET_REGIONS = ['us-east-1', 'ap-northeast-1', 'eu-west-1', 'us-east-2'];
 
 /**
  * The fields a credentials JSON file fills in for an exchange, as strings; keys the exchange doesn't take are
