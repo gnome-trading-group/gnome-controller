@@ -829,6 +829,13 @@ export const registryApi = {
   // Every order gateway, live and paper: its row, its endpoint and its last hour (see types/gateways).
   listGatewayStatus: () =>
     sendApiRequest<GatewayStatus[]>('/gateways/status', 'GET', { apiUrl: REGISTRY_API_URL }),
+  // Asks the gateway reconciler to roll a running gateway onto its pin (else the latest release) without cancelling its
+  // orders; how it goes shows in the gateway's roll.
+  rollGateway: (gatewayKey: string) =>
+    sendApiRequest<{ gatewayKey: string; rollRequestedAt: string; rollRequestedBy: string }>('/gateways/roll', 'POST', {
+      apiUrl: REGISTRY_API_URL,
+      body: { gatewayKey },
+    }),
   // Starts the venue's EmergencyCancel around the order gateway; its outcome comes as an EMERGENCY_CANCEL alert.
   emergencyCancel: (accountId: number, reason: string, dryRun = false) =>
     sendApiRequest<{ label: string; exchange: string; region: string; dryRun: boolean; started: boolean }>(

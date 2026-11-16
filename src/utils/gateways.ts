@@ -1,11 +1,11 @@
 import { Alert } from '../types/alerts';
-import { GatewayAccountMinute, GatewaySessionSends, GatewayStatus } from '../types/gateways';
+import { GatewayAccountMinute, GatewayRollPhase, GatewaySessionSends, GatewayStatus } from '../types/gateways';
 import { StrategySession } from '../types/strategy-sessions';
 
 // Every alert type about an order gateway: its own, its reconciler's, and a session's link to it.
 export const GATEWAY_ALERT_TYPES = [
   'GATEWAY_DEGRADED', 'GATEWAY_DOWN', 'GATEWAY_FATAL', 'GATEWAY_KILLS_STALE', 'GATEWAY_ORDERS_UNANSWERED',
-  'GATEWAY_RECONCILE_FAILED', 'GATEWAY_RESTARTED', 'GATEWAY_START_STUCK', 'GATEWAY_SWEEP_FAILED',
+  'GATEWAY_RECONCILE_FAILED', 'GATEWAY_RESTARTED', 'GATEWAY_ROLL_FAILED', 'GATEWAY_START_STUCK', 'GATEWAY_SWEEP_FAILED',
   'GATEWAY_UNATTRIBUTED_ORDERS', 'GATEWAY_VENUE_RATE_LIMITED', 'ORDER_GATEWAY_UNLINKED',
 ];
 
@@ -18,8 +18,9 @@ export interface GatewayHealth {
   running: boolean;
 }
 
-/** What to show for a gateway: its own state while it runs; otherwise whether anything still wants it. */
+/** What to show for a gateway: rolling while a roll is under way; its own state while it runs; otherwise whether anything still wants it. */
 export function gatewayHealth(g: GatewayStatus, nowMs: number): GatewayHealth {
+  if (rollUnderWay(g, nowMs)) return { label: 'rolling', color: 'violet', running: true };
   if (g.endpoint) {
     const color = { READY: 'teal', DEGRADED: 'orange', STARTING: 'blue', STOPPING: 'gray' }[g.endpoint.state] ?? 'gray';
     return { label: g.endpoint.state.toLowerCase(), color, running: true };
@@ -130,4 +131,68 @@ export function ecsServiceUrl(region: string, gatewayKey: string): string {
 
 export function lastOf<T>(items: T[]): T | undefined {
   return items[items.length - 1];
+}
+
+const ROLL_UNDER_WAY: GatewayRollPhase[] = ['stopping', 'starting', 'rolling_back'];
+// The registry lets a request the reconciler hasn't taken up within this long be asked again.
+const ROLL_UNTAKEN_MS = 5 * 60_000;
+
+/** Whether a roll is under way, or asked for and about to be taken up by the reconciler. */
+export function rollUnderWay(g: GatewayStatus, nowMs: number): boolean {
+  if (g.roll && ROLL_UNDER_WAY.includes(g.roll.phase)) return true;
+  if (!g.rollRequestedAt) return false;
+  const asked = Date.parse(g.rollRequestedAt);
+  const taken = g.roll ? Date.parse(g.roll.requestedAt) >= asked : false;
+  return !taken && nowMs - asked < ROLL_UNTAKEN_MS;
+}
+
+// Venues that cancel resting orders soon after their gateway goes quiet, sooner than a roll's gap: their gateway stops
+// as planned instead of handing over (gnome-gateways' <Venue>Venue.ordersOutliveGatewayFor).
+const CANCELS_WITHOUT_GATEWAY: Record<string, string> = {
+  POLYMARKET_INTL: 'Polymarket International cancels every order 10 s after the gateway\'s heartbeat stops',
+};
+
+export interface RollPlan {
+  // Why it can't be rolled now; null when it can.
+  disabled: string | null;
+  // The release it would move to: its pin, else the latest.
+  target: string | null;
+  // What the operator should know before confirming.
+  warnings: string[];
+}
+
+/** Whether the gateway can be rolled now, onto what, and what to warn of. */
+export function rollPlan(g: GatewayStatus, nowMs: number): RollPlan {
+  const target = g.rollTargetVersion;
+  const warnings: string[] = [];
+  const up = g.endpoint && (g.endpoint.state === 'READY' || g.endpoint.state === 'DEGRADED');
+  let disabled: string | null = null;
+  if (rollUnderWay(g, nowMs)) disabled = 'A roll is under way';
+  else if (!g.endpoint) disabled = "It isn't running: its next start runs the release anyway";
+  else if (!up) disabled = `It isn't up (${g.endpoint.state.toLowerCase()})`;
+  else if (g.mode === 'live' && !g.endpoint.canHandOver) {
+    disabled = `Its release ${g.endpoint.version} can't hand over: a restart would cancel every order`;
+  } else if (!target) disabled = "The latest release couldn't be read";
+  if (g.mode === 'paper') {
+    warnings.push('A paper gateway\'s orders live only in its process: the roll is a plain restart, and every paper order is cancelled.');
+  } else if (g.exchangeCode && CANCELS_WITHOUT_GATEWAY[g.exchangeCode]) {
+    warnings.push(`${CANCELS_WITHOUT_GATEWAY[g.exchangeCode]}, sooner than a roll takes: this gateway restarts as planned, cancelling every order first.`);
+  }
+  if (target && g.endpoint && target === g.endpoint.version) {
+    warnings.push(`It already runs ${target}: the roll restarts it in place.`);
+  }
+  return { disabled, target, warnings };
+}
+
+/** A roll's phase in a few words. */
+export function rollPhaseLabel(phase: GatewayRollPhase): { label: string; color: string } {
+  return {
+    stopping: { label: 'stopping', color: 'violet' },
+    starting: { label: 'starting on the new release', color: 'violet' },
+    rolling_back: { label: 'rolling back', color: 'orange' },
+    done: { label: 'done', color: 'teal' },
+    rolled_back: { label: 'rolled back', color: 'orange' },
+    failed: { label: 'failed', color: 'red' },
+    refused: { label: 'refused', color: 'gray' },
+  }[phase];
 }

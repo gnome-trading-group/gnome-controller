@@ -1,23 +1,27 @@
 import {
-  Alert as MantineAlert, Anchor, Badge, Card, Container, Group, SimpleGrid, Skeleton, Stack, Table, Tabs, Text,
+  Alert as MantineAlert, Anchor, Badge, Button, Card, Container, Group, List, SimpleGrid, Skeleton, Stack, Table, Tabs,
+  Text, Tooltip,
 } from '@mantine/core';
-import { IconExternalLink } from '@tabler/icons-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { IconExternalLink, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis,
 } from 'recharts';
-import { POLL, useActiveSessions, useAlerts, useGatewayStatus } from '../../../query/hooks';
+import { keys, POLL, useActiveSessions, useAlerts, useGatewayStatus } from '../../../query/hooks';
+import { ReasonConfirmModal } from '../../../components/ReasonConfirmModal';
 import { PageHeader } from '../../../components/PageHeader';
 import { LastUpdated } from '../../../components/LastUpdated';
 import { Kpi, ModeBadge } from '../../../components/trading/layout';
-import { GatewayAccountMinutes, GatewayPaperMinute } from '../../../types/gateways';
+import { GatewayAccountMinutes, GatewayPaperMinute, GatewayStatus } from '../../../types/gateways';
 import { formatDuration } from '../../../utils/format';
-import { samplesConfigured } from '../../../utils/api';
+import { registryApi, samplesConfigured } from '../../../utils/api';
 import { GatewayPerformance } from './GatewayPerformance';
 import {
   accountTotals, ecsServiceUrl, formatMicros, GATEWAY_ALERT_TYPES, gatewayHealth, isGatewayAlert, lastOf, linkedSessions,
-  logGroupUrl, shares,
+  logGroupUrl, rollPhaseLabel, rollPlan, rollUnderWay, shares,
 } from '../../../utils/gateways';
 
 const RECENT_ALERTS = { type: GATEWAY_ALERT_TYPES, limit: 500 };
@@ -167,6 +171,46 @@ function PaperCard({ minutes }: { minutes: GatewayPaperMinute[] }) {
 
 // One order gateway: whether it runs, who is linked to it, its last hour per account (or, for paper, its books' lag)
 // and its alerts.
+/** The last roll the reconciler took up, or the one asked for that it is about to. */
+function RollCard({ g, nowMs }: { g: GatewayStatus; nowMs: number }) {
+  const roll = g.roll;
+  const waiting = rollUnderWay(g, nowMs) && (!roll || Date.parse(roll.requestedAt) < Date.parse(g.rollRequestedAt ?? ''));
+  if (!roll && !waiting) return null;
+  const phase = waiting ? { label: 'asked for', color: 'violet' } : rollPhaseLabel(roll!.phase);
+  return (
+    <Card withBorder>
+      <Group justify="space-between" mb="xs">
+        <Group gap="xs">
+          <Text fw={600}>Roll</Text>
+          <Badge color={phase.color} variant="light">{phase.label}</Badge>
+        </Group>
+        {g.rollRequestedBy && g.rollRequestedAt && (
+          <Text size="xs" c="dimmed">
+            asked by {g.rollRequestedBy} <ReactTimeAgo date={new Date(g.rollRequestedAt)} timeStyle="round" />
+          </Text>
+        )}
+      </Group>
+      {waiting ? (
+        <Text size="sm" c="dimmed">Waiting for the gateway reconciler to take it up (within a minute).</Text>
+      ) : (
+        <Stack gap={4}>
+          {roll!.fromVersion && roll!.toVersion && (
+            <Text size="sm" ff="monospace">{roll!.fromVersion} → {roll!.toVersion}</Text>
+          )}
+          {roll!.startedAt && (
+            <Text size="sm" c="dimmed">
+              started <ReactTimeAgo date={new Date(roll!.startedAt)} timeStyle="round" />
+              {roll!.endedAt && <> · ended <ReactTimeAgo date={new Date(roll!.endedAt)} timeStyle="round" /></>}
+              {roll!.startedAt && roll!.endedAt && ` (${formatDuration(Date.parse(roll!.endedAt) - Date.parse(roll!.startedAt))})`}
+            </Text>
+          )}
+          {roll!.reason && <Text size="sm">{roll!.reason}</Text>}
+        </Stack>
+      )}
+    </Card>
+  );
+}
+
 function GatewayDetail() {
   const { gatewayKey = '' } = useParams();
   const navigate = useNavigate();
@@ -181,6 +225,13 @@ function GatewayDetail() {
   const lastMinutes = g?.minutes?.writtenAt;
   const unlinked = links.filter((l) => !l.linked).length;
   const firing = own.filter((a) => a.status !== 'RESOLVED').length;
+  const queryClient = useQueryClient();
+  const [rollOpen, setRollOpen] = useState(false);
+  const plan = g ? rollPlan(g, now) : null;
+  const confirmRoll = async () => {
+    await registryApi.rollGateway(gatewayKey);
+    await queryClient.invalidateQueries({ queryKey: keys.gatewayStatus });
+  };
 
   return (
     <Container size="xl" py="xl">
@@ -194,6 +245,14 @@ function GatewayDetail() {
             <LastUpdated at={status.dataUpdatedAt ? new Date(status.dataUpdatedAt) : null} intervalMs={POLL.gateways}
               failing={status.isError} compact />
           </Group>
+        )}
+        actions={g && plan && (
+          <Tooltip label={plan.disabled ?? `Restart it on ${plan.target} without cancelling its orders`} withArrow>
+            <Button variant="light" leftSection={<IconRefresh size={16} />} disabled={plan.disabled !== null}
+              onClick={() => setRollOpen(true)}>
+              Roll
+            </Button>
+          </Tooltip>
         )}
         menu={g ? [
           { label: 'Open service in ECS', icon: <IconExternalLink size={14} />, onClick: () => window.open(ecsServiceUrl(g.region, g.gatewayKey), '_blank') },
@@ -231,7 +290,9 @@ function GatewayDetail() {
               footer={lastMinutes ? <>minutes written <ReactTimeAgo date={new Date(lastMinutes)} timeStyle="round" /></> : 'no minutes yet'} />
           </SimpleGrid>
 
-          {!g.endpoint && (
+          <RollCard g={g} nowMs={now} />
+
+          {!g.endpoint && !rollUnderWay(g, now) && (
             <MantineAlert color="gray" variant="light">
               Not running: nothing has written its endpoint in the last minute. It starts when a session asks for it.
             </MantineAlert>
@@ -319,6 +380,37 @@ function GatewayDetail() {
             </Tabs.Panel>
           </Tabs>
         </Stack>
+      )}
+      {g && plan && (
+        <ReasonConfirmModal
+          opened={rollOpen}
+          onClose={() => setRollOpen(false)}
+          title={`Roll ${gatewayKey}`}
+          message={(
+            <Stack gap="sm">
+              <Text size="sm">
+                Moves it from <Text span ff="monospace">{g.endpoint?.version ?? '?'}</Text> to{' '}
+                <Text span ff="monospace">{plan.target}</Text>
+                {g.pinnedVersion ? ' (its pin)' : ' (the latest release)'}: it stops without cancelling and starts again on
+                its host, taking its {g.endpoint?.workingOrders ?? 0} working order(s) back. Its{' '}
+                {g.endpoint?.linkedSessions ?? 0} linked session(s) link again by themselves.
+              </Text>
+              <Text size="sm" c="dimmed">
+                About a minute without it: new orders are refused, cancels wait, and fills at the venue are caught up once
+                it is back. If it isn&apos;t up in 5 minutes it is rolled back once. To roll to another release, pin it first.
+              </Text>
+              {plan.warnings.length > 0 && (
+                <MantineAlert color="orange" variant="light">
+                  <List size="sm">{plan.warnings.map((w) => <List.Item key={w}>{w}</List.Item>)}</List>
+                </MantineAlert>
+              )}
+            </Stack>
+          )}
+          confirmLabel="Roll"
+          confirmColor="violet"
+          askReason={false}
+          onConfirm={confirmRoll}
+        />
       )}
     </Container>
   );

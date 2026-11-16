@@ -10,6 +10,25 @@ export interface GatewayEndpoint {
   writtenAt: string;
   linkedSessions: number;
   workingOrders: number;
+  // Whether its release stops without cancelling when rolled; one that can't would cancel every order.
+  canHandOver: boolean;
+  // Stopping for a roll, its orders left resting for the next process on its host.
+  handover: boolean;
+}
+
+export type GatewayRollPhase = 'stopping' | 'starting' | 'rolling_back' | 'done' | 'rolled_back' | 'failed' | 'refused';
+
+// The gateway reconciler's record of the last roll it took up: moving a running gateway onto another release without
+// cancelling its orders. Kept a day.
+export interface GatewayRoll {
+  requestedAt: string;
+  phase: GatewayRollPhase;
+  fromVersion: string | null;
+  toVersion: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  // Why it was refused, rolled back or failed, or how it ended.
+  reason: string | null;
 }
 
 // One account's minute on a live gateway, as its lane counted it. Waits are for the account's request budget; answers
@@ -75,8 +94,13 @@ export interface GatewayStatus {
   region: string;
   profile: string;
   pinnedVersion: string | null;
+  // What a start, and so a roll, would run: its pin, else the latest release; null if that couldn't be read.
+  rollTargetVersion: string | null;
   wantedAt: string | null;
   accounts: number;
+  rollRequestedAt: string | null;
+  rollRequestedBy: string | null;
+  roll: GatewayRoll | null;
   // Null when it isn't running (no endpoint written in the last minute).
   endpoint: GatewayEndpoint | null;
   // Null when it has written none in the last 10 minutes.

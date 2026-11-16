@@ -3,7 +3,8 @@ import { Alert } from '../types/alerts';
 import { GatewayAccountMinute, GatewayStatus } from '../types/gateways';
 import { StrategySession } from '../types/strategy-sessions';
 import {
-  accountTotals, formatMicros, gatewayHealth, isGatewayAlert, linkedSessions, logGroupUrl, shares, WANT_WINDOW_MS,
+  accountTotals, formatMicros, gatewayHealth, isGatewayAlert, linkedSessions, logGroupUrl, rollPlan, rollUnderWay, shares,
+  WANT_WINDOW_MS,
 } from './gateways';
 
 const NOW = Date.parse('2026-11-12T19:00:00Z');
@@ -11,13 +12,14 @@ const NOW = Date.parse('2026-11-12T19:00:00Z');
 function gateway(over: Partial<GatewayStatus> = {}): GatewayStatus {
   return {
     gatewayKey: 'live:kalshi:main', mode: 'live', exchangeId: 5, exchangeCode: 'KALSHI', region: 'us-east-1',
-    profile: 'standard', pinnedVersion: null, wantedAt: null, accounts: 1, endpoint: null, minutes: null, ...over,
+    profile: 'standard', pinnedVersion: null, rollTargetVersion: '2.3.0', wantedAt: null, accounts: 1, endpoint: null,
+    minutes: null, rollRequestedAt: null, rollRequestedBy: null, roll: null, ...over,
   };
 }
 
 const endpoint = (state: string) => ({
   state, instance: 't', privateIp: '10.0.0.1', port: 40010, version: '1.37.4', writtenAt: '', linkedSessions: 1,
-  workingOrders: 2,
+  workingOrders: 2, canHandOver: true, handover: false,
 });
 
 function session(id: string, links: { key: string; linked: boolean; unlinkedMs?: number; workingOrders?: number }[]) {
@@ -98,5 +100,46 @@ describe('formatting', () => {
 
   it("links the gateway's log group in its region", () => {
     expect(logGroupUrl('eu-west-1')).toContain('$252Fgnome$252Forder-gateway$252Feu-west-1');
+  });
+});
+
+describe('rolling a gateway', () => {
+  const up = endpoint('READY');
+  const roll = (phase: NonNullable<GatewayStatus['roll']>['phase'], requestedAt = '2026-11-12T18:50:00Z') => ({
+    requestedAt, phase, fromVersion: '1.37.4', toVersion: '2.3.0', startedAt: requestedAt, endedAt: null, reason: null,
+  });
+
+  it('is under way through its phases, and while a request waits for the reconciler', () => {
+    for (const phase of ['stopping', 'starting', 'rolling_back'] as const) {
+      expect(rollUnderWay(gateway({ endpoint: up, roll: roll(phase) }), NOW)).toBe(true);
+    }
+    expect(rollUnderWay(gateway({ endpoint: up, roll: roll('done') }), NOW)).toBe(false);
+    expect(rollUnderWay(gateway({ endpoint: up, rollRequestedAt: '2026-11-12T18:59:30Z', roll: roll('done') }), NOW)).toBe(true);
+    // Asked long ago and never taken up: lost, so it may be asked again.
+    expect(rollUnderWay(gateway({ endpoint: up, rollRequestedAt: '2026-11-12T18:40:00Z' }), NOW)).toBe(false);
+  });
+
+  it('shows a gateway being rolled as rolling, even while it has no endpoint', () => {
+    expect(gatewayHealth(gateway({ roll: roll('starting') }), NOW)).toEqual({ label: 'rolling', color: 'violet', running: true });
+  });
+
+  it('may roll a running live gateway onto its target, refusing what the reconciler would refuse', () => {
+    expect(rollPlan(gateway({ endpoint: up }), NOW)).toEqual({ disabled: null, target: '2.3.0', warnings: [] });
+    expect(rollPlan(gateway(), NOW).disabled).toContain("isn't running");
+    expect(rollPlan(gateway({ endpoint: endpoint('STARTING') }), NOW).disabled).toContain("isn't up (starting)");
+    expect(rollPlan(gateway({ endpoint: { ...up, canHandOver: false } }), NOW).disabled).toContain("can't hand over");
+    expect(rollPlan(gateway({ endpoint: up, roll: roll('starting') }), NOW).disabled).toBe('A roll is under way');
+    expect(rollPlan(gateway({ endpoint: up, rollTargetVersion: null }), NOW).disabled).toContain("couldn't be read");
+  });
+
+  it('warns that a paper gateway, or one whose venue cancels without it, loses its orders, and of a restart in place', () => {
+    const paper = rollPlan(gateway({ mode: 'paper', gatewayKey: 'paper:kalshi:main', endpoint: { ...up, canHandOver: false } }), NOW);
+    expect(paper.disabled).toBeNull();
+    expect(paper.warnings[0]).toContain('every paper order is cancelled');
+    const intl = rollPlan(gateway({ exchangeCode: 'POLYMARKET_INTL', endpoint: up }), NOW);
+    expect(intl.warnings[0]).toContain('cancelling every order first');
+    expect(rollPlan(gateway({ endpoint: up, rollTargetVersion: '1.37.4' }), NOW).warnings).toEqual([
+      'It already runs 1.37.4: the roll restarts it in place.',
+    ]);
   });
 });
