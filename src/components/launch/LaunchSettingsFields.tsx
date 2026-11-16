@@ -1,6 +1,6 @@
 import { Group, Select, TextInput } from '@mantine/core';
 import { LaunchSettings } from '../../utils/launch-settings';
-import { instanceTypeOptions, LATENCY_PROFILE_OPTIONS, LatencyProfile } from '../../utils/sizing';
+import { instanceTypeOptions, Tier, TIER_OPTIONS } from '../../utils/sizing';
 import { useLaunchSizing } from '../../hooks/useLaunchSizing';
 import { strategyClassHint } from '../../utils/strategy-class';
 
@@ -11,8 +11,6 @@ const COMMIT_DESCRIPTION = 'Also fixes the orchestrator and gnomepy releases the
 interface Props {
   value: LaunchSettings;
   onChange: (patch: Partial<LaunchSettings>) => void;
-  // Listings in the session, for sizing; where they aren't known yet (a launch rule), the number it usually has.
-  listingCount: number;
   // A launch rule's sessions take their region from their venue, so it doesn't offer one.
   showRegion?: boolean;
   required?: boolean;
@@ -20,8 +18,8 @@ interface Props {
 
 // Mode, strategy class and where and how the session runs: the same fields, hints and sizing rules for a strategy's
 // defaults, a deploy and a launch rule.
-export function LaunchSettingsFields({ value, onChange, listingCount, showRegion = true, required = false }: Props) {
-  useLaunchSizing(value, onChange, listingCount);
+export function LaunchSettingsFields({ value, onChange, showRegion = true, required = false }: Props) {
+  useLaunchSizing(value, onChange);
   const hint = strategyClassHint(value.strategyType);
   return (
     <>
@@ -42,10 +40,10 @@ export function LaunchSettingsFields({ value, onChange, listingCount, showRegion
           onChange={e => onChange({ availabilityZone: e.currentTarget.value })} />
       </Group>
       <Group grow>
-        <Select label="Latency Profile" data={LATENCY_PROFILE_OPTIONS} value={value.latencyProfile}
-          onChange={v => v && onChange({ latencyProfile: v as LatencyProfile, latencyProfileChosen: true })} />
-        <Select label="Instance Type" data={instanceTypeOptions(value.latencyProfile)} value={value.instanceType}
-          onChange={v => v && onChange({ instanceType: v, instanceTypeChosen: true })} />
+        <Select label="Sizing Tier" data={TIER_OPTIONS} value={value.tier}
+          onChange={v => v && onChange({ tier: v as Tier, tierChosen: true })} />
+        <Select label="Instance Type" data={instanceTypeOptions(value.tier)} value={value.instanceType}
+          onChange={v => v !== null && onChange({ instanceType: v, instanceTypeChosen: true })} />
       </Group>
       {value.strategyType === 'python' && (
         <TextInput label="Research Commit (optional)" placeholder="git SHA or branch (default main)"

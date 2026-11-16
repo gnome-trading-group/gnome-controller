@@ -8,7 +8,7 @@ describe('launch settings', () => {
     const fromRule = launchSettingsFrom({ strategy_type: 'python', strategy_class: 'a.b:C', research_commit: 'abc', instance_type: 'c7i.large' });
     expect(fromRule).toEqual(fromTemplate);
     expect(fromRule.instanceTypeChosen).toBe(true);
-    expect(fromRule.latencyProfileChosen).toBeUndefined();
+    expect(fromRule.tierChosen).toBeUndefined();
   });
 
   it('round-trips through rule parameters', () => {
@@ -18,8 +18,23 @@ describe('launch settings', () => {
     }) };
     expect(launchSettingsToParams(settings, { region: false })).toEqual({
       mode: 'paper', strategy_type: 'python', strategy_class: 'a.b:C', research_commit: 'abc', latency_profile: 'standard',
-      instance_type: 'c7i.large',
+      sizing_tier: 'standard', instance_type: 'c7i.large',
     });
+  });
+
+  it('leaves an unchosen tier and an automatic instance type to the registry', () => {
+    const params = launchSettingsToParams({ ...defaultLaunchSettings(), strategyClass: 'x.Y', strategyType: 'java' });
+    expect(params.instance_type).toBeUndefined();
+    expect(params.sizing_tier).toBeUndefined();
+    expect(params.latency_profile).toBeUndefined();
+  });
+
+  it('writes a chosen slow tier with the profile it runs', () => {
+    const params = launchSettingsToParams({
+      ...defaultLaunchSettings(), strategyClass: 'x.Y', strategyType: 'java', tier: 'slow', tierChosen: true,
+    });
+    expect(params.sizing_tier).toBe('slow');
+    expect(params.latency_profile).toBe('standard');
   });
 
   it("keeps only the commit of the strategy's own language", () => {

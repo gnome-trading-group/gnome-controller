@@ -293,7 +293,7 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
       strategyCommit: commit?.key === 'strategy_commit' ? commit.value : undefined,
       region: region.trim() || undefined,
       availabilityZone: availabilityZone.trim() || undefined,
-      instanceType,
+      instanceType: instanceType || undefined,
     });
   };
 
@@ -392,7 +392,6 @@ function DeploySessionModal({ opened, onClose, onCreated, preselectedStrategyId,
             <LaunchSettingsFields
               value={launch}
               onChange={patch => { patchLaunch(patch); if (patch.mode !== undefined) setLiveConfirmText(''); }}
-              listingCount={listingIds.length}
               required
             />
 

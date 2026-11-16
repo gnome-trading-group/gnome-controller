@@ -70,6 +70,7 @@ export interface ResolvedStrategyConfig {
   simulation?: Record<string, unknown>;
   instance_type?: string | null;
   latency_profile?: string | null;
+  sizing_tier?: string | null;
   availability_zone?: string | null;
   overrides?: Record<string, string>;
 }

@@ -194,7 +194,6 @@ function StrategyFormModal({ opened, onClose, onSaved, strategy }: StrategyFormM
             <LaunchSettingsFields
               value={launch}
               onChange={patch => setLaunch(l => ({ ...l, ...patch }))}
-              listingCount={listingIds.length}
             />
             <MultiSelect
               label="Listings"

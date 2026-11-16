@@ -1,22 +1,13 @@
 import { useEffect } from 'react';
 import { LaunchSettings } from '../utils/launch-settings';
-import { defaultLatencyProfile, isInstanceTypeValidFor, suggestInstanceType } from '../utils/sizing';
+import { AUTO_INSTANCE_TYPE, isInstanceTypeValidFor } from '../utils/sizing';
 
-// Keeps the latency profile following the mode, and the instance type following the profile and listing count, until
-// someone chooses them (see LaunchSettings).
-export function useLaunchSizing(
-  settings: LaunchSettings, onChange: (patch: Partial<LaunchSettings>) => void, listingCount: number,
-) {
+// A chosen instance type the tier can't run (a standard-only size once low latency is picked) goes back to automatic,
+// which the registry sizes for the tier and the session's listings at launch.
+export function useLaunchSizing(settings: LaunchSettings, onChange: (patch: Partial<LaunchSettings>) => void) {
   useEffect(() => {
-    if (settings.latencyProfileChosen) return;
-    const profile = defaultLatencyProfile(settings.mode);
-    if (profile !== settings.latencyProfile) onChange({ latencyProfile: profile });
+    if (isInstanceTypeValidFor(settings.tier, settings.instanceType)) return;
+    onChange({ instanceType: AUTO_INSTANCE_TYPE, instanceTypeChosen: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.mode, settings.latencyProfileChosen]);
-  useEffect(() => {
-    if (settings.instanceTypeChosen && isInstanceTypeValidFor(settings.latencyProfile, settings.instanceType)) return;
-    const suggested = suggestInstanceType(settings.latencyProfile, settings.mode, listingCount);
-    if (suggested !== settings.instanceType) onChange({ instanceType: suggested });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.mode, settings.latencyProfile, settings.instanceType, settings.instanceTypeChosen, listingCount]);
+  }, [settings.tier, settings.instanceType]);
 }

@@ -23,8 +23,6 @@ import { StrategyArgsEditor } from '../../components/launch/StrategyArgsEditor';
 import { OrchestratorOverridesEditor } from '../../components/OrchestratorOverrides';
 import { SimulationSettingsEditor } from '../../components/simulation/SimulationSettingsEditor';
 import { SessionSimulation, simulationProblem } from '../../utils/simulation';
-// What a rule's sessions are sized for before they exist: a match or an event usually has a couple of listings.
-const TYPICAL_LISTINGS = 2;
 
 const EMPTY_RULE: EditableRule = {
   name: '', description: null, rule_type: '', status: 'active', launch_path: 'approval', shutdown_path: 'auto',
@@ -255,7 +253,7 @@ export function RuleEditorModal({ opened, onClose, onSaved, ruleTypes, rule, dup
                 <Select label="Strategy" required searchable data={strategyOptions}
                   placeholder={strategies.isLoading ? 'Loading…' : 'Choose a strategy; its defaults fill in the rest'}
                   value={strategyId != null ? String(strategyId) : null} onChange={chooseStrategy} />
-                <LaunchSettingsFields value={launch} required showRegion={false} listingCount={TYPICAL_LISTINGS}
+                <LaunchSettingsFields value={launch} required showRegion={false}
                   onChange={patch => { changed(); setLaunch(l => ({ ...l, ...patch })); }} />
                 <Text size="xs" c="dimmed">Each session runs in the region of the venue its listings trade on.</Text>
 

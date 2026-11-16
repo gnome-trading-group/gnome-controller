@@ -60,7 +60,7 @@ export interface CreateStrategySessionRequest {
   strategyCommit?: string;
   region?: string;
   availabilityZone?: string;
-  // Left out, the registry picks the instance type for the session's latency profile.
+  // Left out, the registry sizes the session for its tier and the load its listings are predicted to bring.
   instanceType?: string;
 }
 

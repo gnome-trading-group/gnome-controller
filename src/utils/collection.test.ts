@@ -4,7 +4,7 @@ import {
 } from '../types/collection';
 import {
   attentionItems, capsForTier, collectionCounts, coverageSegments, currentStatus, cutTime, handoffStep, parseShardCaps,
-  parseStreamIds, ruleCriteria, ruleSelection, ruleStreamCount, segmentTime, shardHealth, shardStreams, shardUsage,
+  parseStreamIds, ruleCriteria, ruleSelection, ruleStreamCount, segmentTime, shardHealth, shardLoad, shardStreams, shardUsage,
   stateCounts,
 } from './collection';
 
@@ -234,5 +234,18 @@ describe('parseShardCaps', () => {
 
     expect(capsForTier(caps, 'something_new')).toEqual(caps?.get('standard'));
     expect(capsForTier(null, 'standard')).toBeNull();
+  });
+});
+
+describe('shardLoad', () => {
+  const caps = { maxStreams: 900, maxPublished: 300, maxRecordsPerSecond: 4500 };
+
+  it('counts published streams and records per second together, each against its cap', () => {
+    expect(shardLoad({ streams: 500, published: 150, recordsPerSecond: 2250 }, caps)).toBeCloseTo(1);
+    expect(shardLoad({ streams: 500, published: 30, recordsPerSecond: 2000 }, caps)).toBeCloseTo(0.544, 3);
+  });
+
+  it('counts no rate while the status has none', () => {
+    expect(shardLoad({ streams: 10, published: 60, recordsPerSecond: null }, caps)).toBeCloseTo(0.2);
   });
 });

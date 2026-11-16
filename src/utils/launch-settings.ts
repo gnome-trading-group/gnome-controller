@@ -1,5 +1,5 @@
 import { ConfigValue } from '../types';
-import { defaultLatencyProfile, LatencyProfile, suggestInstanceType } from './sizing';
+import { AUTO_INSTANCE_TYPE, DEFAULT_TIER, profileForTier, Tier, tierFrom } from './sizing';
 
 // How a session is started, wherever it is chosen: a strategy's saved defaults, a deploy, a launch rule. One shape
 // so every form edits it with the same fields (components/launch/LaunchSettingsFields).
@@ -9,10 +9,10 @@ export interface LaunchSettings {
   strategyClass: string;
   region: string;
   availabilityZone: string;
-  latencyProfile: LatencyProfile;
-  // Until someone picks a latency profile it follows the mode, and until someone picks an instance type it follows
-  // the profile and the listing count; once chosen, each sticks.
-  latencyProfileChosen: boolean;
+  tier: Tier;
+  // Unchosen, the tier is left to the registry's default and the instance type (AUTO_INSTANCE_TYPE) to the registry's
+  // sizing for the tier and the session's listings; once chosen, each sticks.
+  tierChosen: boolean;
   instanceType: string;
   instanceTypeChosen: boolean;
   // The commit the session runs, by language: gnomepy-research for python, gnome-strategies for java. It also pins
@@ -22,11 +22,10 @@ export interface LaunchSettings {
 }
 
 export function defaultLaunchSettings(): LaunchSettings {
-  const latencyProfile = defaultLatencyProfile('paper');
   return {
     mode: 'paper', strategyType: null, strategyClass: '', region: '', availabilityZone: '',
-    latencyProfile, latencyProfileChosen: false,
-    instanceType: suggestInstanceType(latencyProfile, 'paper', 1), instanceTypeChosen: false,
+    tier: DEFAULT_TIER, tierChosen: false,
+    instanceType: AUTO_INSTANCE_TYPE, instanceTypeChosen: false,
     researchCommit: '', strategyCommit: '',
   };
 }
@@ -50,10 +49,11 @@ export function launchSettingsFrom(raw: Record<string, unknown>): Partial<Launch
   set('availabilityZone', str(get('availabilityZone', 'availability_zone')));
   set('researchCommit', str(get('researchCommit', 'research_commit')));
   set('strategyCommit', str(get('strategyCommit', 'strategy_commit')));
-  const profile = str(get('latencyProfile', 'latency_profile'));
-  if (profile) {
-    out.latencyProfile = profile === 'standard' ? 'standard' : 'low_latency';
-    out.latencyProfileChosen = true;
+  // A tier, or the latency profile settings saved before tiers held (standard or low_latency, the same names).
+  const tier = tierFrom(get('sizingTier', 'sizing_tier')) ?? tierFrom(get('latencyProfile', 'latency_profile'));
+  if (tier) {
+    out.tier = tier;
+    out.tierChosen = true;
   }
   const instanceType = str(get('instanceType', 'instance_type'));
   if (instanceType) {
@@ -63,12 +63,17 @@ export function launchSettingsFrom(raw: Record<string, unknown>): Partial<Launch
   return out;
 }
 
-// The settings as a launch rule's (or a strategy's) snake_case parameters. An unchosen latency profile is left out,
-// so whatever launches the session picks it by mode; the instance type is always given.
+// The settings as a launch rule's (or a strategy's) snake_case parameters. An unchosen tier and an automatic instance
+// type are left out, so the registry sizes each session from its own listings when it launches.
 export function launchSettingsToParams(s: LaunchSettings, opts: { region?: boolean } = {}): Record<string, ConfigValue> {
-  const out: Record<string, ConfigValue> = { mode: s.mode, strategy_class: s.strategyClass.trim(), instance_type: s.instanceType };
+  const out: Record<string, ConfigValue> = { mode: s.mode, strategy_class: s.strategyClass.trim() };
+  if (s.instanceType !== AUTO_INSTANCE_TYPE) out.instance_type = s.instanceType;
   if (s.strategyType) out.strategy_type = s.strategyType;
-  if (s.latencyProfileChosen) out.latency_profile = s.latencyProfile;
+  // The profile with the tier: it is what rules saved before tiers carry, and what a launcher that predates tiers reads.
+  if (s.tierChosen) {
+    out.sizing_tier = s.tier;
+    out.latency_profile = profileForTier(s.tier);
+  }
   if (opts.region !== false && s.region.trim()) out.region = s.region.trim();
   if (s.availabilityZone.trim()) out.availability_zone = s.availabilityZone.trim();
   const commit = launchCommit(s);

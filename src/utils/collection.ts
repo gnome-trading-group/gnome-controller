@@ -317,6 +317,15 @@ export function shardUsage(shard: CollectionShard, status: ShardTaskStatus | nul
   };
 }
 
+/**
+ * The shard's load as the reconciler counts it: published streams and records per second together, each against its
+ * cap (`published / max_published + records/s / max_records_per_second`), 1 being full. Its rate counts as 0 while its
+ * status has none, as the reconciler counts only rates read.
+ */
+export function shardLoad(usage: ShardUsage, caps: ShardCaps): number {
+  return usage.published / caps.maxPublished + (usage.recordsPerSecond ?? 0) / caps.maxRecordsPerSecond;
+}
+
 const STANDARD_TIER = 'standard';
 
 /**

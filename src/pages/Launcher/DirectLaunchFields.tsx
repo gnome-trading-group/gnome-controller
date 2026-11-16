@@ -40,7 +40,7 @@ export function DirectLaunchFields({ value, onChange }: { value: DirectLaunchFor
       <Select label="Strategy" required searchable data={(strategies.data ?? []).filter(s => !s.archived)
         .map(s => ({ value: String(s.strategyId), label: s.name }))} value={value.strategyId} onChange={chooseStrategy}
         placeholder={strategies.isLoading ? 'Loading…' : 'Choose a strategy; its defaults fill in the rest'} />
-      <LaunchSettingsFields value={value.launch} required showRegion={false} listingCount={value.listingIds.length}
+      <LaunchSettingsFields value={value.launch} required showRegion={false}
         onChange={patch => set({ launch: { ...value.launch, ...patch }, liveConfirm: patch.mode ? '' : value.liveConfirm })} />
       <Divider />
       <StrategyArgsEditor rows={value.args} onChange={args => set({ args })} />

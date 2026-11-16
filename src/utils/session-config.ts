@@ -4,6 +4,7 @@ import {
   ArgRow, argsToRows, defaultLaunchSettings, launchCommit, LaunchSettings, launchSettingsFrom, rowsToArgs,
 } from './launch-settings';
 import { compactSimulation, SessionSimulation, toSessionSimulation } from './simulation';
+import { profileForTier } from './sizing';
 import { LostField, lostFields } from './round-trip';
 
 // A session's config as the deploy form edits it.
@@ -35,7 +36,8 @@ export function sessionConfigFrom(form: SessionForm, asOf?: string | null): Reco
   const commit = launchCommit(launch);
   if (commit) config[commit.key] = commit.value;
   if (launch.region.trim()) config['region'] = launch.region.trim();
-  config['latency.profile'] = launch.latencyProfile;
+  config['sizing.tier'] = launch.tier;
+  config['latency.profile'] = profileForTier(launch.tier);
   if (launch.mode === 'live' && Object.keys(form.accountPins).length > 0) config.accounts = form.accountPins;
   for (const [property, value] of Object.entries(form.overrides)) {
     config[`overrides.${property}`] = value;
@@ -74,6 +76,7 @@ export function sessionFormFrom(session: StrategySession): SessionForm {
         researchCommit: config['research_commit'],
         strategyCommit: config['strategy_commit'],
         region: config['region'],
+        sizingTier: config['sizing.tier'],
         latencyProfile: config['latency.profile'],
         instanceType: session.instanceType,
       }),
