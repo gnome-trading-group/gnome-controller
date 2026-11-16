@@ -5,10 +5,12 @@ import json
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import boto3
 import yaml
+from botocore.config import Config
 from utils import create_response
 
 from sweep import expand_scenarios_and_sweeps, get_param_value, scenario_names, sweep_params
@@ -17,13 +19,16 @@ DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
 S3_BUCKET = os.environ["S3_BUCKET"]
 BATCH_JOB_QUEUE = os.environ["BATCH_JOB_QUEUE"]
 BATCH_JOB_DEFINITION = os.environ["BATCH_JOB_DEFINITION"]
+UPLOAD_THREADS = 32
 
 _ddb = boto3.resource("dynamodb")
 _table = _ddb.Table(DYNAMODB_TABLE)
-_s3 = boto3.client("s3")
+_s3 = boto3.client("s3", config=Config(max_pool_connections=UPLOAD_THREADS))
 _batch = boto3.client("batch")
 
 TTL_DAYS = 90
+# Batch's limit on an array job's size.
+MAX_JOBS = 10_000
 # A strategy commit is resolved to its SHA by the submitter, so every job of a run, and a rerun, compiles the same tree.
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 # gnome-backtest publishes only releases to GitHub Packages, where the job fetches an engine version from.
@@ -57,6 +62,32 @@ def _put_s3_yaml(run_id: str, suffix: str, data: dict) -> None:
     )
 
 
+def submit_job_kwargs(run_id: str, job_count: int, environment: list[dict]) -> dict:
+    kwargs = {
+        "jobName": f"backtest-{run_id}",
+        "jobQueue": BATCH_JOB_QUEUE,
+        "jobDefinition": BATCH_JOB_DEFINITION,
+        "containerOverrides": {
+            "environment": [{"name": "RUN_ID", "value": run_id}, {"name": "S3_BUCKET", "value": S3_BUCKET},
+                            *environment],
+        },
+        "retryStrategy": {"attempts": 2},
+    }
+    # Batch array jobs need at least two children; a single job runs as a plain job (index 0).
+    if job_count > 1:
+        kwargs["arrayProperties"] = {"size": job_count}
+    return kwargs
+
+
+def _set_meta(run_id: str, fields: dict) -> None:
+    _table.update_item(
+        Key={"run_id": run_id, "sk": "META"},
+        UpdateExpression="SET " + ", ".join(f"#{k} = :{k}" for k in fields),
+        ExpressionAttributeNames={f"#{k}": k for k in fields},
+        ExpressionAttributeValues={f":{k}": v for k, v in fields.items()},
+    )
+
+
 def handler(event: dict, context) -> dict:
     try:
         body = json.loads(event.get("body") or "{}")
@@ -85,20 +116,18 @@ def handler(event: dict, context) -> dict:
 
     jobs = expand_scenarios_and_sweeps(config)
     job_count = len(jobs)
+    if job_count > MAX_JOBS:
+        return create_response(400, {"error": f"{job_count} jobs is more than a run can hold ({MAX_JOBS})"})
     run_id = _run_id()
     now = _now_iso()
     strategy = config.get("strategy", {}).get("class_name", "unknown")
     scenarios = scenario_names(config)
     params = sweep_params(config)
 
-    # Upload original config to S3
     _put_s3_yaml(run_id, "config.yaml", config)
+    with ThreadPoolExecutor(max_workers=UPLOAD_THREADS) as pool:
+        list(pool.map(lambda i: _put_s3_yaml(run_id, f"jobs/{i}/config.yaml", jobs[i][1]), range(job_count)))
 
-    # Upload per-job configs to S3
-    for i, (_, cfg) in enumerate(jobs):
-        _put_s3_yaml(run_id, f"jobs/{i}/config.yaml", cfg)
-
-    # Write META record to DynamoDB
     meta_item: dict = {
         "run_id": run_id,
         "sk": "META",
@@ -125,47 +154,35 @@ def handler(event: dict, context) -> dict:
     if scenarios:
         meta_item["scenarios"] = scenarios
     environment = [{"name": k.upper(), "value": v} for k, v in sources.items() if v]
+    # Rows go in before the job exists: its first state changes arrive within seconds and update them. Job rows
+    # carry no submitted_at, which keeps them out of the status index the list reads.
     _table.put_item(Item=meta_item)
+    with _table.batch_writer() as writer:
+        for i, (scenario_name, cfg) in enumerate(jobs):
+            job_item: dict = {
+                "run_id": run_id,
+                "sk": f"JOB#{i:04d}",
+                "status": "SUBMITTED",
+                "array_index": i,
+                "config_params": {k: get_param_value(cfg, k) for k in params},
+                "ttl": _ttl(),
+            }
+            if scenario_name:
+                job_item["scenario"] = scenario_name
+            writer.put_item(Item=job_item)
 
-    # Submit individual Batch jobs and write JOB# records
-    batch_job_ids = []
-    for i, (scenario_name, cfg) in enumerate(jobs):
-        resp = _batch.submit_job(
-            jobName=f"backtest-{run_id}-{i}",
-            jobQueue=BATCH_JOB_QUEUE,
-            jobDefinition=BATCH_JOB_DEFINITION,
-            containerOverrides={
-                "environment": [
-                    {"name": "RUN_ID", "value": run_id},
-                    {"name": "S3_BUCKET", "value": S3_BUCKET},
-                    *environment,
-                    {"name": "JOB_INDEX", "value": str(i)},
-                ]
-            },
-            retryStrategy={"attempts": 2},
-        )
-        job_id = resp["jobId"]
-        batch_job_ids.append(job_id)
-
-        job_item: dict = {
-            "run_id": run_id,
-            "sk": f"JOB#{i:04d}",
-            "status": "SUBMITTED",
-            "submitted_at": now,
-            "array_index": i,
-            "batch_job_id": job_id,
-            "config_params": {k: get_param_value(cfg, k) for k in params},
-            "ttl": _ttl(),
-        }
-        if scenario_name:
-            job_item["scenario"] = scenario_name
-        _table.put_item(Item=job_item)
+    try:
+        batch_job_id = _batch.submit_job(**submit_job_kwargs(run_id, job_count, environment))["jobId"]
+    except Exception as e:
+        _set_meta(run_id, {"status": "FAILED", "error": f"Batch submit failed: {e}"})
+        raise
+    _set_meta(run_id, {"batch_job_id": batch_job_id})
 
     return create_response(200, {
         "run_id": run_id,
         "job_count": job_count,
         "status": "SUBMITTED",
-        "batch_job_id": batch_job_ids[0] if batch_job_ids else None,
+        "batch_job_id": batch_job_id,
     })
 
 

@@ -88,7 +88,7 @@ class FakeTable:
     def batch_writer(self):
         yield self
 
-    def get_item(self, Key):
+    def get_item(self, Key, ConsistentRead=False):
         item = self.items.get((Key["run_id"], Key["sk"]))
         return {"Item": dict(item)} if item else {}
 
@@ -97,19 +97,34 @@ class FakeTable:
         return {"Items": [dict(v) for (r, _), v in sorted(self.items.items()) if r == run_id]}
 
     def update_item(self, Key, UpdateExpression, ExpressionAttributeValues, ExpressionAttributeNames=None,
-                    ConditionExpression=None):
+                    ConditionExpression=None, ReturnValues=None):
         names = ExpressionAttributeNames or {}
+        values = ExpressionAttributeValues
         key = (Key["run_id"], Key["sk"])
         item = self.items.get(key)
         if ConditionExpression:
             if item is None:
                 raise _Exceptions.ConditionalCheckFailedException()
             current = item.get("status")
-            allowed = [v for k, v in ExpressionAttributeValues.items() if k.startswith(":from")]
-            finished = [ExpressionAttributeValues.get(":succeeded"), ExpressionAttributeValues.get(":failed")]
-            if (allowed and current not in allowed) or (not allowed and current in finished):
+            allowed = [v for k, v in values.items() if k.startswith(":from")]
+            finished = [values.get(":succeeded"), values.get(":failed")]
+            if "contains(" in ConditionExpression:
+                field = ConditionExpression.split("contains(")[1].split(",")[0]
+                if values[":i"] in item.get(field, set()):
+                    raise _Exceptions.ConditionalCheckFailedException()
+            elif (allowed and current not in allowed) or (not allowed and current in finished):
                 raise _Exceptions.ConditionalCheckFailedException()
         item = self.items.setdefault(key, dict(Key))
-        for assignment in UpdateExpression.removeprefix("SET ").split(", "):
-            field, value = (s.strip() for s in assignment.split("="))
-            item[names.get(field, field)] = ExpressionAttributeValues[value]
+        action, _, clauses = UpdateExpression.partition(" ")
+        for clause in clauses.split(", "):
+            if action == "SET":
+                field, value = (s.strip() for s in clause.split("="))
+                item[names.get(field, field)] = values[value]
+            else:
+                field, value = clause.split()
+                current = item.get(field)
+                if isinstance(values[value], set):
+                    item[field] = (current or set()) | values[value]
+                else:
+                    item[field] = (current or 0) + values[value]
+        return {"Attributes": dict(item)} if ReturnValues == "ALL_NEW" else {}

@@ -6,6 +6,7 @@ import os
 from decimal import Decimal
 
 import boto3
+from batch_runs import FINISHED_INDEXES
 from boto3.dynamodb.conditions import Key
 from utils import create_response
 
@@ -36,17 +37,24 @@ def _cloudwatch_log_url(log_stream_name: str) -> str:
     return f"{base}#logsV2:log-groups/log-group/{encoded_group}/log-events/{encoded_stream}"
 
 
-def _presigned_report_url(run_id: str, array_index: int) -> str | None:
-    key = f"backtests/{run_id}/jobs/{array_index}/report.html"
-    try:
-        _s3.head_object(Bucket=S3_BUCKET, Key=key)
-        return _s3.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": S3_BUCKET, "Key": key},
-            ExpiresIn=3600,
-        )
-    except Exception:
-        return None
+def _report_url(run_id: str, array_index: int) -> str:
+    # Presigning is local, with no request to S3, so a run of a thousand jobs costs nothing here.
+    return _s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": S3_BUCKET, "Key": f"backtests/{run_id}/jobs/{array_index}/report.html"},
+        ExpiresIn=3600,
+    )
+
+
+def _query_run(run_id: str) -> list[dict]:
+    kwargs = {"KeyConditionExpression": Key("run_id").eq(run_id)}
+    rows = []
+    while True:
+        response = _table.query(**kwargs)
+        rows += response.get("Items", [])
+        if "LastEvaluatedKey" not in response:
+            return rows
+        kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
 
 
 def handler(event: dict, context) -> dict:
@@ -59,10 +67,7 @@ def handler(event: dict, context) -> dict:
     if not run_id:
         return create_response(400, {"error": "run_id is required"})
 
-    response = _table.query(
-        KeyConditionExpression=Key("run_id").eq(run_id),
-    )
-    items = _decimal_to_native(response.get("Items", []))
+    items = _decimal_to_native(_query_run(run_id))
 
     meta = next((i for i in items if i.get("sk") == "META"), None)
     if not meta:
@@ -73,11 +78,11 @@ def handler(event: dict, context) -> dict:
         key=lambda i: i.get("array_index", 0),
     )
 
-    # Add presigned report URLs and CloudWatch log links for each job
+    meta.pop(FINISHED_INDEXES, None)
     for job in jobs:
-        idx = job.get("array_index", 0)
-        if job.get("status") == "SUCCEEDED":
-            job["report_url"] = _presigned_report_url(run_id, idx)
+        # A job writes its summary alongside its report, and the status handler stores the summary only when found.
+        if job.get("status") == "SUCCEEDED" and job.get("summary"):
+            job["report_url"] = _report_url(run_id, job.get("array_index", 0))
         if log_stream_name := job.get("log_stream_name"):
             job["log_url"] = _cloudwatch_log_url(log_stream_name)
 

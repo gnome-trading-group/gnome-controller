@@ -3,10 +3,9 @@ every task has finished."""
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from batch_runs import array_task, finish_task, set_run_status
 
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
 
@@ -23,30 +22,6 @@ STATUS = {
     "SUCCEEDED": "SUCCEEDED",
     "FAILED": "FAILED",
 }
-
-
-def task_event(detail: dict) -> tuple[str, int] | None:
-    """(run_id, array index) of a task's event; None for the array parent and for other jobs."""
-    name = detail.get("jobName", "")
-    if not name.startswith("research-"):
-        return None
-    array = detail.get("arrayProperties") or {}
-    if "index" in array:
-        return name[len("research-"):], int(array["index"])
-    # The parent of an array job reports a size; its children report their own states.
-    if "size" in array:
-        return None
-    return name[len("research-"):], 0
-
-
-def run_status(task_statuses: list[str], task_count: int) -> str | None:
-    """The run's final status, or None while any task is unfinished."""
-    if len(task_statuses) < task_count or not set(task_statuses) <= TERMINAL:
-        return None
-    failed = task_statuses.count("FAILED")
-    if failed == 0:
-        return "COMPLETED"
-    return "FAILED" if failed == task_count else "PARTIALLY_FAILED"
 
 
 def _update_task(run_id: str, index: int, detail: dict) -> None:
@@ -85,58 +60,16 @@ def _update_task(run_id: str, index: int, detail: dict) -> None:
         pass
 
 
-def _set_run_status(run_id: str, status: str, allowed_from: tuple[str, ...], stamp: str) -> None:
-    values: dict = {":s": status, ":t": datetime.now(timezone.utc).isoformat(),
-                    **{f":from{i}": s for i, s in enumerate(allowed_from)}}
-    try:
-        _table.update_item(
-            Key={"run_id": run_id, "sk": "META"},
-            UpdateExpression=f"SET #st = :s, {stamp} = :t",
-            ConditionExpression=f"#st IN ({', '.join(f':from{i}' for i in range(len(allowed_from)))})",
-            ExpressionAttributeNames={"#st": "status"},
-            ExpressionAttributeValues=values,
-        )
-    except _table.meta.client.exceptions.ConditionalCheckFailedException:
-        pass
-
-
-def _set_counts(run_id: str, succeeded: int, failed: int) -> None:
-    _table.update_item(
-        Key={"run_id": run_id, "sk": "META"},
-        UpdateExpression="SET succeeded_count = :sc, failed_count = :fc",
-        ExpressionAttributeValues={":sc": succeeded, ":fc": failed},
-    )
-
-
-def _on_task_finished(run_id: str) -> None:
-    """Recount the run's finished tasks, so a run in progress shows them, and finalize it once all have."""
-    kwargs = {"KeyConditionExpression": Key("run_id").eq(run_id), "ConsistentRead": True}
-    rows = []
-    while True:
-        response = _table.query(**kwargs)
-        rows += response.get("Items", [])
-        if "LastEvaluatedKey" not in response:
-            break
-        kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
-    meta = next((r for r in rows if r["sk"] == "META"), None)
-    if meta is None:
-        return
-    statuses = [r["status"] for r in rows if r["sk"].startswith("TASK#")]
-    _set_counts(run_id, statuses.count("SUCCEEDED"), statuses.count("FAILED"))
-    final = run_status(statuses, int(meta["task_count"]))
-    if final:
-        _set_run_status(run_id, final, ("SUBMITTED", "RUNNING"), "finished_at")
-
-
 def handler(event: dict, context) -> None:
     detail = event.get("detail") or {}
-    task = task_event(detail)
+    task = array_task(detail, "research-")
     if task is None:
         return
     run_id, index = task
     _update_task(run_id, index, detail)
     status = STATUS.get(detail.get("status", ""))
     if status == "RUNNING":
-        _set_run_status(run_id, "RUNNING", ("SUBMITTED",), "started_at")
+        set_run_status(_table, run_id, "RUNNING", ("SUBMITTED",), "started_at")
     elif status in TERMINAL:
-        _on_task_finished(run_id)
+        finish_task(_table, run_id, index, status == "SUCCEEDED", ("succeeded_count", "failed_count"), "task_count",
+                    ("SUBMITTED", "RUNNING"))

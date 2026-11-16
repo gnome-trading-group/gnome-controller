@@ -50,7 +50,7 @@ export const METRIC_ORDER = [
   'tick_to_trade', 'cancel_race.lost', 'cancel_race.late',
   'strat.transit', 'strat.queue', 'strat.decision', 'oms.process', 'session.tick_to_order', 'gw.to_wire',
   'order_to_ack', 'cancel_to_ack',
-  'shard.venue_to_recv', 'shard.venue_hold', 'shard.venue_network', 'shard.decode', 'shard.wait', 'shard.send', 'feed.shard_wait', 'feed.network', 'paper.queue', 'paper.lag',
+  'shard.venue_to_recv', 'shard.venue_hold', 'shard.venue_network', 'shard.decode', 'shard.roll_hold', 'shard.wait', 'shard.send', 'feed.shard_wait', 'feed.network', 'paper.queue', 'paper.lag',
   'gw.transit', 'gw.queue', 'gw.budget_wait', 'gw.sign_send', 'venue.answer', 'gw.report_out',
 ];
 
@@ -71,7 +71,8 @@ export const METRIC_DESCRIPTIONS: Record<string, string> = {
   'shard.venue_to_recv': 'The venue\'s event time to the shard receiving it. On the venue\'s clock: watch the trend, not the level.',
   'shard.venue_hold': 'How long the venue held a message between its event and sending it, to the millisecond. Kalshi (one clock) and Lighter books (two of Lighter\'s servers\' clocks).',
   'shard.venue_network': 'The network from the venue to the shard: receipt minus the venue\'s send time. Kalshi and Lighter books; crosses clocks, to the millisecond.',
-  'shard.decode': 'The shard\'s reader: raw capture, decode, book update and encode, from receipt to its ring.',
+  'shard.decode': 'The shard\'s reader: copying the raw frame for capture, decode, book update and encode, from receipt to its ring.',
+  'shard.roll_hold': 'A record a connection roll published late, from what the replacing connection received while taking over: receipt to its ring. Counted here, not in the reader\'s time.',
   'shard.wait': 'A record waiting in the shard for the publisher\'s pass, held records included.',
   'shard.send': 'The publisher sending within its pass: the offer\'s return minus the pass start.',
   'feed.shard_wait': 'Time inside the shard, as a gateway reading it saw it.',

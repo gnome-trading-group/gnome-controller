@@ -74,3 +74,38 @@ def test_unrunnable_sources_are_refused(aws, body, message):
     assert res["statusCode"] == 400
     assert message in json.loads(res["body"])["error"]
     assert batch.submitted == []
+
+
+SWEEP = CONFIG.replace("PlatformCheck\n", "PlatformCheck\n  args: {}\n") + "sweep:\n  strategy:\n    spread: [1, 2, 3]\n"
+
+
+def test_a_sweep_is_one_array_job_with_a_row_and_config_per_job(aws, monkeypatch):
+    batch, table = aws
+    s3 = FakeS3()
+    monkeypatch.setattr(submit, "_s3", s3)
+    res = submit.handler({"body": json.dumps({"config": SWEEP})}, None)
+    assert res["statusCode"] == 200
+    assert len(batch.submitted) == 1
+    job = batch.submitted[0]
+    assert (job["jobName"], job["arrayProperties"]) == (f"backtest-{meta(table)['run_id']}", {"size": 3})
+    assert "JOB_INDEX" not in env(batch), "each child reads its own AWS_BATCH_JOB_ARRAY_INDEX"
+    jobs = sorted(sk for (_, sk) in table.items if sk.startswith("JOB#"))
+    assert jobs == ["JOB#0000", "JOB#0001", "JOB#0002"]
+    assert all("submitted_at" not in table.items[(r, sk)] for (r, sk) in table.items if sk.startswith("JOB#")), \
+        "job rows stay out of the status index"
+    assert sum(k.endswith("/config.yaml") and "/jobs/" in k for k in s3.objects) == 3
+    assert meta(table)["batch_job_id"] == "job-1"
+
+
+def test_a_single_job_is_a_plain_job(aws):
+    batch, _ = aws
+    assert post({})["statusCode"] == 200
+    assert "arrayProperties" not in batch.submitted[0]
+
+
+def test_a_failed_batch_submit_marks_the_run_failed(aws, monkeypatch):
+    _, table = aws
+    monkeypatch.setattr(submit, "_batch", FakeBatch(fail=True))
+    with pytest.raises(RuntimeError):
+        post({})
+    assert meta(table)["status"] == "FAILED"

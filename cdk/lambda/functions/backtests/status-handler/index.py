@@ -5,11 +5,10 @@ from __future__ import annotations
 import json
 import math
 import os
-from datetime import datetime, timezone
 from decimal import Decimal
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from batch_runs import array_task, finish_task, set_run_status
 
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
 S3_BUCKET = os.environ["S3_BUCKET"]
@@ -29,31 +28,6 @@ STATUS = {
     "SUCCEEDED": "SUCCEEDED",
     "FAILED": "FAILED",
 }
-
-
-def job_event(detail: dict) -> tuple[str, int] | None:
-    """(run_id, job index) of a backtest job's event, named backtest-<run_id>-<index>; None for other jobs."""
-    name = detail.get("jobName", "")
-    if not name.startswith("backtest-"):
-        return None
-    run_id, _, index = name[len("backtest-"):].rpartition("-")
-    if not run_id or not index.isdigit():
-        return None
-    return run_id, int(index)
-
-
-def run_status(job_statuses: list[str], job_count: int) -> str | None:
-    """The run's final status, or None while any job is unfinished."""
-    if len(job_statuses) < job_count or not set(job_statuses) <= TERMINAL:
-        return None
-    failed = job_statuses.count("FAILED")
-    if failed == 0:
-        return "COMPLETED"
-    return "FAILED" if failed == job_count else "PARTIALLY_FAILED"
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _read_summary(run_id: str, index: int) -> dict:
@@ -129,54 +103,16 @@ def _update_job(run_id: str, index: int, detail: dict) -> None:
         pass
 
 
-def _set_run_status(run_id: str, status: str, allowed_from: tuple[str, ...], stamp: str) -> None:
-    values: dict = {":s": status, ":t": _now(), **{f":from{i}": s for i, s in enumerate(allowed_from)}}
-    try:
-        _table.update_item(
-            Key={"run_id": run_id, "sk": "META"},
-            UpdateExpression=f"SET #st = :s, {stamp} = :t",
-            ConditionExpression=f"#st IN ({', '.join(f':from{i}' for i in range(len(allowed_from)))})",
-            ExpressionAttributeNames={"#st": "status"},
-            ExpressionAttributeValues=values,
-        )
-    except _table.meta.client.exceptions.ConditionalCheckFailedException:
-        pass
-
-
-def _on_job_finished(run_id: str) -> None:
-    """Recount the run's finished jobs, so a run in progress shows them, and finalize it once all have."""
-    kwargs = {"KeyConditionExpression": Key("run_id").eq(run_id), "ConsistentRead": True}
-    rows = []
-    while True:
-        response = _table.query(**kwargs)
-        rows += response.get("Items", [])
-        if "LastEvaluatedKey" not in response:
-            break
-        kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
-    meta = next((r for r in rows if r["sk"] == "META"), None)
-    if meta is None:
-        return
-    statuses = [r["status"] for r in rows if r["sk"].startswith("JOB#")]
-    _table.update_item(
-        Key={"run_id": run_id, "sk": "META"},
-        UpdateExpression="SET completed_count = :cc, failed_count = :fc",
-        ExpressionAttributeValues={":cc": statuses.count("SUCCEEDED"), ":fc": statuses.count("FAILED")},
-    )
-    final = run_status(statuses, int(meta["job_count"]))
-    if final:
-        # A cancelled run stays CANCELLED as its terminated jobs fail.
-        _set_run_status(run_id, final, UNFINISHED_RUN, "finished_at")
-
-
 def handler(event: dict, context) -> None:
     detail = event.get("detail") or {}
-    job = job_event(detail)
+    job = array_task(detail, "backtest-")
     if job is None:
         return
     run_id, index = job
     _update_job(run_id, index, detail)
     status = STATUS.get(detail.get("status", ""))
     if status == "RUNNING":
-        _set_run_status(run_id, "RUNNING", ("SUBMITTED", "PENDING"), "started_at")
+        set_run_status(_table, run_id, "RUNNING", ("SUBMITTED", "PENDING"), "started_at")
     elif status in TERMINAL:
-        _on_job_finished(run_id)
+        finish_task(_table, run_id, index, status == "SUCCEEDED", ("completed_count", "failed_count"), "job_count",
+                    UNFINISHED_RUN)

@@ -48,6 +48,9 @@ import { TAIL_LINES, TaskDetailPanel } from '../../../components/batch/TaskDetai
 import { TaskGrid } from '../../../components/batch/TaskGrid';
 import { usePolledLoad } from '../../../components/batch/usePolledLoad';
 import {
+  HistogramBin, PER_JOB_CHART_MAX, histogram, pollIntervalMs, runFingerprint,
+} from '../../../components/batch/largeRuns';
+import {
   TaskFilter, isRunActive, isTaskFinished, runElapsedMs, taskElapsedMs, taskMatches,
 } from '../../../components/batch/status';
 
@@ -66,7 +69,10 @@ const HEADERS: Record<string, string> = {
 };
 
 const EXPLORABLE = new Set<BacktestStatus>(['COMPLETED', 'PARTIALLY_FAILED']);
-const POLL_INTERVAL_MS = 10000;
+
+const runPollMs = (r: BacktestRun) => pollIntervalMs(r.jobs?.length ?? 0);
+const backtestFingerprint = (r: BacktestRun) =>
+  runFingerprint(r.status, [r.completedCount, r.failedCount], (r.jobs ?? []).map(j => j.status));
 
 const FILTERS: { value: TaskFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -78,6 +84,10 @@ const FILTERS: { value: TaskFilter; label: string }[] = [
 
 function toCamelWords(key: string): string {
   return key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).trim();
+}
+
+function formatPnl(v: number): string {
+  return Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2);
 }
 
 function jobLabel(job: BacktestJob): string {
@@ -115,8 +125,8 @@ function BacktestDetail() {
   const load = useCallback(() => controllerApi.getBacktest(runId ?? ''), [runId]);
   const inProgress = useCallback((r: BacktestRun) =>
     isRunActive(r.status) || (r.jobs ?? []).some(j => !isTaskFinished(j.status)), []);
-  const { data: run, loading, error, failing, lastUpdated, live, refresh } =
-    usePolledLoad(load, inProgress, POLL_INTERVAL_MS, 'Failed to load backtest');
+  const { data: run, loading, error, failing, lastUpdated, live, pollMs, refresh } =
+    usePolledLoad(load, inProgress, runPollMs, 'Failed to load backtest', backtestFingerprint);
 
   const jobs = useMemo(() => run?.jobs ?? [], [run]);
   const shown = useMemo(() => jobs.filter(j => taskMatches(filter, j.status)), [jobs, filter]);
@@ -146,16 +156,22 @@ function BacktestDetail() {
     return colors;
   }, [run?.scenarios]);
 
+  const finished = useMemo(() => jobs.filter((j) => j.finalPnl !== undefined), [jobs]);
+  const perJobChart = finished.length <= PER_JOB_CHART_MAX;
   const chartData = useMemo(() =>
-    jobs
-      .filter((j) => j.finalPnl !== undefined)
-      .map((j) => ({
+    perJobChart
+      ? finished.map((j) => ({
         label: jobLabel(j) || `job ${j.arrayIndex}`,
         pnl: j.finalPnl ?? 0,
         positive: (j.finalPnl ?? 0) >= 0,
         scenario: j.scenario ?? '',
-      })),
-    [jobs],
+      }))
+      : [],
+    [finished, perJobChart],
+  );
+  const pnlBins = useMemo(
+    () => (perJobChart ? [] : histogram(finished.map((j) => j.finalPnl ?? 0))),
+    [finished, perJobChart],
   );
 
   const summaryKeys = useMemo(() => {
@@ -359,7 +375,7 @@ function BacktestDetail() {
         badges={run && <RunStatusBadge status={run.status} />}
         actions={(
           <>
-            {live && <LastUpdated at={lastUpdated} intervalMs={POLL_INTERVAL_MS} failing={failing} />}
+            {live && pollMs !== null && <LastUpdated at={lastUpdated} intervalMs={pollMs} failing={failing} />}
             {run && isRunActive(run.status) && (
               <Button size="sm" color="red" variant="light" leftSection={<IconX size={14} />} onClick={() => setCancelOpen(true)}>
                 Cancel
@@ -520,6 +536,35 @@ function BacktestDetail() {
                     }
                     opacity={entry.positive ? 1 : 0.65}
                   />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
+
+      {pnlBins.length > 0 && (
+        <Card withBorder mb="md" p="md">
+          <Group justify="space-between" mb="sm">
+            <Text fw={500}>PnL distribution</Text>
+            <Text size="xs" c="dimmed">{finished.length} jobs · sort the table by PnL for the best and worst</Text>
+          </Group>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={pnlBins} margin={{ top: 4, right: 8, bottom: 4, left: 0 }} barCategoryGap={1}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <XAxis dataKey="from" tick={{ fontSize: 10 }} tickFormatter={(v: number) => formatPnl(v)} minTickGap={24} />
+              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+              <RechartsTooltip
+                labelFormatter={(_, payload) => {
+                  const bin = payload?.[0]?.payload as HistogramBin | undefined;
+                  return bin ? `${formatPnl(bin.from)} to ${formatPnl(bin.to)}` : '';
+                }}
+                formatter={(value) => [value, 'Jobs']}
+                contentStyle={{ background: '#1a1b1e', border: '1px solid #373a40' }}
+              />
+              <Bar dataKey="count" isAnimationActive={false}>
+                {pnlBins.map((bin, i) => (
+                  <Cell key={i} fill={bin.from + bin.to >= 0 ? '#2f9e44' : '#c92a2a'} />
                 ))}
               </Bar>
             </BarChart>

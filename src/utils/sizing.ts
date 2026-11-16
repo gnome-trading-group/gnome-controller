@@ -24,8 +24,6 @@ export const INSTANCE_TYPES: InstanceType[] = [
   { value: 'c7i.large', vcpus: 2, memoryGb: 4, isolatedCpus: 0 },
   { value: 'c7i.xlarge', vcpus: 4, memoryGb: 8, isolatedCpus: 0 },
   { value: 'c7i.4xlarge', vcpus: 16, memoryGb: 32, isolatedCpus: 12 },
-  { value: 'c7i.8xlarge', vcpus: 32, memoryGb: 64, isolatedCpus: 28 },
-  { value: 'c7i.12xlarge', vcpus: 48, memoryGb: 96, isolatedCpus: 44 },
 ];
 
 export function instanceTypeOptions(profile: LatencyProfile): { value: string; label: string }[] {

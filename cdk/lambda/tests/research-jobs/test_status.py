@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from batch_runs import final_status
 from conftest import load
 from fakes import FakeBatch, FakeTable
 
@@ -13,6 +14,7 @@ cancel = load("cancel")
 
 def rows(statuses, run_status="SUBMITTED"):
     meta = {"run_id": "r1", "sk": "META", "status": run_status, "task_count": len(statuses),
+            "succeeded_count": 0, "failed_count": 0,
             "submitted_at": "2026-10-20T00:00:00+00:00", "batch_job_id": "job-1"}
     return [meta] + [{"run_id": "r1", "sk": f"TASK#{i:04d}", "status": s, "array_index": i}
                      for i, s in enumerate(statuses)]
@@ -35,22 +37,14 @@ def table(monkeypatch):
     return make
 
 
-def test_children_and_plain_jobs_are_tasks_but_the_array_parent_is_not():
-    assert status.task_event(batch_event("RUNNING", 7)["detail"]) == ("r1", 7)
-    assert status.task_event(batch_event("RUNNING")["detail"]) == ("r1", 0)
-    assert status.task_event({"jobName": "research-r1", "arrayProperties": {"size": 13}}) is None
-    assert status.task_event({"jobName": "backtest-r1-0"}) is None
-
-
-@pytest.mark.parametrize("statuses, expected", [
-    (["SUCCEEDED", "SUCCEEDED"], "COMPLETED"),
-    (["SUCCEEDED", "FAILED"], "PARTIALLY_FAILED"),
-    (["FAILED", "FAILED"], "FAILED"),
-    (["SUCCEEDED", "RUNNING"], None),
-    (["SUCCEEDED"], None),
+@pytest.mark.parametrize("succeeded, failed, expected", [
+    (2, 0, "COMPLETED"),
+    (1, 1, "PARTIALLY_FAILED"),
+    (0, 2, "FAILED"),
+    (1, 0, None),
 ])
-def test_a_run_finishes_only_when_every_task_has(statuses, expected):
-    assert status.run_status(statuses, 2) == expected
+def test_a_run_finishes_only_when_every_task_has(succeeded, failed, expected):
+    assert final_status(succeeded, failed, 2) == expected
 
 
 def test_a_run_goes_running_then_completes_as_its_tasks_finish(table):
@@ -107,11 +101,14 @@ def test_get_returns_tasks_in_order_with_their_logs_and_outputs(table):
     assert get.handler({"pathParameters": {"runId": "nope"}}, None)["statusCode"] == 404
 
 
-def test_list_returns_runs_newest_first(monkeypatch):
-    class Scan:
-        def scan(self, **kwargs):
-            return {"Items": [{"run_id": "old", "submitted_at": "2026-10-01"}, {"run_id": "new", "submitted_at": "2026-10-20"}]}
+def test_list_returns_runs_newest_first_across_statuses(monkeypatch):
+    class Index:
+        def query(self, **kwargs):
+            status = kwargs["KeyConditionExpression"].get_expression()["values"][1]
+            runs = {"COMPLETED": [{"run_id": "old", "sk": "META", "submitted_at": "2026-10-01"}],
+                    "RUNNING": [{"run_id": "new", "sk": "META", "submitted_at": "2026-10-20"}]}
+            return {"Items": runs.get(status, [])}
 
-    monkeypatch.setattr(listing, "_table", Scan())
+    monkeypatch.setattr(listing, "_table", Index())
     body = json.loads(listing.handler({"queryStringParameters": {"limit": "1"}}, None)["body"])
     assert [r["run_id"] for r in body["runs"]] == ["new"]

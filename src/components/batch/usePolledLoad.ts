@@ -10,16 +10,20 @@ export interface PolledLoad<T> {
   failing: boolean;
   lastUpdated: Date | null;
   live: boolean;
+  // The current poll interval, null until the first load.
+  pollMs: number | null;
   refresh: (silent?: boolean) => Promise<void>;
 }
 
 // Loads once, then re-loads every intervalMs for as long as shouldPoll says the data can still change. `load` must be
-// stable (useCallback) — a new one starts over.
+// stable (useCallback) — a new one starts over. intervalMs may depend on the data (a large run polls less often), and
+// a poll whose `fingerprint` matches the data shown keeps the old object, so the page doesn't redraw for nothing.
 export function usePolledLoad<T>(
   load: () => Promise<T>,
   shouldPoll: (data: T) => boolean,
-  intervalMs: number,
+  intervalMs: number | ((data: T) => number),
   failureMessage: string,
+  fingerprint?: (data: T) => string,
 ): PolledLoad<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,7 +41,7 @@ export function usePolledLoad<T>(
     try {
       const result = await load();
       if (!isCurrent()) return;
-      setData(result);
+      setData(prev => (prev !== null && fingerprint && fingerprint(prev) === fingerprint(result) ? prev : result));
       setLastUpdated(new Date());
       setFailing(false);
       setError(null);
@@ -49,7 +53,7 @@ export function usePolledLoad<T>(
       // Not gated on silent: a superseded load skips this, so the newest must clear a spinner it didn't start.
       if (isCurrent()) setLoading(false);
     }
-  }, [load, begin, failureMessage]);
+  }, [load, begin, failureMessage, fingerprint]);
 
   useEffect(() => {
     setData(null);
@@ -58,11 +62,12 @@ export function usePolledLoad<T>(
   }, [refresh]);
 
   const live = data !== null && shouldPoll(data);
+  const pollMs = data === null ? null : typeof intervalMs === 'function' ? intervalMs(data) : intervalMs;
   useEffect(() => {
-    if (!live) return;
-    const interval = setInterval(() => refresh(true), intervalMs);
+    if (!live || pollMs === null) return;
+    const interval = setInterval(() => refresh(true), pollMs);
     return () => clearInterval(interval);
-  }, [live, refresh, intervalMs]);
+  }, [live, refresh, pollMs]);
 
-  return { data, loading, error, failing, lastUpdated, live, refresh };
+  return { data, loading, error, failing, lastUpdated, live, pollMs, refresh };
 }

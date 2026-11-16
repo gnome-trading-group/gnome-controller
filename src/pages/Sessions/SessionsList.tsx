@@ -241,6 +241,8 @@ function SessionsList() {
     enableRowActions: true,
     positionActionsColumn: 'last' as const,
     enableColumnFilters: false,
+    // The registry has no text search over sessions; the status and strategy selects are the filters.
+    enableGlobalFilter: false,
     initialState: { density: 'xs' },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
     mantineTableBodyRowProps: ({ row }: { row: MRT_Row<StrategySession> }) => (

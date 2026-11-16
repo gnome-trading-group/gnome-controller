@@ -14,7 +14,6 @@ export interface BacktestJob {
   sk: string;
   arrayIndex: number;
   status: JobStatus;
-  submittedAt: string;
   configParams: Record<string, string>;
   scenario?: string;
   finalPnl?: number;

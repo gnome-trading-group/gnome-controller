@@ -6,6 +6,7 @@ from decimal import Decimal
 from urllib.parse import quote
 
 import boto3
+from batch_runs import FINISHED_INDEXES
 from boto3.dynamodb.conditions import Key
 from utils import create_response
 
@@ -65,6 +66,7 @@ def describe(run_id: str, rows: list[dict]) -> dict | None:
         task["s3_console_url"] = s3_console_url(prefix)
         if stream := task.get("log_stream_name"):
             task["log_url"] = cloudwatch_log_url(stream)
+    meta.pop(FINISHED_INDEXES, None)
     meta["s3_console_url"] = s3_console_url(f"research-jobs/runs/{run_id}/")
     return {**meta, "tasks": tasks}
 
