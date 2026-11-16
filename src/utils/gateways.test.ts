@@ -3,7 +3,8 @@ import { Alert } from '../types/alerts';
 import { GatewayAccountMinute, GatewayStatus } from '../types/gateways';
 import { StrategySession } from '../types/strategy-sessions';
 import {
-  accountTotals, formatMicros, gatewayHealth, isGatewayAlert, linkedSessions, logGroupUrl, rollPlan, rollUnderWay, shares,
+  accountTotals, formatMicros, gatewayHealth, isGatewayAlert, linkedSessions, logGroupUrl, paperVenues, rollPlan, rollUnderWay,
+  shares,
   WANT_WINDOW_MS,
 } from './gateways';
 
@@ -140,6 +141,25 @@ describe('rolling a gateway', () => {
     expect(intl.warnings[0]).toContain('cancelling every order first');
     expect(rollPlan(gateway({ endpoint: up, rollTargetVersion: '1.37.4' }), NOW).warnings).toEqual([
       'It already runs 1.37.4: the roll restarts it in place.',
+    ]);
+  });
+});
+
+describe('paperVenues', () => {
+  it("lists each venue's running paper instances in order, busiest venue first, live and stopped ones left out", () => {
+    const paper = (gatewayKey: string, state: string | null) =>
+      gateway({ gatewayKey, mode: 'paper', endpoint: state ? endpoint(state) : null });
+
+    expect(paperVenues([
+      paper('paper:polymarket_us:main', 'READY'),
+      paper('paper:kalshi:10', 'READY'),
+      paper('paper:kalshi:2', 'DEGRADED'),
+      paper('paper:kalshi:main', 'READY'),
+      paper('paper:kalshi:3', null),
+      gateway({ endpoint: endpoint('READY') }),
+    ], NOW)).toEqual([
+      { exchange: 'kalshi', running: ['main', '2', '10'] },
+      { exchange: 'polymarket_us', running: ['main'] },
     ]);
   });
 });

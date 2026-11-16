@@ -8,14 +8,15 @@ import { IconExternalLink, IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis,
+  CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis,
 } from 'recharts';
 import { keys, POLL, useActiveSessions, useAlerts, useGatewayStatus } from '../../../query/hooks';
 import { ReasonConfirmModal } from '../../../components/ReasonConfirmModal';
 import { PageHeader } from '../../../components/PageHeader';
 import { LastUpdated } from '../../../components/LastUpdated';
 import { Kpi, ModeBadge } from '../../../components/trading/layout';
-import { GatewayAccountMinutes, GatewayPaperMinute, GatewayStatus } from '../../../types/gateways';
+import { GatewayAccountMinutes, GatewayPaperLoad, GatewayPaperMinute, GatewayStatus } from '../../../types/gateways';
+import { PaperGatewayCapacity } from '../../../components/gateways/PaperGatewayCapacity';
 import { formatDuration } from '../../../utils/format';
 import { registryApi, samplesConfigured } from '../../../utils/api';
 import { GatewayPerformance } from './GatewayPerformance';
@@ -29,10 +30,12 @@ const TOOLTIP_STYLE = { background: '#1a1b1e', border: '1px solid #373a40' };
 
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-function MinuteChart({ data, lines, unit }: {
-  data: Record<string, number>[];
+function MinuteChart({ data, lines, unit, references = [] }: {
+  data: Record<string, number | undefined>[];
   lines: { key: string; name: string; color: string }[];
   unit?: string;
+  // Horizontal lines for a limit, e.g. a cap or the overload threshold.
+  references?: { y: number; label: string; color: string }[];
 }) {
   return (
     <ResponsiveContainer width="100%" height={200}>
@@ -42,6 +45,10 @@ function MinuteChart({ data, lines, unit }: {
         <YAxis tick={{ fontSize: 11 }} unit={unit} width={56} />
         <RechartsTooltip labelFormatter={(v) => clock(Number(v))} contentStyle={TOOLTIP_STYLE} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
+        {references.map((r) => (
+          <ReferenceLine key={r.label} y={r.y} stroke={r.color} strokeDasharray="4 4"
+            label={{ value: r.label, position: 'insideTopRight', fontSize: 10, fill: r.color }} />
+        ))}
         {lines.map((l) => (
           <Line key={l.key} type="monotone" dataKey={l.key} name={l.name} stroke={l.color} dot={false} isAnimationActive={false} />
         ))}
@@ -135,20 +142,37 @@ function AccountCard({ account }: { account: GatewayAccountMinutes }) {
   );
 }
 
-// A paper gateway's simulated venue: how far its books trailed the market, and how many sessions it carried.
-function PaperCard({ minutes }: { minutes: GatewayPaperMinute[] }) {
+// Over this share of new records later than 5 ms, the books' lag p99 is past 5 ms (PAPER_GATEWAY_OVERLOADED after five
+// minutes of it).
+const LATE_SHARE_LIMIT_PCT = 1;
+
+// A paper gateway's simulated venue: its load against its caps, how far its books trailed the market, how many
+// sessions it carried and turned away.
+function PaperCard({ minutes, load }: { minutes: GatewayPaperMinute[]; load: GatewayPaperLoad | null | undefined }) {
   const worst = Math.max(0, ...minutes.map((m) => m.lagMaxMs));
   const last = lastOf(minutes);
+  // Minutes from a release before the gateway reported its load have none of these.
+  const reported = minutes.filter((m) => m.lateShare != null);
+  const lastReported = lastOf(reported);
+  const latePct = lastReported?.lateShare != null ? lastReported.lateShare * 100 : null;
   return (
     <Card withBorder>
       <Text fw={600} mb="sm">Simulated venue</Text>
-      <SimpleGrid cols={{ base: 2, sm: 4 }} mb="md">
+      <Text size="sm" c="dimmed" mb={4}>Capacity</Text>
+      <Stack mb="md"><PaperGatewayCapacity load={load} /></Stack>
+      <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} mb="md">
         <Kpi label="Books' lag" value={last ? `${last.lagMaxMs} ms` : '—'}
           hint="The oldest new market-data record any book took in the last minute, from the venue's receipt. Hundreds of ms every minute means the gateway can't keep up; a single spike is usually a shard moving." />
         <Kpi label="Worst this hour" value={`${worst} ms`} />
-        <Kpi label="Sessions" value={last?.sessions ?? '—'} hint="About 30 fit on one c7a.medium" />
+        <Kpi label="Sessions" value={last?.sessions ?? '—'}
+          hint="Sessions it simulates for; what fits is set by its books and streams caps above" />
         <Kpi label="Refused, no book data" value={last?.refusedNotReady ?? '—'}
           hint="New orders refused GATEWAY_NOT_READY because their book had no record yet, since the gateway started" />
+        <Kpi label="Late records" value={latePct == null ? '—'
+          : <Text span inherit c={latePct > LATE_SHARE_LIMIT_PCT ? 'red' : undefined}>{latePct.toFixed(2)}%</Text>}
+          hint="Of the last minute's new records, the share that reached the books more than 5 ms after the venue sent them. Over 1%, the books' lag p99 is past 5 ms; five minutes of that raises PAPER_GATEWAY_OVERLOADED." />
+        <Kpi label="Sessions refused for room" value={lastReported?.refusedForRoom ?? '—'}
+          hint="New sessions refused SESSION_CAP because they would take the gateway past its books or streams cap, since it started. Each is sent to another of the venue's paper gateways when it asks again." />
       </SimpleGrid>
       <SimpleGrid cols={{ base: 1, lg: 2 }}>
         <div>
@@ -156,6 +180,35 @@ function PaperCard({ minutes }: { minutes: GatewayPaperMinute[] }) {
           <MinuteChart data={minutes.map((m) => ({ endedAt: m.endedAt, lag: m.lagMaxMs }))} unit=" ms"
             lines={[{ key: 'lag', name: 'worst lag', color: '#fab005' }]} />
         </div>
+        {reported.length > 0 && (
+          <div>
+            <Text size="sm" c="dimmed" mb={4}>Records later than 5 ms</Text>
+            <MinuteChart data={reported.map((m) => ({ endedAt: m.endedAt, late: (m.lateShare ?? 0) * 100 }))} unit="%"
+              lines={[{ key: 'late', name: 'late share', color: '#fa5252' }]}
+              references={[{ y: LATE_SHARE_LIMIT_PCT, label: 'p99 past 5 ms', color: '#fa5252' }]} />
+          </div>
+        )}
+        {reported.length > 0 && (
+          <div>
+            <Text size="sm" c="dimmed" mb={4}>Books and streams</Text>
+            <MinuteChart data={reported.map((m) => ({ endedAt: m.endedAt, books: m.books, streams: m.streams }))}
+              lines={[
+                { key: 'books', name: 'books', color: '#7950f2' },
+                { key: 'streams', name: 'streams', color: '#15aabf' },
+              ]}
+              references={load ? [
+                { y: load.maxBooks, label: 'books cap', color: '#7950f2' },
+                { y: load.maxStreams, label: 'streams cap', color: '#15aabf' },
+              ] : []} />
+          </div>
+        )}
+        {reported.length > 0 && (
+          <div>
+            <Text size="sm" c="dimmed" mb={4}>Records per second</Text>
+            <MinuteChart data={reported.map((m) => ({ endedAt: m.endedAt, rate: m.recordsPerSecond }))}
+              lines={[{ key: 'rate', name: 'records/s', color: '#12b886' }]} />
+          </div>
+        )}
         <div>
           <Text size="sm" c="dimmed" mb={4}>Sessions and working orders</Text>
           <MinuteChart data={minutes.map((m) => ({ endedAt: m.endedAt, sessions: m.sessions, working: m.workingOrders }))}
@@ -312,7 +365,7 @@ function GatewayDetail() {
             <Tabs.Panel value="overview">
               <Stack gap="lg">
                 {g.mode === 'paper'
-                  ? g.minutes?.paper && <PaperCard minutes={g.minutes.paper.minutes} />
+                  ? g.minutes?.paper && <PaperCard minutes={g.minutes.paper.minutes} load={g.endpoint?.paper} />
                   : g.minutes?.accounts.map((a) => <AccountCard key={a.accountId} account={a} />)}
                 {!g.minutes && (
                   <Text size="sm" c="dimmed">

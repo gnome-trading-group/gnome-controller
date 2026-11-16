@@ -196,3 +196,27 @@ export function rollPhaseLabel(phase: GatewayRollPhase): { label: string; color:
     refused: { label: 'refused', color: 'gray' },
   }[phase];
 }
+
+/** A venue's paper gateways running now: a venue runs as many as its sessions need (`:main`, `:2`, ...). */
+export interface PaperVenue {
+  exchange: string;
+  running: string[];
+}
+
+/** The venues with a paper gateway running, each with the instances that run, busiest venue first. */
+export function paperVenues(gateways: GatewayStatus[], nowMs: number): PaperVenue[] {
+  const byVenue = new Map<string, string[]>();
+  for (const g of gateways) {
+    if (g.mode !== 'paper' || !gatewayHealth(g, nowMs).running) continue;
+    const exchange = g.gatewayKey.split(':')[1] ?? g.gatewayKey;
+    byVenue.set(exchange, [...(byVenue.get(exchange) ?? []), g.gatewayKey.split(':')[2] ?? '']);
+  }
+  return [...byVenue.entries()]
+    .map(([exchange, running]) => ({ exchange, running: running.sort(instanceOrder) }))
+    .sort((a, b) => b.running.length - a.running.length || a.exchange.localeCompare(b.exchange));
+}
+
+function instanceOrder(a: string, b: string): number {
+  const n = (instance: string) => (instance === 'main' ? 1 : Number(instance) || Number.MAX_SAFE_INTEGER);
+  return n(a) - n(b);
+}

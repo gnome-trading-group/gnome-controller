@@ -1,43 +1,7 @@
-import { Group, Progress, SimpleGrid, Stack, Text, Tooltip } from '@mantine/core';
+import { SimpleGrid, Stack, Text } from '@mantine/core';
+import { Cap, CapacityRow } from '../CapacityRow';
 import { ShardCaps } from '../../types/collection';
 import { ShardUsage } from '../../utils/collection';
-
-// Merges and relief leave shards at most this full, so a shard above it takes nothing more from them.
-const FILL_TARGET = 0.8;
-
-function fillColor(fill: number): string {
-  if (fill > 1) return 'red';
-  if (fill >= FILL_TARGET) return 'yellow';
-  return 'teal';
-}
-
-interface Cap {
-  label: string;
-  used: number | null;
-  max: number | undefined;
-  unit?: string;
-  help: string;
-}
-
-function CapRow({ cap, size }: { cap: Cap; size: 'xs' | 'sm' }) {
-  const fill = cap.used != null && cap.max ? cap.used / cap.max : null;
-  const used = cap.used == null ? '—' : Math.round(cap.used).toLocaleString();
-  const max = cap.max ? Math.round(cap.max).toLocaleString() : '—';
-  return (
-    <Tooltip withArrow multiline w={300} label={cap.help}>
-      <Stack gap={2}>
-        <Group justify="space-between" gap="xs" wrap="nowrap">
-          <Text size={size} c="dimmed">{cap.label}</Text>
-          <Text size={size} c={fill != null && fill > 1 ? 'red' : undefined}>
-            {used}/{max}{cap.unit ?? ''}{fill != null ? ` · ${Math.round(fill * 100)}%` : ''}
-          </Text>
-        </Group>
-        <Progress value={fill != null ? Math.min(fill, 1) * 100 : 0} color={fill != null ? fillColor(fill) : 'gray'}
-          size={size === 'xs' ? 4 : 8} />
-      </Stack>
-    </Tooltip>
-  );
-}
 
 /**
  * How full a shard is against its tier's caps: streams, published streams and records per second, as the reconciler
@@ -66,10 +30,10 @@ export function ShardCapacity({ usage, caps, compact = false }: {
   return (
     <Stack gap={compact ? 4 : 'xs'}>
       {compact
-        ? rows.map((cap) => <CapRow key={cap.label} cap={cap} size={size} />)
+        ? rows.map((cap) => <CapacityRow key={cap.label} cap={cap} size={size} />)
         : (
           <SimpleGrid cols={{ base: 1, sm: 3 }}>
-            {rows.map((cap) => <CapRow key={cap.label} cap={cap} size={size} />)}
+            {rows.map((cap) => <CapacityRow key={cap.label} cap={cap} size={size} />)}
           </SimpleGrid>
         )}
       {!caps && (

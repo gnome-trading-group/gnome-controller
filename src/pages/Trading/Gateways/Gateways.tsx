@@ -11,7 +11,10 @@ import { Kpi, KpiStrip, ModeBadge } from '../../../components/trading/layout';
 import { GatewayStatus } from '../../../types/gateways';
 import { StrategySession } from '../../../types/strategy-sessions';
 import { Alert } from '../../../types/alerts';
-import { formatMicros, GATEWAY_ALERT_TYPES, gatewayHealth, isGatewayAlert, lastOf, linkedSessions } from '../../../utils/gateways';
+import { PaperGatewayCapacity } from '../../../components/gateways/PaperGatewayCapacity';
+import {
+  formatMicros, GATEWAY_ALERT_TYPES, gatewayHealth, isGatewayAlert, lastOf, linkedSessions, paperVenues,
+} from '../../../utils/gateways';
 
 const OPEN_ALERTS = { status: ['FIRING' as const, 'PENDING' as const], type: GATEWAY_ALERT_TYPES, limit: 500 };
 
@@ -45,7 +48,7 @@ function lastMinute(g: GatewayStatus) {
 }
 
 const HOST_WINDOW_MS = 2 * 60_000;
-const COLUMNS = 10;
+const COLUMNS = 11;
 
 /** A running gateway's host from its newest runtime sample: CPU busy, and the process's memory. */
 function HostCell({ gatewayKey }: { gatewayKey: string }) {
@@ -96,6 +99,7 @@ function GatewayTable({ gateways, sessions, alerts, loading }: {
           <Table.Th>State</Table.Th>
           <Table.Th>Sessions</Table.Th>
           <Table.Th>Working orders</Table.Th>
+          <Table.Th>Load</Table.Th>
           <Table.Th>Last minute</Table.Th>
           <Table.Th>Host</Table.Th>
           <Table.Th>Release</Table.Th>
@@ -127,6 +131,11 @@ function GatewayTable({ gateways, sessions, alerts, loading }: {
                 </Group>
               </Table.Td>
               <Table.Td><Text size="sm">{g.endpoint?.workingOrders ?? '—'}</Text></Table.Td>
+              <Table.Td miw={140}>
+                {g.mode === 'paper' && health.running
+                  ? <PaperGatewayCapacity load={g.endpoint?.paper} compact />
+                  : <Text size="sm" c="dimmed">—</Text>}
+              </Table.Td>
               <Table.Td>{lastMinute(g)}</Table.Td>
               <Table.Td>
                 {health.running && samplesConfigured ? <HostCell gatewayKey={g.gatewayKey} /> : <Text size="sm" c="dimmed">—</Text>}
@@ -187,6 +196,14 @@ function Gateways() {
             <Group gap="xs" mb="sm">
               <ModeBadge mode={mode} />
               <Text fw={600}>{mode === 'live' ? 'Live gateways' : 'Paper gateways'}</Text>
+              {mode === 'paper' && paperVenues(list, now).map((v) => (
+                <Tooltip key={v.exchange} withArrow multiline w={300}
+                  label={`Running: ${v.running.join(', ')}. A venue runs as many paper gateways as its sessions need; a full one sends new sessions to the next.`}>
+                  <Badge variant="light" color={v.running.length > 1 ? 'violet' : 'gray'}>
+                    {v.exchange} × {v.running.length}
+                  </Badge>
+                </Tooltip>
+              ))}
             </Group>
             <GatewayTable gateways={list} sessions={sessions.data ?? []} alerts={alerts.data ?? []} loading={loading} />
           </Card>

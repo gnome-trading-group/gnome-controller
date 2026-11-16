@@ -14,6 +14,20 @@ export interface GatewayEndpoint {
   canHandOver: boolean;
   // Stopping for a roll, its orders left resting for the next process on its host.
   handover: boolean;
+  // When its process started; null from a release that doesn't say.
+  startedAt?: string | null;
+  // A paper gateway's load against its caps; null for a live one or a release that doesn't say.
+  paper?: GatewayPaperLoad | null;
+}
+
+// What a paper gateway carries against its caps. A book is a session's listing (heap); streams are the distinct ones its
+// shard reader reads every pass. A new session past either cap is refused and goes to another of the venue's instances.
+export interface GatewayPaperLoad {
+  books: number;
+  streams: number;
+  recordsPerSecond: number;
+  maxBooks: number;
+  maxStreams: number;
 }
 
 export type GatewayRollPhase = 'stopping' | 'starting' | 'rolling_back' | 'done' | 'rolled_back' | 'failed' | 'refused';
@@ -76,6 +90,14 @@ export interface GatewayPaperMinute {
   workingOrders: number;
   lagMaxMs: number;
   refusedNotReady: number;
+  // From releases that report their load: books, distinct streams, records/s over the minute, and the share of new
+  // records later than 5 ms (over 1%, the books' lag p99 is past 5 ms).
+  books?: number;
+  streams?: number;
+  recordsPerSecond?: number;
+  lateShare?: number;
+  // New sessions refused for room (past a cap), since the gateway started.
+  refusedForRoom?: number;
 }
 
 export interface GatewayMinutes {
