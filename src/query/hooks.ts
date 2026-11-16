@@ -3,6 +3,7 @@ import { keepPreviousData, useInfiniteQuery, useQueries, useQuery, useQueryClien
 import { collectionApi, controllerApi, registryApi, samplesApi, samplesConfigured, EventScope, LedgerFilters, LedgerScope, SampleQuery, SampleWindow } from '../utils/api';
 import { ACTIVE_SESSION_STATUSES, AlertFilters, isActiveSession, LedgerFill, LedgerOrder, Mode, PnlSeries, StrategySession } from '../types';
 import { mergeSeries } from './series';
+import { parseShardCaps } from '../utils/collection';
 import { TransferFilters } from '../types/treasury';
 
 // How often each kind of data is re-read while it can still change; nothing polls once a session has ended.
@@ -54,6 +55,7 @@ export const keys = {
   collectionTargets: ['collection', 'targets'] as const,
   collectionShards: (includeDeleted: boolean) => ['collection', 'shards', includeDeleted] as const,
   collectionShard: (shardId: string) => ['collection', 'shard', shardId] as const,
+  shardCaps: ['serviceConfig', 'market-data', 'shardCaps'] as const,
   shardLogs: (shardId: string, taskId: string) => ['collection', 'logs', shardId, taskId] as const,
   sessionLease: (sessionId: string) => ['collection', 'lease', sessionId] as const,
   transfers: (filters: TransferFilters) => ['treasury', 'transfers', filters] as const,
@@ -432,6 +434,15 @@ export function useCollectionShards(includeDeleted = false) {
 export function useCollectionShard(shardId: string) {
   return useQuery({
     queryKey: keys.collectionShard(shardId), queryFn: () => collectionApi.getShard(shardId), refetchInterval: COLLECTION_POLL,
+  });
+}
+
+/** Each tier's shard caps from the market-data Service Config, re-read every minute so an edit shows without a reload. */
+export function useShardCaps() {
+  return useQuery({
+    queryKey: keys.shardCaps,
+    queryFn: async () => parseShardCaps((await controllerApi.getServiceConfig('market-data')).config),
+    refetchInterval: 60_000,
   });
 }
 

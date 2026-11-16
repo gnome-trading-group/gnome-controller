@@ -3,11 +3,14 @@ import { Alert, Button, Card, Container, Group, SimpleGrid, Stack, Tabs, Text, T
 import { IconAlertTriangle, IconPlus, IconRefresh } from '@tabler/icons-react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  COLLECTION_POLL, keys, useCollectionShardDetails, useCollectionShards, useCollectionTargets, useStreamNames,
+  COLLECTION_POLL, keys, useCollectionShardDetails, useCollectionShards, useCollectionTargets, useShardCaps,
+  useStreamNames,
 } from '../../../query/hooks';
-import { CollectionRule, CollectionShard, ShardTaskStatus } from '../../../types/collection';
+import { CollectionRule, CollectionShard, ShardCaps, ShardTaskStatus } from '../../../types/collection';
 import { collectionApi } from '../../../utils/api';
-import { attentionItems, collectionCounts, currentStatus, shardHealth, ShardHealthLevel } from '../../../utils/collection';
+import {
+  attentionItems, capsForTier, collectionCounts, currentStatus, shardHealth, ShardHealthLevel,
+} from '../../../utils/collection';
 import { LastUpdated } from '../../../components/LastUpdated';
 import { Kpi } from '../../../components/trading/layout';
 import { ShardCard } from '../../../components/collection/ShardCard';
@@ -20,7 +23,9 @@ interface ShardRead {
   asOfMs: number;
 }
 
-function ShardGrid({ shards, reads }: { shards: CollectionShard[]; reads: Map<string, ShardRead> }) {
+function ShardGrid({ shards, reads, caps }: {
+  shards: CollectionShard[]; reads: Map<string, ShardRead>; caps: Map<string, ShardCaps> | null | undefined;
+}) {
   const byRegion = new Map<string, CollectionShard[]>();
   shards.forEach((s) => byRegion.set(s.region, [...(byRegion.get(s.region) ?? []), s]));
   if (shards.length === 0) {
@@ -33,7 +38,8 @@ function ShardGrid({ shards, reads }: { shards: CollectionShard[]; reads: Map<st
           <Text size="sm" fw={600} c="dimmed">{region}</Text>
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 4 }}>
             {list.map((s) => (
-              <ShardCard key={s.shardId} shard={s} status={reads.get(s.shardId)?.status} asOfMs={reads.get(s.shardId)?.asOfMs ?? 0} />
+              <ShardCard key={s.shardId} shard={s} status={reads.get(s.shardId)?.status} asOfMs={reads.get(s.shardId)?.asOfMs ?? 0}
+                caps={capsForTier(caps, s.tier)} />
             ))}
           </SimpleGrid>
         </Stack>
@@ -50,6 +56,7 @@ function Collection() {
   const shards = useCollectionShards();
   const liveShards = (shards.data ?? []).filter((s) => s.state !== 'DELETED');
   const details = useCollectionShardDetails(liveShards.map((s) => s.shardId));
+  const caps = useShardCaps();
   const names = useStreamNames((targets.data ?? []).map((t) => t.streamId));
   const [editing, setEditing] = useState<CollectionRule | null>(null);
   const [creating, setCreating] = useState(false);
@@ -129,7 +136,7 @@ function Collection() {
       )}
 
       <Title order={4} mb="sm">Shards</Title>
-      <ShardGrid shards={liveShards} reads={reads} />
+      <ShardGrid shards={liveShards} reads={reads} caps={caps.data} />
 
       <Tabs defaultValue="streams" keepMounted={false} mt="xl">
         <Tabs.List mb="md">

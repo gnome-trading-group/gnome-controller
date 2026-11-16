@@ -109,6 +109,9 @@ export interface ShardStreamStatus {
   lastVerifiedNs: number;
   resyncs: number;
   records: number;
+  // Collected records per second over the last minute; absent before the shard's second status, or on a release that
+  // doesn't report it.
+  recordsPerSecond?: number;
   // Whether a session leases it, so the shard sends it over Aeron; and what reached or missed that publication.
   published?: boolean;
   offered?: number;
@@ -133,6 +136,13 @@ export interface ShardTaskStatus {
   streams: ShardStreamStatus[];
   transitionsRecorded: number;
   transitions: ShardTransition[];
+}
+
+/** What one shard of a tier may carry (Service Config market-data shard_caps). */
+export interface ShardCaps {
+  maxStreams: number;
+  maxPublished: number;
+  maxRecordsPerSecond: number;
 }
 
 export interface ShardDetail {

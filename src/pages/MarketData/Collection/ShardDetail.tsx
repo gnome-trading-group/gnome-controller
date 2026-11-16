@@ -2,8 +2,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, Badge, Container, Group, SimpleGrid, Stack, Tabs, Text, Tooltip } from '@mantine/core';
 import ReactTimeAgo from 'react-time-ago';
 import { IconExternalLink } from '@tabler/icons-react';
-import { COLLECTION_POLL, useCollectionShard, useStreamNames } from '../../../query/hooks';
-import { currentStatus, isCovered, nsToDate, processLine, ProcessLine, shardStreams } from '../../../utils/collection';
+import { COLLECTION_POLL, useCollectionShard, useShardCaps, useStreamNames } from '../../../query/hooks';
+import {
+  capsForTier, currentStatus, isCovered, nsToDate, processLine, ProcessLine, shardStreams, shardUsage,
+} from '../../../utils/collection';
+import { ShardCapacity } from '../../../components/collection/ShardCapacity';
 import { PageHeader } from '../../../components/PageHeader';
 import { LastUpdated } from '../../../components/LastUpdated';
 import { Kpi } from '../../../components/trading/layout';
@@ -32,6 +35,7 @@ function ShardDetail() {
   const { shardId = '' } = useParams();
   const navigate = useNavigate();
   const detail = useCollectionShard(shardId);
+  const caps = useShardCaps();
   const shard = detail.data?.shard;
   const statuses = [...(detail.data?.statuses ?? [])].sort((a, b) => b.writtenAtNs - a.writtenAtNs);
   const status = currentStatus(statuses);
@@ -101,6 +105,7 @@ function ShardDetail() {
               footer={gcMsTotal(p) != null ? `GC ${gcMsTotal(p)} ms total` : undefined} />
           </SimpleGrid>
           <StateBar states={rows.map((r) => r.state)} height={10} />
+          <ShardCapacity usage={shardUsage(shard, status)} caps={capsForTier(caps.data, shard.tier)} />
           {!status && (
             <Alert color="gray" variant="light">
               No status yet: its task hasn&apos;t started (a host is launching, or the image is downloading), or it can&apos;t

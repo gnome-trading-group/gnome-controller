@@ -86,6 +86,14 @@ export function ShardStreamsTab({ rows, names }: { rows: ShardStreamRow[]; names
       Cell: ({ row }) => <Sent row={row.original} />,
     },
     {
+      id: 'rate', header: 'Records/s', size: 110, enableColumnFilter: false, mantineTableBodyCellProps: { ta: 'right' },
+      accessorFn: (r) => r.status?.recordsPerSecond ?? -1,
+      Cell: ({ row }) => {
+        const rate = row.original.status?.recordsPerSecond;
+        return rate == null ? <Text size="sm" c="dimmed">—</Text> : <Text size="sm">{rate.toFixed(rate < 10 ? 2 : 0)}</Text>;
+      },
+    },
+    {
       id: 'records', header: 'Records', size: 110, enableColumnFilter: false, mantineTableBodyCellProps: { ta: 'right' },
       accessorFn: (r) => r.status?.records ?? 0, Cell: ({ cell }) => cell.getValue<number>().toLocaleString(),
     },

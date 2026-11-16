@@ -1,13 +1,14 @@
 import { Badge, Card, Group, Stack, Text } from '@mantine/core';
 import { Link } from 'react-router-dom';
-import { CollectionShard, ShardTaskStatus } from '../../types/collection';
-import { shardStreams } from '../../utils/collection';
+import { CollectionShard, ShardCaps, ShardTaskStatus } from '../../types/collection';
+import { shardStreams, shardUsage } from '../../utils/collection';
+import { ShardCapacity } from './ShardCapacity';
 import { ShardHealth } from './ShardHealth';
 import { StateBar } from './StateBar';
 
 // One shard at a glance: what it is, whether it's alive, and how its streams are doing. Links to the shard.
-export function ShardCard({ shard, status, asOfMs }: {
-  shard: CollectionShard; status: ShardTaskStatus | null | undefined; asOfMs: number;
+export function ShardCard({ shard, status, asOfMs, caps }: {
+  shard: CollectionShard; status: ShardTaskStatus | null | undefined; asOfMs: number; caps: ShardCaps | null;
 }) {
   const rows = shardStreams(shard, status ?? null);
   const reconnecting = (status?.connections ?? []).filter((c) => c.reconnecting).length;
@@ -25,6 +26,7 @@ export function ShardCard({ shard, status, asOfMs }: {
         </Group>
         <ShardHealth status={status} createdAtNs={shard.createdAtNs} asOfMs={asOfMs} />
         <StateBar states={rows.map((r) => r.state)} />
+        <ShardCapacity usage={shardUsage(shard, status)} caps={caps} compact />
         <Group justify="space-between">
           <Text size="xs" c="dimmed">
             {shard.streams.length} streams{shard.draining.length ? ` · ${shard.draining.length} draining` : ''}

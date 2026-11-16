@@ -3,8 +3,9 @@ import {
   CollectionRule, CollectionShard, CollectionTarget, ShardStreamStatus, ShardTaskStatus, StreamCoverage, WARMING,
 } from '../types/collection';
 import {
-  attentionItems, collectionCounts, coverageSegments, currentStatus, cutTime, handoffStep, parseStreamIds, ruleCriteria,
-  ruleSelection, ruleStreamCount, segmentTime, shardHealth, shardStreams, stateCounts,
+  attentionItems, capsForTier, collectionCounts, coverageSegments, currentStatus, cutTime, handoffStep, parseShardCaps,
+  parseStreamIds, ruleCriteria, ruleSelection, ruleStreamCount, segmentTime, shardHealth, shardStreams, shardUsage,
+  stateCounts,
 } from './collection';
 
 const MIN = 60_000;
@@ -187,5 +188,51 @@ describe('coverageSegments', () => {
     }), 10 * MIN, 60 * MIN, 45 * MIN);
 
     expect(segments.map(s => [s.kind, s.startMs / MIN, s.endMs / MIN])).toEqual([['covered', 30, 45]]);
+  });
+});
+
+describe('shardUsage', () => {
+  it('counts streams owned or draining once, published from publish, and sums the reported rates', () => {
+    const s = shard({ streams: [1, 2, 3], draining: [3, 4], publish: [2, 4] });
+
+    expect(shardUsage(s, status(0, [
+      { id: 1, recordsPerSecond: 12.5 }, { id: 2, recordsPerSecond: 0 }, { id: 4, recordsPerSecond: 0.5 }, { id: 3 },
+    ]))).toEqual({ streams: 4, published: 2, recordsPerSecond: 13 });
+  });
+
+  it('has no rate when the status reports none, or there is no status', () => {
+    const s = shard({ streams: [1] });
+
+    expect(shardUsage(s, status(0, [{ id: 1 }])).recordsPerSecond).toBeNull();
+    expect(shardUsage(s, null).recordsPerSecond).toBeNull();
+  });
+});
+
+describe('parseShardCaps', () => {
+  const config = {
+    shard_caps: {
+      standard: { max_streams: 900, max_published: 400, max_records_per_second: 2000 },
+      low_latency: { max_streams: 900, max_published: 300, max_records_per_second: 50000 },
+      broken: { max_streams: 0, max_published: 1, max_records_per_second: 1 },
+    },
+  };
+
+  it('reads each tier, skipping one with a cap at or below zero', () => {
+    const caps = parseShardCaps(config);
+
+    expect(caps?.get('low_latency')).toEqual({ maxStreams: 900, maxPublished: 300, maxRecordsPerSecond: 50000 });
+    expect(caps?.has('broken')).toBe(false);
+  });
+
+  it('is null before the config has shard_caps', () => {
+    expect(parseShardCaps({ max_shards: [] })).toBeNull();
+    expect(parseShardCaps(undefined)).toBeNull();
+  });
+
+  it('gives an unlisted tier standard caps, as the reconciler does', () => {
+    const caps = parseShardCaps(config);
+
+    expect(capsForTier(caps, 'something_new')).toEqual(caps?.get('standard'));
+    expect(capsForTier(null, 'standard')).toBeNull();
   });
 });

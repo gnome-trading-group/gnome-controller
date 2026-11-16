@@ -1,5 +1,5 @@
 import {
-  CollectionRule, CollectionShard, CollectionTarget, ShardStreamStatus, ShardTaskStatus, StreamCoverage, WARMING,
+  CollectionRule, CollectionShard, CollectionTarget, ShardCaps, ShardStreamStatus, ShardTaskStatus, StreamCoverage, WARMING,
 } from '../types/collection';
 
 const NANOS_PER_MS = 1_000_000;
@@ -299,3 +299,47 @@ export function coverageSegments(coverage: StreamCoverage, fromMs: number, toMs:
 export function segmentTime(segments: CoverageSegment[], kind: SegmentKind): number {
   return segments.filter(s => s.kind === kind).reduce((sum, s) => sum + s.endMs - s.startMs, 0);
 }
+
+/** A shard's load as the reconciler counts it: streams owned or draining, those it publishes, and their summed rate. */
+export interface ShardUsage {
+  streams: number;
+  published: number;
+  // Null when its status reports no rates: a release before them, or a status not read yet.
+  recordsPerSecond: number | null;
+}
+
+export function shardUsage(shard: CollectionShard, status: ShardTaskStatus | null | undefined): ShardUsage {
+  const rated = (status?.streams ?? []).filter((s) => s.recordsPerSecond != null);
+  return {
+    streams: new Set([...shard.streams, ...shard.draining]).size,
+    published: shard.publish.length,
+    recordsPerSecond: rated.length ? rated.reduce((sum, s) => sum + (s.recordsPerSecond ?? 0), 0) : null,
+  };
+}
+
+const STANDARD_TIER = 'standard';
+
+/**
+ * Each tier's caps from the market-data Service Config; null when it has none yet (the reconciler adds the defaults
+ * the first time a release that knows them reads the config).
+ */
+export function parseShardCaps(config: Record<string, unknown> | undefined): Map<string, ShardCaps> | null {
+  const raw = config?.shard_caps;
+  if (!raw || typeof raw !== 'object') return null;
+  const caps = new Map<string, ShardCaps>();
+  Object.entries(raw as Record<string, Record<string, unknown>>).forEach(([tier, entry]) => {
+    const maxStreams = Number(entry?.max_streams);
+    const maxPublished = Number(entry?.max_published);
+    const maxRecordsPerSecond = Number(entry?.max_records_per_second);
+    if (maxStreams > 0 && maxPublished > 0 && maxRecordsPerSecond > 0) {
+      caps.set(tier, { maxStreams, maxPublished, maxRecordsPerSecond });
+    }
+  });
+  return caps.size ? caps : null;
+}
+
+/** The tier's caps, or standard's for a tier the config doesn't list, as the reconciler takes them. */
+export function capsForTier(caps: Map<string, ShardCaps> | null | undefined, tier: string): ShardCaps | null {
+  return caps?.get(tier) ?? caps?.get(STANDARD_TIER) ?? null;
+}
+
