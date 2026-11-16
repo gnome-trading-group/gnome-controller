@@ -59,11 +59,15 @@ import {
 const MISSING_FRACTION_KEY = 'market_data_missing_fraction';
 
 // Estimated venue rewards (gnomepy's summary): shown, and ranked by, only for a run whose jobs earned some.
-const REWARDS_TOTAL_KEY = 'rewardsEstimatedTotal';
-const PNL_WITH_REWARDS_KEY = 'finalPnlWithRewardsEstimated';
-const DEFAULT_METRICS = ['finalPnl', 'sharpe', 'sortino', 'fillCount', 'totalFees'];
+const PNL_KEY = 'final_pnl';
+const REWARDS_TOTAL_KEY = 'rewards_estimated_total';
+const PNL_WITH_REWARDS_KEY = 'final_pnl_with_rewards_estimated';
+const DEFAULT_METRICS = [PNL_KEY, 'sharpe', 'sortino', 'fill_count', 'total_fees'];
 const REWARD_METRICS = [REWARDS_TOTAL_KEY, PNL_WITH_REWARDS_KEY];
 const HEADERS: Record<string, string> = {
+  [PNL_KEY]: 'PnL',
+  fill_count: 'Fills',
+  total_fees: 'Fees',
   [REWARDS_TOTAL_KEY]: 'Rewards (est.)',
   [PNL_WITH_REWARDS_KEY]: 'PnL + rewards (est.)',
 };
@@ -82,12 +86,12 @@ const FILTERS: { value: TaskFilter; label: string }[] = [
   { value: 'succeeded', label: 'Succeeded' },
 ];
 
-function toCamelWords(key: string): string {
-  return key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).trim();
+function toWords(key: string): string {
+  return key.split('_').filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
 }
 
-function formatPnl(v: number): string {
-  return Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2);
+function formatMetric(v: number): string {
+  return v.toLocaleString(undefined, Number.isInteger(v) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function jobLabel(job: BacktestJob): string {
@@ -119,7 +123,7 @@ function BacktestDetail() {
   const [logsFor, setLogsFor] = useState<number | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
-  const [sorting, setSorting] = useState<MRT_SortingState>([{ id: 'summary_finalPnl', desc: true }]);
+  const [sorting, setSorting] = useState<MRT_SortingState>([{ id: `summary_${PNL_KEY}`, desc: true }]);
   const [visibilityInitialized, setVisibilityInitialized] = useState(false);
 
   const load = useCallback(() => controllerApi.getBacktest(runId ?? ''), [runId]);
@@ -189,13 +193,13 @@ function BacktestDetail() {
   const metricColumns = useMemo<MRT_ColumnDef<BacktestJob>[]>(() =>
     summaryKeys.map((key) => ({
       id: `summary_${key}`,
-      header: HEADERS[key] ?? toCamelWords(key),
+      header: HEADERS[key] ?? toWords(key),
       size: 110,
       accessorFn: (row) => row.summary?.[key],
       Cell: ({ cell }) => {
         const v = cell.getValue() as number | string | undefined;
         if (v === undefined) return <Text c="dimmed" size="sm">—</Text>;
-        return <Text size="sm">{typeof v === 'number' ? v : String(v)}</Text>;
+        return <Text size="sm">{typeof v === 'number' ? formatMetric(v) : String(v)}</Text>;
       },
     })),
     [summaryKeys],
@@ -522,7 +526,7 @@ function BacktestDetail() {
               />
               <YAxis tick={{ fontSize: 11 }} />
               <RechartsTooltip
-                formatter={(value) => [typeof value === 'number' ? value.toFixed(4) : value, 'PnL']}
+                formatter={(value) => [typeof value === 'number' ? formatMetric(value) : value, 'PnL']}
                 contentStyle={{ background: '#1a1b1e', border: '1px solid #373a40' }}
               />
               <Bar dataKey="pnl" radius={[3, 3, 0, 0]}>
@@ -552,12 +556,12 @@ function BacktestDetail() {
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={pnlBins} margin={{ top: 4, right: 8, bottom: 4, left: 0 }} barCategoryGap={1}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-              <XAxis dataKey="from" tick={{ fontSize: 10 }} tickFormatter={(v: number) => formatPnl(v)} minTickGap={24} />
+              <XAxis dataKey="from" tick={{ fontSize: 10 }} tickFormatter={(v: number) => formatMetric(v)} minTickGap={24} />
               <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
               <RechartsTooltip
                 labelFormatter={(_, payload) => {
                   const bin = payload?.[0]?.payload as HistogramBin | undefined;
-                  return bin ? `${formatPnl(bin.from)} to ${formatPnl(bin.to)}` : '';
+                  return bin ? `${formatMetric(bin.from)} to ${formatMetric(bin.to)}` : '';
                 }}
                 formatter={(value) => [value, 'Jobs']}
                 contentStyle={{ background: '#1a1b1e', border: '1px solid #373a40' }}
