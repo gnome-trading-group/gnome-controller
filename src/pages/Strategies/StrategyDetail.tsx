@@ -45,6 +45,8 @@ import { PerformancePanel } from '../../components/trading/PerformancePanel';
 import { GroupPositions } from '../../components/trading/GroupPositions';
 import { PositionsTable } from '../../components/trading/PositionsTable';
 import { FillsTable, OrdersTable } from '../../components/trading/LedgerTables';
+import { RoleFilter } from '../../components/trading/RoleBadge';
+import { useRoleParam } from '../../hooks/useRoleParam';
 import { AdjustPositionModal } from '../../components/trading/AdjustPositionModal';
 import { usePageTitleLabels } from '../../context/PageTitleContext';
 
@@ -103,8 +105,10 @@ function StrategyDetail() {
   const scope = { strategyId: id, mode };
   const positionsView = params.get('view') === 'groups' ? 'groups' : 'listings';
   const groupPositions = useGroupPositions({ strategyId: id, mode }, tab === 'positions' && positionsView === 'groups', true);
-  const fills = useFills(scope, { live: true, enabled: tab === 'fills' });
-  const orders = useOrders(scope, { live: true, enabled: tab === 'orders' }, 'ANY');
+  const [role, setRole] = useRoleParam();
+  const ledgerFilters = role ? { role } : {};
+  const fills = useFills(scope, { live: true, enabled: tab === 'fills' }, ledgerFilters);
+  const orders = useOrders(scope, { live: true, enabled: tab === 'orders' }, 'ANY', ledgerFilters);
 
   const [deployOpen, setDeployOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -412,12 +416,14 @@ function StrategyDetail() {
           <MantineReactTable table={sessionTable} />
         </Tabs.Panel>
         <Tabs.Panel value="fills">
+          <Group justify="flex-end" mb="xs"><RoleFilter value={role} onChange={setRole} /></Group>
           <FillsTable
             rows={fills.data ?? []} loading={fills.isLoading} showSession
             hasMore={!!fills.hasNextPage} loadingMore={fills.isFetchingNextPage} onLoadMore={() => fills.fetchNextPage()}
           />
         </Tabs.Panel>
         <Tabs.Panel value="orders">
+          <Group justify="flex-end" mb="xs"><RoleFilter value={role} onChange={setRole} /></Group>
           <OrdersTable
             rows={orders.data ?? []} loading={orders.isLoading} showSession
             hasMore={!!orders.hasNextPage} loadingMore={orders.isFetchingNextPage} onLoadMore={() => orders.fetchNextPage()}

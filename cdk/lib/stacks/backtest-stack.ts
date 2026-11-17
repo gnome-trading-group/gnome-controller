@@ -15,6 +15,7 @@ import {
   API_KEY_SECRET_NAMES, CallerKind, GnomeApiAuthorizer, lookupPlatformNetwork, Stage,
 } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
+import { grantResearchDatasetRead } from "../research-datasets";
 
 export interface BacktestStackProps extends cdk.StackProps {
   stage: Stage;
@@ -101,6 +102,8 @@ export class BacktestStack extends cdk.Stack {
       actions: ["secretsmanager:GetSecretValue"],
       resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:gnomepy/gh-token*`],
     }));
+    // A research strategy may read datasets while it runs (rt_maker reads rt_reviews and rt_scores).
+    grantResearchDatasetRead(this, batchJobRole);
     // gnomepy reads the registry's and market-data API's keys from their mirrors: the registry for listings and
     // streams, market-data for where a backtest's data is missing.
     batchJobRole.addToPolicy(new iam.PolicyStatement({

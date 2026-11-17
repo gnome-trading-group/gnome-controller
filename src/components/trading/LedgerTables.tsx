@@ -3,9 +3,12 @@ import { Anchor, Badge, Button, Group, Text, Tooltip } from '@mantine/core';
 import { MantineReactTable, MRT_ColumnDef, MRT_RowData, useMantineReactTable } from 'mantine-react-table';
 import { Link } from 'react-router-dom';
 import { LedgerFill, LedgerOrder } from '../../types';
+import { EpisodeRef } from '../../query/hooks';
 import { formatDuration } from '../../utils/format';
 import { ListingLabel, Money, Price, Qty, SideLabel, Time } from './values';
+import { EpisodeDrawer } from './EpisodeDrawer';
 import { OrderDrawer } from './OrderDrawer';
+import { RoleBadge } from './RoleBadge';
 
 const SOURCE_COLORS: Record<string, string> = {
   VENUE: 'gray', RECOVERY: 'blue', RESET: 'red', ADJUSTMENT: 'orange', MANUAL: 'yellow', SETTLEMENT: 'violet', GAP: 'red',
@@ -69,7 +72,14 @@ function useLedgerTable<T extends MRT_RowData>(
   });
 }
 
+// A fill's order is in the session that sent it, which a recovered fill names as its origin.
+function fillEpisode(fill: LedgerFill): EpisodeRef | null {
+  const sessionId = fill.source === 'RECOVERY' ? fill.originSessionId : fill.sessionId;
+  return sessionId && fill.orderEpisodeId ? { sessionId, episodeId: fill.orderEpisodeId } : null;
+}
+
 export function FillsTable(props: PagedTableProps<LedgerFill>) {
+  const [episode, setEpisode] = useState<EpisodeRef | null>(null);
   const columns = useMemo<MRT_ColumnDef<LedgerFill>[]>(() => {
     const cols: MRT_ColumnDef<LedgerFill>[] = [
       { id: 'time', header: 'Time', size: 190, Cell: ({ row }) => <Time value={row.original.recordedAt} precision="ms" size="sm" /> },
@@ -91,6 +101,13 @@ export function FillsTable(props: PagedTableProps<LedgerFill>) {
         Cell: ({ row }) => row.original.liquidity
           ? <Badge size="xs" variant="light" color={row.original.liquidity === 'MAKER' ? 'teal' : 'orange'}>{row.original.liquidity === 'MAKER' ? 'maker' : 'taker'}</Badge>
           : <Text span c="dimmed">—</Text>,
+      },
+      {
+        id: 'role', header: 'For', size: 70,
+        Cell: ({ row }) => {
+          const ref = fillEpisode(row.original);
+          return <RoleBadge role={row.original.orderRole} episodeId={ref?.episodeId} onOpenEpisode={() => setEpisode(ref)} />;
+        },
       },
       {
         id: 'mark', header: 'Mark then', size: 85, ...right,
@@ -119,7 +136,12 @@ export function FillsTable(props: PagedTableProps<LedgerFill>) {
     return cols;
   }, [props.showSession]);
   const table = useLedgerTable(columns, props, 'No fills yet.', row => row.fillId);
-  return <MantineReactTable table={table} />;
+  return (
+    <>
+      <MantineReactTable table={table} />
+      <EpisodeDrawer episode={episode} onClose={() => setEpisode(null)} />
+    </>
+  );
 }
 
 function OrderStatus({ order }: { order: LedgerOrder }) {
@@ -139,6 +161,7 @@ function OrderStatus({ order }: { order: LedgerOrder }) {
 }
 
 export function OrdersTable(props: PagedTableProps<LedgerOrder>) {
+  const [episode, setEpisode] = useState<EpisodeRef | null>(null);
   const columns = useMemo<MRT_ColumnDef<LedgerOrder>[]>(() => {
     const cols: MRT_ColumnDef<LedgerOrder>[] = [
       { id: 'opened', header: 'Opened', size: 190, Cell: ({ row }) => <Time value={row.original.openedAt} precision="ms" size="sm" /> },
@@ -149,6 +172,14 @@ export function OrdersTable(props: PagedTableProps<LedgerOrder>) {
     cols.push(
       { id: 'listing', header: 'Listing', size: 130, Cell: ({ row }) => <ListingLabel listingId={row.original.listingId} symbol={row.original.symbol} /> },
       { id: 'side', header: 'Side', size: 60, Cell: ({ row }) => <SideLabel side={row.original.side} /> },
+      {
+        id: 'role', header: 'For', size: 70,
+        Cell: ({ row }) => {
+          const { sessionId, episodeId } = row.original;
+          return <RoleBadge role={row.original.role} episodeId={episodeId}
+            onOpenEpisode={() => episodeId && setEpisode({ sessionId, episodeId })} />;
+        },
+      },
       {
         id: 'price', header: 'Price', size: 80, ...right,
         Cell: ({ row }) => row.original.price === null
@@ -195,6 +226,7 @@ export function OrdersTable(props: PagedTableProps<LedgerOrder>) {
     <>
       <MantineReactTable table={table} />
       <OrderDrawer order={current} onClose={() => setSelected(null)} />
+      <EpisodeDrawer episode={episode} onClose={() => setEpisode(null)} />
     </>
   );
 }

@@ -29,6 +29,8 @@ import { ChartView, PnlChart } from '../../components/trading/PnlChart';
 import { PositionsTable } from '../../components/trading/PositionsTable';
 import { GroupPositions } from '../../components/trading/GroupPositions';
 import { FillsTable, OrdersTable } from '../../components/trading/LedgerTables';
+import { RoleFilter } from '../../components/trading/RoleBadge';
+import { useRoleParam } from '../../hooks/useRoleParam';
 import { StopSessionModal } from './StopSessionModal';
 import DeploySessionModal from './DeploySessionModal';
 import { SessionDetailsPanel } from './SessionDetailsPanel';
@@ -71,9 +73,11 @@ function SessionDetail() {
   const scope = { sessionId };
   const positionsView = params.get('view') === 'groups' ? 'groups' : 'listings';
   const groupPositions = useGroupPositions({ sessionId }, tab === 'positions' && positionsView === 'groups', live);
-  const openOrders = useOrders(scope, { live, enabled: tab === 'open' }, 'OPEN');
-  const fills = useFills(scope, { live, enabled: tab === 'fills' });
-  const orders = useOrders(scope, { live, enabled: tab === 'orders' }, 'ANY');
+  const [role, setRole] = useRoleParam();
+  const ledgerFilters = role ? { role } : {};
+  const openOrders = useOrders(scope, { live, enabled: tab === 'open' }, 'OPEN', ledgerFilters);
+  const fills = useFills(scope, { live, enabled: tab === 'fills' }, ledgerFilters);
+  const orders = useOrders(scope, { live, enabled: tab === 'orders' }, 'ANY', ledgerFilters);
   const logs = useQuery({
     queryKey: ['sessionLogs', sessionId],
     queryFn: () => registryApi.getSessionLogs(sessionId),
@@ -328,18 +332,21 @@ function SessionDetail() {
               )}
             </Tabs.Panel>
             <Tabs.Panel value="open">
+              <Group justify="flex-end" mb="xs"><RoleFilter value={role} onChange={setRole} /></Group>
               <OrdersTable
                 rows={openOrders.data ?? []} loading={openOrders.isLoading} showSession={false}
                 hasMore={!!openOrders.hasNextPage} loadingMore={openOrders.isFetchingNextPage} onLoadMore={() => openOrders.fetchNextPage()}
               />
             </Tabs.Panel>
             <Tabs.Panel value="fills">
+              <Group justify="flex-end" mb="xs"><RoleFilter value={role} onChange={setRole} /></Group>
               <FillsTable
                 rows={fills.data ?? []} loading={fills.isLoading} showSession={false}
                 hasMore={!!fills.hasNextPage} loadingMore={fills.isFetchingNextPage} onLoadMore={() => fills.fetchNextPage()}
               />
             </Tabs.Panel>
             <Tabs.Panel value="orders">
+              <Group justify="flex-end" mb="xs"><RoleFilter value={role} onChange={setRole} /></Group>
               <OrdersTable
                 rows={orders.data ?? []} loading={orders.isLoading} showSession={false}
                 hasMore={!!orders.hasNextPage} loadingMore={orders.isFetchingNextPage} onLoadMore={() => orders.fetchNextPage()}

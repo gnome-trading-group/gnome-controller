@@ -251,15 +251,21 @@ export interface RiskGroup {
   exchangeIds: number[];
   // Firm view only.
   strategyIds?: number[];
-  legs: { strategyId: number; eventId: number; eventTitle: string; outcome: string; held: HeldPosition }[];
+  // settlementPrice: what the contract settled at (price units), null while open.
+  legs: {
+    strategyId: number; eventId: number; eventTitle: string; outcome: string; settlementPrice: string | null; held: HeldPosition;
+  }[];
   current: string;
-  // Worst first. paysListingIds: the legs paying $1 in it; paying: the net contracts paying (shorts count against).
-  worlds: { label: string; paysListingIds: number[]; pnl: string; change: string; paying: string }[];
+  // Worst first, consistent with every settlement so far. paysListingIds: the legs paying $1 in it; paying: the net
+  // contracts paying (shorts count against).
+  worlds: GroupWorld[];
+  // Worlds against what has already settled on some venue: they happen only if a venue still open settles differently.
+  divergent: GroupWorld[];
   // Every leg paid by its venue's void rule, when the venues void differently or a relationship is flagged so.
   void: { pnl: string; change: string } | null;
   // The worst world: what the group makes however it settles, if the venues settle it alike.
   locked: string | null;
-  // The lower of locked and void.
+  // The lowest of locked, void and divergent.
   worst: string | null;
   best: string | null;
   // The spread of net contracts paying across worlds: 0 when fully hedged.
@@ -268,6 +274,14 @@ export interface RiskGroup {
   flags: string[];
   // Too many contracts to list its worlds.
   tooLarge: boolean;
+}
+
+export interface GroupWorld {
+  label: string;
+  paysListingIds: number[];
+  pnl: string;
+  change: string;
+  paying: string;
 }
 
 export interface GroupPositions {
@@ -355,6 +369,8 @@ export interface LedgerFill {
   realizedPnlAfter: string | null;
   actor: string | null;
   reason: string | null;
+  // When it traded, by the venue's clock (epoch ns; earlier rows may carry none).
+  eventTimeNs: string | null;
   recordedAt: string;
   symbol: string | null;
   exchangeId: number | null;
@@ -362,7 +378,14 @@ export interface LedgerFill {
   lotSize: string | null;
   markPrice: string | null;
   slippage: string | null;
+  // What the fill's order was for in its strategy (null: unstated, or a fill of no order) and its episode.
+  orderRole: OrderRole | null;
+  orderEpisodeId: string | null;
 }
+
+// What an order was for in its strategy: a resting quote, a hedge completing a fill, an arbitrage leg, a trade closing
+// inventory.
+export type OrderRole = 'QUOTE' | 'HEDGE' | 'ARB_LEG' | 'EXIT';
 
 export interface LedgerOrder {
   orderSeq: string;
@@ -390,6 +413,10 @@ export interface LedgerOrder {
   fillQty: string;
   avgFillPrice: string | null;
   fees: string;
+  role: OrderRole | null;
+  // The strategy's id for orders that belong together, and the time in force sent.
+  episodeId: string | null;
+  timeInForce: 'GOOD_TILL_CANCELED' | 'IMMEDIATE_OR_CANCELED' | 'FILL_OR_KILL' | null;
 }
 
 export interface LedgerPage<T> {

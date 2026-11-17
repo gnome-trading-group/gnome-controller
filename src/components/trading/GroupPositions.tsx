@@ -21,6 +21,8 @@ const HISTORY: GroupStatus[] = ['exited', 'settled'];
 type Filter = 'all' | 'awaiting' | 'open' | 'history';
 const FILTERS: Filter[] = ['awaiting', 'open', 'history'];
 
+const DOLLAR = 1_000_000_000n;
+
 const STATUS_LABELS: Record<GroupStatus, string> = {
   awaiting: 'Awaiting settlement',
   open: 'Open',
@@ -37,6 +39,8 @@ const FLAG_NOTES: Record<string, string> = {
   DEADLINE_TIMEZONE_DIFFERS: 'Venues state their deadlines in different time zones',
   OBSERVATION_TIME_DIFFERS: 'Venues observe the result at different times',
   VOTE_SCOPE_ASSUMED: 'Which vote counts was assumed',
+  SETTLED_DIFFERENTLY: 'Venues have already settled these contracts differently',
+  SETTLED_AT_FRACTION: 'A venue settled at neither $1 nor $0 (a void or tie price)',
 };
 
 export type Basis = 'lifetime' | 'session' | 'firm';
@@ -100,8 +104,25 @@ function capitalOf(group: RiskGroup) {
   return group.legs.reduce((sum, l) => sum + (capital(l.held.netQuantity, l.held.avgEntryPrice, '0', true) ?? 0n), 0n);
 }
 
+// Which venues have settled the group's contracts and which it still waits on, once at least one has.
+function settlementNote(group: RiskGroup, venue: (exchangeId: number | null) => string): string | null {
+  const settled = new Set(group.legs.filter(l => l.settlementPrice !== null).map(l => l.held.exchangeId));
+  const open = new Set(group.legs.filter(l => l.settlementPrice === null).map(l => l.held.exchangeId));
+  if (settled.size === 0 || open.size === 0) return null;
+  const names = (ids: Set<number | null>) => [...ids].map(venue).join(', ');
+  return `Settled on ${names(settled)}; waiting on ${names(open)}`;
+}
+
+function SettledBadge({ price }: { price: string | null }) {
+  if (price === null) return null;
+  const value = BigInt(price);
+  const label = value === DOLLAR ? 'paid $1' : value === 0n ? 'paid $0' : `settled ${(Number(value) / 1e9).toFixed(2)}`;
+  return <Badge size="xs" variant="light" color={value === DOLLAR ? 'teal' : 'gray'} ml={6}>{label}</Badge>;
+}
+
 function GroupHeader({ group, basis }: { group: RiskGroup; basis: Basis }) {
   const names = useNames();
+  const note = settlementNote(group, names.venue);
   return (
     <Group justify="space-between" mb="xs" wrap="nowrap" align="flex-start">
       <Stack gap={4}>
@@ -121,6 +142,7 @@ function GroupHeader({ group, basis }: { group: RiskGroup; basis: Basis }) {
         </Group>
       </Stack>
       <Group gap="xs" wrap="nowrap">
+        {note && <Text size="xs" c="dimmed">{note}</Text>}
         {group.resolved && <Badge color="gray" variant="light">resolved</Badge>}
         {group.expiry && !group.resolved && <Text size="xs" c="dimmed">closes <Time value={group.expiry} precision="minute" size="xs" /></Text>}
       </Group>
@@ -152,6 +174,7 @@ function LegsTable({ group, mode, basis }: { group: RiskGroup; mode: Mode; basis
               <Tooltip label={l.eventTitle} withArrow disabled={l.eventTitle === l.outcome}>
                 <Anchor component={Link} to={positionHref(l.strategyId, mode, l.held.listingId)} size="sm">{l.outcome}</Anchor>
               </Tooltip>
+              <SettledBadge price={l.settlementPrice} />
             </Table.Td>
             <Table.Td><Text size="sm" c="dimmed">{names.venue(l.held.exchangeId)}</Text></Table.Td>
             {basis === 'firm' && <Table.Td><Text size="sm">{names.strategy(l.strategyId)}</Text></Table.Td>}
@@ -186,10 +209,10 @@ function OpenGroup({ group, mode, basis }: { group: RiskGroup; mode: Mode; basis
         <Stat label="Now" tip={`${pnlLabel} on these contracts at current marks`}>
           <Money value={group.current} size="sm" fw={600} />
         </Stat>
-        <Stat label="Locked" tip="The worst outcome world: what the group makes however it settles, if every venue settles it alike">
+        <Stat label="Locked" tip="The worst way the group can still settle, given what has settled: what it makes if every venue settles it alike">
           {group.locked === null ? <Text size="sm" c="dimmed">—</Text> : <Money value={group.locked} size="sm" fw={600} />}
         </Stat>
-        <Stat label="Worst case" tip="The lower of locked and the void scenario">
+        <Stat label="Worst case" tip="The lowest of locked, voided, and a venue still open settling against the ones that have">
           {group.worst === null ? <Text size="sm" c="dimmed">—</Text> : <Money value={group.worst} size="sm" fw={600} />}
         </Stat>
         <Stat label="Unhedged" tip="How far the contracts paying out differ between worlds: 0 means every world pays the same">
@@ -224,6 +247,21 @@ function OpenGroup({ group, mode, basis }: { group: RiskGroup; mode: Mode; basis
               return (
                 <Table.Tr key={w.label} style={isWorst ? { boxShadow: 'inset 3px 0 0 var(--mantine-color-red-6)' } : undefined}>
                   <Table.Td><Text size="sm" lineClamp={2}>{w.label}</Text></Table.Td>
+                  <Table.Td ta="right"><Qty value={w.paying} lotSize={null} signed size="sm" /></Table.Td>
+                  <Table.Td ta="right"><Money value={w.pnl} size="sm" fw={600} /></Table.Td>
+                  <Table.Td ta="right"><Money value={w.change} size="sm" /></Table.Td>
+                </Table.Tr>
+              );
+            })}
+            {group.divergent.map(w => {
+              const isWorst = worst !== null && BigInt(w.pnl) === worst;
+              return (
+                <Table.Tr key={`divergent/${w.label}`} style={isWorst ? { boxShadow: 'inset 3px 0 0 var(--mantine-color-red-6)' } : undefined}>
+                  <Table.Td>
+                    <Tooltip label="Against what has already settled: only if a venue still open settles differently" withArrow multiline w={300}>
+                      <Text size="sm" fs="italic" lineClamp={2}>Settles differently: {w.label}</Text>
+                    </Tooltip>
+                  </Table.Td>
                   <Table.Td ta="right"><Qty value={w.paying} lotSize={null} signed size="sm" /></Table.Td>
                   <Table.Td ta="right"><Money value={w.pnl} size="sm" fw={600} /></Table.Td>
                   <Table.Td ta="right"><Money value={w.change} size="sm" /></Table.Td>

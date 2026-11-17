@@ -15,6 +15,7 @@ import {
   API_KEY_SECRET_NAMES, CallerKind, GnomeApiAuthorizer, lookupPlatformNetwork, Stage,
 } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
+import { grantResearchDatasetRead } from "../research-datasets";
 
 export interface ResearchJobsStackProps extends cdk.StackProps {
   stage: Stage;
@@ -25,20 +26,9 @@ export interface ResearchJobsStackProps extends cdk.StackProps {
   maxVcpus: number;
 }
 
-// The research datasets and artifact index (gnome-pipelines DataStack owns the table bucket).
-const RESEARCH_TABLE_BUCKET = "gnome-research-tables";
 // Per task unless a submit overrides them: NUTS runs 4 chains, and 13 such tasks fit under prod's 128-vCPU cap at once.
 const DEFAULT_CPU = 4;
 const DEFAULT_MEMORY_GIB = 14;
-const TABLE_READ_ACTIONS = [
-  "s3tables:GetTableBucket",
-  "s3tables:GetNamespace",
-  "s3tables:ListNamespaces",
-  "s3tables:ListTables",
-  "s3tables:GetTable",
-  "s3tables:GetTableMetadataLocation",
-  "s3tables:GetTableData",
-];
 
 /**
  * Runs any gnomepy-research module at a pushed commit as a spot Batch array job, one task per argument list.
@@ -120,16 +110,7 @@ export class ResearchJobsStack extends cdk.Stack {
       resources: [bucket.bucketArn],
       conditions: { StringLike: { "s3:prefix": ["research-jobs/*", "artifacts/*"] } },
     }));
-    const tableBucketArn = `arn:aws:s3tables:${this.region}:${this.account}:bucket/${RESEARCH_TABLE_BUCKET}`;
-    jobRole.addToPolicy(new iam.PolicyStatement({
-      actions: TABLE_READ_ACTIONS,
-      resources: [tableBucketArn, `${tableBucketArn}/table/*`],
-    }));
-    // gnomepy.data finds the table bucket and the artifact root through these.
-    jobRole.addToPolicy(new iam.PolicyStatement({
-      actions: ["ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/gnome/research/*`],
-    }));
+    grantResearchDatasetRead(this, jobRole);
     jobRole.addToPolicy(new iam.PolicyStatement({
       actions: ["secretsmanager:GetSecretValue"],
       resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:gnomepy/gh-token*`],

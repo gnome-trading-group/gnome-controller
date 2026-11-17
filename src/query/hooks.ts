@@ -131,6 +131,19 @@ export function useOrderFills(order: LedgerOrder | null) {
   });
 }
 
+export interface EpisodeRef {
+  sessionId: string;
+  episodeId: string;
+}
+
+export function useEpisodeFills(episode: EpisodeRef | null) {
+  return useQuery({
+    queryKey: ['episodeFills', episode?.sessionId, episode?.episodeId],
+    queryFn: async () => (await registryApi.listEpisodeFills(episode!.sessionId, episode!.episodeId)).rows,
+    enabled: !!episode,
+  });
+}
+
 export function useDailyPnl(scope: { strategyId?: number; mode: Mode }, tz: string, days: number) {
   return useQuery({
     queryKey: ['dailyPnl', scope, tz, days],
@@ -155,7 +168,6 @@ export function useGroupPositions(scope: GroupScope, enabled: boolean, live: boo
     queryFn: () => registryApi.getGroupPositions(scope),
     enabled,
     refetchInterval: live ? POLL.summary : false,
-    placeholderData: keepPreviousData,
   });
 }
 

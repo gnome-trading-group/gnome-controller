@@ -7,6 +7,7 @@ import { useListingLabels, useListingSearch } from '../../hooks/useAsyncSearch';
 import { useActiveSessions, useFills, useOrders, useStrategies } from '../../query/hooks';
 import { ModeBand, ModeSwitch } from '../../components/trading/layout';
 import { FillsTable, OrdersTable } from '../../components/trading/LedgerTables';
+import { RoleFilter } from '../../components/trading/RoleBadge';
 
 const RANGES: Record<string, number | null> = { '1h': 3_600_000, '24h': 86_400_000, '7d': 7 * 86_400_000, '30d': 30 * 86_400_000, all: null };
 const SOURCES = [
@@ -33,6 +34,7 @@ function Blotter() {
   const listingId = params.get('listing') ? Number(params.get('listing')) : undefined;
   const side = params.get('side') === 'buy' ? 0 : params.get('side') === 'sell' ? 1 : undefined;
   const source = params.get('source') ?? undefined;
+  const role = params.get('role') ?? undefined;
   const status = params.get('status') === 'open' ? 'OPEN' : params.get('status') === 'closed' ? 'CLOSED' : 'ANY';
   const range = params.get('range') && params.get('range')! in RANGES ? params.get('range')! : '24h';
   const listingLabels = useListingLabels(listingId ? [listingId] : []);
@@ -49,7 +51,7 @@ function Blotter() {
     const span = RANGES[range];
     return span === null ? undefined : new Date(Date.now() - span).toISOString();
   }, [range]);
-  const filters: LedgerFilters = { listingId, side, start, ...(tab === 'fills' && source ? { source } : {}) };
+  const filters: LedgerFilters = { listingId, side, start, role, ...(tab === 'fills' && source ? { source } : {}) };
   const scope = strategyId ? { strategyId, mode } : { mode };
   // Refreshes while anything in the mode is trading.
   const live = (active.data ?? []).some(s => s.mode === mode);
@@ -64,7 +66,7 @@ function Blotter() {
     }
     return options;
   }, [listingOptions.options, listingId, listingLabels]);
-  const filtered = [strategyId, listingId, side, source, params.get('status')].some(v => v !== undefined && v !== null);
+  const filtered = [strategyId, listingId, side, source, role, params.get('status')].some(v => v !== undefined && v !== null);
 
   return (
     <Container size="xl" py="xl">
@@ -93,6 +95,7 @@ function Blotter() {
               data={[{ value: 'any', label: 'Any' }, { value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }]}
               value={params.get('status') ?? 'any'} onChange={v => set('status', v === 'any' ? null : v)} />
           )}
+          <RoleFilter value={role ?? null} onChange={v => set('role', v)} />
           <Select label="Since" size="xs" w={100}
             data={Object.keys(RANGES).map(r => ({ value: r, label: r === 'all' ? 'All time' : `Last ${r}` }))}
             value={range} onChange={v => set('range', v)} />

@@ -62,6 +62,8 @@ export interface LedgerFilters {
   side?: 0 | 1;
   // Fills only: VENUE, RECOVERY, RESET, ADJUSTMENT, MANUAL, SETTLEMENT, GAP (comma-separated).
   source?: string;
+  // What the orders (or the fills' orders) were for: QUOTE, HEDGE, ARB_LEG, EXIT, NONE (unstated); comma-separated.
+  role?: string;
   start?: string;
   end?: string;
 }
@@ -768,6 +770,13 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       convertToCamelCase: true,
       queryParams: { orderSessionId: sessionId, clientOidCounter },
+    }),
+  // One episode's fills, oldest first: its hedges and the quote fills they hedged.
+  listEpisodeFills: (sessionId: string, episodeId: string) =>
+    sendApiRequest<LedgerPage<LedgerFill>>('/ledger/fills', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      convertToCamelCase: true,
+      queryParams: { sessionId, episodeId },
     }),
   listOrders: (scope: LedgerScope, page: LedgerPageParams & { status?: 'OPEN' | 'CLOSED' | 'ANY' } = {}) =>
     sendApiRequest<LedgerPage<LedgerOrder>>('/ledger/orders/list', 'GET', {
