@@ -31,6 +31,7 @@ const GatewayDetail = lazy(() => import('./pages/Trading/Gateways/GatewayDetail'
 const SystemHealth = lazy(() => import('./pages/System/SystemHealth'));
 const Alerts = lazy(() => import('./pages/System/Alerts'));
 const RiskPolicies = lazy(() => import('./pages/Risk/RiskPolicies'));
+const RiskGroups = lazy(() => import('./pages/Risk/RiskGroups'));
 const Treasury = lazy(() => import('./pages/Treasury/Treasury'));
 const BacktestList = lazy(() => import('./pages/Research/Backtests/BacktestList'));
 const BacktestDetail = lazy(() => import('./pages/Research/Backtests/BacktestDetail'));
@@ -200,6 +201,7 @@ function AppContent() {
                   <Route path="/system" element={<SystemHealth />} />
                   <Route path="/system/alerts" element={<Alerts />} />
                   <Route path="/risk/policies" element={<RiskPolicies />} />
+                  <Route path="/risk/groups" element={<RiskGroups />} />
                   <Route path="/treasury" element={<Treasury />} />
                   <Route path="/research" element={<Navigate to="/research/sessions" replace />} />
                   <Route path="/research/sessions" element={<ResearchList />} />

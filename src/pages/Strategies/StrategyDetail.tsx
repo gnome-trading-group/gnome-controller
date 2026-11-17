@@ -20,7 +20,7 @@ import { SESSION_STATUS_COLORS } from '../../utils/session-status';
 import { useLatestPolicyHistory } from '../../hooks/useLatestPolicyHistory';
 import { useDayZone } from '../../context/PreferencesContext';
 import {
-  keys, POLL, useEventPositions, useFills, useOrders, usePnlSeries, useRiskPolicies, useSessionsTotals, useStrategies, useStrategySessions,
+  keys, POLL, useGroupPositions, useFills, useOrders, usePnlSeries, useRiskPolicies, useSessionsTotals, useStrategies, useStrategySessions,
   useStrategySummary,
 } from '../../query/hooks';
 import DeploySessionModal from '../Sessions/DeploySessionModal';
@@ -42,7 +42,7 @@ import { useModeParam } from '../../hooks/useModeParam';
 import { Money, Time } from '../../components/trading/values';
 import { PnlChart } from '../../components/trading/PnlChart';
 import { PerformancePanel } from '../../components/trading/PerformancePanel';
-import { EventPositions } from '../../components/trading/EventPositions';
+import { GroupPositions } from '../../components/trading/GroupPositions';
 import { PositionsTable } from '../../components/trading/PositionsTable';
 import { FillsTable, OrdersTable } from '../../components/trading/LedgerTables';
 import { AdjustPositionModal } from '../../components/trading/AdjustPositionModal';
@@ -101,8 +101,8 @@ function StrategyDetail() {
   const series = usePnlSeries({ strategyId: id, mode }, start, true);
   const tab: Tab = TABS.includes(params.get('tab') as Tab) ? params.get('tab') as Tab : 'positions';
   const scope = { strategyId: id, mode };
-  const positionsView = params.get('view') === 'events' ? 'events' : 'listings';
-  const eventPositions = useEventPositions({ strategyId: id, mode }, tab === 'positions' && positionsView === 'events', true);
+  const positionsView = params.get('view') === 'groups' ? 'groups' : 'listings';
+  const groupPositions = useGroupPositions({ strategyId: id, mode }, tab === 'positions' && positionsView === 'groups', true);
   const fills = useFills(scope, { live: true, enabled: tab === 'fills' });
   const orders = useOrders(scope, { live: true, enabled: tab === 'orders' }, 'ANY');
 
@@ -383,15 +383,15 @@ function StrategyDetail() {
               value={positionsView}
               onChange={v => setParams(current => {
                 const updated = new URLSearchParams(current);
-                if (v === 'events') updated.set('view', 'events');
+                if (v === 'groups') updated.set('view', 'groups');
                 else updated.delete('view');
                 return updated;
               }, { replace: true })}
-              data={[{ value: 'listings', label: 'By listing' }, { value: 'events', label: 'By event' }]}
+              data={[{ value: 'listings', label: 'By listing' }, { value: 'groups', label: 'By group' }]}
             />
           </Group>
-          {positionsView === 'events' ? (
-            <EventPositions data={eventPositions.data} scope={{ strategyId: id, mode }} strategyId={id} mode={mode} loading={eventPositions.isLoading} basis="lifetime" />
+          {positionsView === 'groups' ? (
+            <GroupPositions data={groupPositions.data} scope={{ strategyId: id, mode }} mode={mode} loading={groupPositions.isLoading} basis="lifetime" />
           ) : (
           <PositionsTable
             rows={summary.data?.listings ?? []}

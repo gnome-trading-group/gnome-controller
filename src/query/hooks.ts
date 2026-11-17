@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { collectionApi, controllerApi, registryApi, samplesApi, samplesConfigured, EventScope, LedgerFilters, LedgerScope, SampleQuery, SampleWindow } from '../utils/api';
+import { collectionApi, controllerApi, registryApi, samplesApi, samplesConfigured, GroupScope, LedgerFilters, LedgerScope, SampleQuery, SampleWindow } from '../utils/api';
 import { ACTIVE_SESSION_STATUSES, AlertFilters, isActiveSession, LedgerFill, LedgerOrder, Mode, PnlSeries, StrategySession } from '../types';
 import { mergeSeries } from './series';
 import { parseShardCaps } from '../utils/collection';
@@ -149,28 +149,28 @@ export function useRiskUsage(sessionId: string | undefined, live: boolean) {
   });
 }
 
-export function useEventPositions(scope: EventScope, enabled: boolean, live: boolean) {
+export function useGroupPositions(scope: GroupScope, enabled: boolean, live: boolean) {
   return useQuery({
-    queryKey: ['eventPositions', scope],
-    queryFn: () => registryApi.getEventPositions(scope),
+    queryKey: ['groupPositions', scope],
+    queryFn: () => registryApi.getGroupPositions(scope),
     enabled,
     refetchInterval: live ? POLL.summary : false,
     placeholderData: keepPreviousData,
   });
 }
 
-const EVENT_HISTORY_PAGE_SIZE = 50;
+const GROUP_HISTORY_PAGE_SIZE = 50;
 
-// Events that are over for the scope don't change, so they aren't polled: they load when shown and refresh on request.
-export function useEventHistory(scope: EventScope, enabled: boolean) {
+// Groups that are over for the scope don't change, so they aren't polled: they load when shown and refresh on request.
+export function useGroupHistory(scope: GroupScope, enabled: boolean) {
   return useInfiniteQuery({
     enabled,
-    queryKey: ['eventHistory', scope],
-    queryFn: ({ pageParam }) => registryApi.getEventPositions(scope, { before: pageParam, limit: EVENT_HISTORY_PAGE_SIZE }),
+    queryKey: ['groupHistory', scope],
+    queryFn: ({ pageParam }) => registryApi.getGroupPositions(scope, { before: pageParam, limit: GROUP_HISTORY_PAGE_SIZE }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: last => last.nextBefore ?? undefined,
     select: data => ({
-      events: data.pages.flatMap(page => page.events),
+      groups: data.pages.flatMap(page => page.groups),
       other: data.pages[0]?.other ?? [],
       flatOther: data.pages[0]?.counts.flatOther ?? 0,
     }),

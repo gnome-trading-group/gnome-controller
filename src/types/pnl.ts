@@ -224,7 +224,7 @@ export interface RiskUsage {
   policies: PolicyUsage[];
 }
 
-// A held contract or other position, as the event view shows it.
+// A held contract or other position, as the group view shows it.
 export interface HeldPosition {
   listingId: number;
   symbol: string | null;
@@ -238,31 +238,45 @@ export interface HeldPosition {
   total: string;
 }
 
-// A strategy's prediction-market positions by event (registry /pnl/events). Each market's scenarios are the
-// lifetime PnL of its contracts if that outcome wins; other listings (hedges) are not in them.
-export interface EventPositions {
+// Prediction-market positions grouped by what offsets what (registry /pnl/groups): contracts the relationship rows,
+// binary complements and multi-outcome events tie together, across venues and, in the firm view, across strategies.
+// Each world is one way the group's contracts can settle together ($1 if true, $0 if not) and its PnL then.
+export interface RiskGroup {
+  // The group's lowest security id: stable while its contracts are.
+  key: number;
+  title: string;
+  expiry: string | null;
+  resolved: boolean;
+  resolvedAt: string | null;
+  exchangeIds: number[];
+  // Firm view only.
+  strategyIds?: number[];
+  legs: { strategyId: number; eventId: number; eventTitle: string; outcome: string; held: HeldPosition }[];
+  current: string;
+  // Worst first. paysListingIds: the legs paying $1 in it; paying: the net contracts paying (shorts count against).
+  worlds: { label: string; paysListingIds: number[]; pnl: string; change: string; paying: string }[];
+  // Every leg paid by its venue's void rule, when the venues void differently or a relationship is flagged so.
+  void: { pnl: string; change: string } | null;
+  // The worst world: what the group makes however it settles, if the venues settle it alike.
+  locked: string | null;
+  // The lower of locked and void.
+  worst: string | null;
+  best: string | null;
+  // The spread of net contracts paying across worlds: 0 when fully hedged.
+  gap: string | null;
+  // Flags on the relationships joining the group (settlement rules that differ between venues).
+  flags: string[];
+  // Too many contracts to list its worlds.
+  tooLarge: boolean;
+}
+
+export interface GroupPositions {
   asOf: string;
-  events: {
-    eventId: number;
-    title: string;
-    expiry: string | null;
-    resolved: boolean;
-    resolvedAt: string | null;
-    markets: {
-      key: string;
-      kind: 'BINARY' | 'MULTI_OUTCOME';
-      outcomes: { outcome: string; listingId: number | null; symbol: string | null; held: HeldPosition | null }[];
-      netExposure: { outcome: string; quantity: string } | null;
-      current: string;
-      scenarios: { label: string; pnl: string; change: string }[];
-      worst: string | null;
-      best: string | null;
-    }[];
-  }[];
+  groups: RiskGroup[];
   // Held listings that aren't event contracts; in history, the newest flat ones, on the first page only.
-  other: HeldPosition[];
-  // Events still held, events with every contract flat, and flat listings that aren't event contracts.
-  counts: { active: number; history: number; flatOther: number };
+  other: (HeldPosition & { strategyId: number })[];
+  // Groups still held, flat contracts outside them, and flat listings that aren't event contracts.
+  counts: { active: number; flatContracts: number; flatOther: number };
   // Set on a history page with more after it.
   nextBefore: string | null;
 }

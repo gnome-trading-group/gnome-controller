@@ -3,7 +3,7 @@ import {
   DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
   RuleType, TriggerEvaluation,
 } from '../types/launcher';
-import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractProposition, ContractRelationship, DailyPnl, EventPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PropositionSubject, PnlSeries, RewardAccrual, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope, SubjectMergeCandidate, SubjectMergeLogEntry, SubjectKeyAlias, SetSubjectKeyAlias, SubjectKeyAliasKind, SubjectKeyAliasOrigin } from '../types';
+import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractProposition, ContractRelationship, DailyPnl, GroupPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PropositionSubject, PnlSeries, RewardAccrual, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope, SubjectMergeCandidate, SubjectMergeLogEntry, SubjectKeyAlias, SetSubjectKeyAlias, SubjectKeyAliasKind, SubjectKeyAliasOrigin } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
 import { BacktestRun } from '../types/backtests';
@@ -66,7 +66,7 @@ export interface LedgerFilters {
   end?: string;
 }
 
-export type EventScope = { strategyId: number; mode: Mode } | { sessionId: string };
+export type GroupScope = { strategyId: number; mode: Mode } | { sessionId: string } | { firm: true; mode: Mode };
 
 export interface LedgerPageParams extends LedgerFilters {
   before?: string;
@@ -701,9 +701,9 @@ export const registryApi = {
       apiUrl: REGISTRY_API_URL,
       queryParams: { sessionIds: sessionIds.join(',') },
     }),
-  // Events still held; with a history page, events every contract of which is flat, most recently resolved first.
-  getEventPositions: (scope: EventScope, history?: { before?: string; limit: number }) =>
-    sendApiRequest<EventPositions>('/pnl/events', 'GET', {
+  // Groups still held; with a history page, groups every contract of which is flat, most recently resolved first.
+  getGroupPositions: (scope: GroupScope, history?: { before?: string; limit: number }) =>
+    sendApiRequest<GroupPositions>('/pnl/groups', 'GET', {
       apiUrl: REGISTRY_API_URL,
       queryParams: definedParams({ ...scope, ...(history && { status: 'history', ...history }) }),
     }),
