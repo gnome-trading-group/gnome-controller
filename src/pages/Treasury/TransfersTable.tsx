@@ -98,7 +98,7 @@ export function TransfersTable({ rows, loading, showAccount }: { rows: Transfer[
     enableExpanding: false,
     initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 15 } },
     mantineTableProps: { striped: true, highlightOnHover: true, withColumnBorders: true },
-    renderDetailPanel: ({ row }) => (row.original.allocations.length === 0 && !row.original.unallocated ? null : (
+    renderDetailPanel: ({ row }) => (!row.original.allocations?.length && !row.original.unallocated ? null : (
       <Stack gap={4} py={4}>
         {row.original.allocations.length > 0 && <Text size="xs" c="dimmed">Given to the strategies that earned it</Text>}
         <Table withRowBorders={false} verticalSpacing={2} fz="sm" w="auto">
