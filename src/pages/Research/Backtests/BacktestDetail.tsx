@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Accordion,
   ActionIcon,
@@ -12,6 +12,7 @@ import {
   Divider,
   Group,
   HoverCard,
+  ScrollArea,
   SegmentedControl,
   SimpleGrid,
   Skeleton,
@@ -47,21 +48,20 @@ import { CancelRunModal } from '../../../components/batch/CancelRunModal';
 import { TAIL_LINES, TaskDetailPanel } from '../../../components/batch/TaskDetailPanel';
 import { TaskGrid } from '../../../components/batch/TaskGrid';
 import { usePolledLoad } from '../../../components/batch/usePolledLoad';
+import { CappedBadges } from '../../../components/batch/CappedBadges';
+import { PER_JOB_CHART_MAX, pollIntervalMs, runFingerprint } from '../../../components/batch/largeRuns';
 import {
-  HistogramBin, PER_JOB_CHART_MAX, histogram, pollIntervalMs, runFingerprint,
-} from '../../../components/batch/largeRuns';
+  MISSING_FRACTION_KEY, PNL_KEY, PNL_WITH_REWARDS_KEY, REWARDS_TOTAL_KEY, earnedRewards, formatMetric, groupings,
+  metricValue, rankingPnlKey,
+} from '../../../utils/backtestStats';
+import { GroupBreakdown, MetricDistribution, MetricOption } from './BacktestCharts';
+import { RunResultsCard } from './RunResultsCard';
 import {
   TaskFilter, isRunActive, isTaskFinished, runElapsedMs, taskElapsedMs, taskMatches,
 } from '../../../components/batch/status';
 
 // Summary keys arrive as gnomepy wrote them (getBacktest preserves them). The missing fraction gets its own column, as a
-// percentage.
-const MISSING_FRACTION_KEY = 'market_data_missing_fraction';
-
-// Estimated venue rewards (gnomepy's summary): shown, and ranked by, only for a run whose jobs earned some.
-const PNL_KEY = 'final_pnl';
-const REWARDS_TOTAL_KEY = 'rewards_estimated_total';
-const PNL_WITH_REWARDS_KEY = 'final_pnl_with_rewards_estimated';
+// percentage. Estimated venue rewards are shown, and ranked by, only for a run whose jobs earned some.
 const DEFAULT_METRICS = [PNL_KEY, 'sharpe', 'sortino', 'fill_count', 'total_fees'];
 const REWARD_METRICS = [REWARDS_TOTAL_KEY, PNL_WITH_REWARDS_KEY];
 const HEADERS: Record<string, string> = {
@@ -88,10 +88,6 @@ const FILTERS: { value: TaskFilter; label: string }[] = [
 
 function toWords(key: string): string {
   return key.split('_').filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
-}
-
-function formatMetric(v: number): string {
-  return v.toLocaleString(undefined, Number.isInteger(v) ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function jobLabel(job: BacktestJob): string {
@@ -173,10 +169,8 @@ function BacktestDetail() {
       : [],
     [finished, perJobChart],
   );
-  const pnlBins = useMemo(
-    () => (perJobChart ? [] : histogram(finished.map((j) => j.finalPnl ?? 0))),
-    [finished, perJobChart],
-  );
+  const runGroupings = useMemo(() => (run ? groupings(run) : []), [run]);
+  const rankKey = useMemo(() => rankingPnlKey(finished), [finished]);
 
   const summaryKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -189,6 +183,20 @@ function BacktestDetail() {
     keys.delete(MISSING_FRACTION_KEY);
     return Array.from(keys);
   }, [jobs]);
+
+  const chartMetrics = useMemo<MetricOption[]>(() => {
+    const candidates = earnedRewards(finished) ? [...DEFAULT_METRICS, ...REWARD_METRICS] : DEFAULT_METRICS;
+    return candidates
+      .filter(key => finished.some(j => metricValue(j, key) !== undefined))
+      .map(key => ({ value: key, label: HEADERS[key] ?? toWords(key) }));
+  }, [finished]);
+
+  const tableRef = useRef<HTMLDivElement>(null);
+  const selectJob = useCallback((index: number) => {
+    setSelected(index);
+    setFilter('all');
+    tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   const metricColumns = useMemo<MRT_ColumnDef<BacktestJob>[]>(() =>
     summaryKeys.map((key) => ({
@@ -314,8 +322,8 @@ function BacktestDetail() {
 
   useEffect(() => {
     if (!visibilityInitialized && summaryKeys.length > 0) {
-      const earnedRewards = jobs.some(j => Number(j.summary?.[REWARDS_TOTAL_KEY] ?? 0) !== 0);
-      const shownMetrics = earnedRewards ? [...DEFAULT_METRICS, ...REWARD_METRICS] : DEFAULT_METRICS;
+      const rewards = earnedRewards(jobs);
+      const shownMetrics = rewards ? [...DEFAULT_METRICS, ...REWARD_METRICS] : DEFAULT_METRICS;
       const hidden: Record<string, boolean> = {};
       for (const key of summaryKeys) {
         if (!shownMetrics.includes(key)) {
@@ -323,7 +331,7 @@ function BacktestDetail() {
         }
       }
       setColumnVisibility(hidden);
-      if (earnedRewards) {
+      if (rewards) {
         setSorting([{ id: `summary_${PNL_WITH_REWARDS_KEY}`, desc: true }]);
       }
       setVisibilityInitialized(true);
@@ -331,6 +339,7 @@ function BacktestDetail() {
   }, [summaryKeys, visibilityInitialized, jobs]);
 
   const awaitingRun = !run && !error;
+  const showResults = !!run && EXPLORABLE.has(run.status);
 
   const table = useMantineReactTable({
     columns,
@@ -370,6 +379,16 @@ function BacktestDetail() {
       </TaskDetailPanel>
     ),
   });
+
+  // A job picked from the grid or the results may sit on another page of the table.
+  useEffect(() => {
+    if (selected === null) return;
+    const i = table.getPrePaginationRowModel().rows.findIndex(r => r.original.arrayIndex === selected);
+    if (i < 0) return;
+    const { pageIndex, pageSize } = table.getState().pagination;
+    const page = Math.floor(i / pageSize);
+    if (page !== pageIndex) table.setPageIndex(page);
+  }, [selected, filter, table]);
 
   return (
     <Container size="xl" py="xl">
@@ -434,24 +453,21 @@ function BacktestDetail() {
                     ? <Text span ff="monospace" size="xs">gnome-backtest {run.engineVersion}</Text>
                     : <Text span size="sm" c="dimmed">the image's</Text>}
                 </InfoRow>
+                <InfoRow label="Resources">
+                  {run.cpu || run.memoryGib
+                    ? <Text span size="sm">{[run.cpu && `${run.cpu} vCPU`, run.memoryGib && `${run.memoryGib} GiB`].filter(Boolean).join(' · ')}</Text>
+                    : <Text span size="sm" c="dimmed">job definition default</Text>}
+                </InfoRow>
               </Stack>
               <Stack gap={4}>
                 {hasScenarios && (
-                  <InfoRow label="Scenarios">
-                    <Group gap={4}>
-                      {run.scenarios!.map((name) => (
-                        <Badge key={name} variant="light" size="sm" color="blue">{name}</Badge>
-                      ))}
-                    </Group>
+                  <InfoRow label={`Scenarios (${run.scenarios!.length})`}>
+                    <CappedBadges values={run.scenarios!} />
                   </InfoRow>
                 )}
                 {Object.entries(run.sweepParams ?? {}).map(([param, values]) => (
                   <InfoRow key={param} label={param}>
-                    <Group gap={4}>
-                      {values.map((v) => (
-                        <Badge key={v} variant="outline" size="sm" color="gray">{v}</Badge>
-                      ))}
-                    </Group>
+                    <CappedBadges values={values} variant="outline" color="gray" />
                   </InfoRow>
                 ))}
               </Stack>
@@ -480,17 +496,32 @@ function BacktestDetail() {
         </Card>
       )}
 
-      {run?.configYaml && (
-        <Accordion variant="contained" mb="md">
-          <Accordion.Item value="config">
-            <Accordion.Control>Config</Accordion.Control>
-            <Accordion.Panel>
-              <Code block style={{ whiteSpace: 'pre', fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                {run.configYaml}
-              </Code>
-            </Accordion.Panel>
-          </Accordion.Item>
-        </Accordion>
+      {run && (showResults || run.configYaml) && (
+        <SimpleGrid cols={{ base: 1, md: showResults && run.configYaml ? 2 : 1 }} spacing="md" mb="md">
+          {showResults && (
+            <RunResultsCard
+              run={run}
+              jobs={jobs}
+              jobLabel={jobLabel}
+              onSelectJob={selectJob}
+              onShowFailed={() => setFilter('failed')}
+            />
+          )}
+          {run.configYaml && (
+            <Accordion variant="contained" style={{ alignSelf: 'start' }}>
+              <Accordion.Item value="config">
+                <Accordion.Control>Config</Accordion.Control>
+                <Accordion.Panel>
+                  <ScrollArea.Autosize mah={420}>
+                    <Code block style={{ whiteSpace: 'pre', fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                      {run.configYaml}
+                    </Code>
+                  </ScrollArea.Autosize>
+                </Accordion.Panel>
+              </Accordion.Item>
+            </Accordion>
+          )}
+        </SimpleGrid>
       )}
 
       {run && run.failedCount > 0 && filter !== 'failed' && (
@@ -547,35 +578,15 @@ function BacktestDetail() {
         </Card>
       )}
 
-      {pnlBins.length > 0 && (
-        <Card withBorder mb="md" p="md">
-          <Group justify="space-between" mb="sm">
-            <Text fw={500}>PnL distribution</Text>
-            <Text size="xs" c="dimmed">{finished.length} jobs · sort the table by PnL for the best and worst</Text>
-          </Group>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={pnlBins} margin={{ top: 4, right: 8, bottom: 4, left: 0 }} barCategoryGap={1}>
-              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-              <XAxis dataKey="from" tick={{ fontSize: 10 }} tickFormatter={(v: number) => formatMetric(v)} minTickGap={24} />
-              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-              <RechartsTooltip
-                labelFormatter={(_, payload) => {
-                  const bin = payload?.[0]?.payload as HistogramBin | undefined;
-                  return bin ? `${formatMetric(bin.from)} to ${formatMetric(bin.to)}` : '';
-                }}
-                formatter={(value) => [value, 'Jobs']}
-                contentStyle={{ background: '#1a1b1e', border: '1px solid #373a40' }}
-              />
-              <Bar dataKey="count" isAnimationActive={false}>
-                {pnlBins.map((bin, i) => (
-                  <Cell key={i} fill={bin.from + bin.to >= 0 ? '#2f9e44' : '#c92a2a'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
+      {!perJobChart && chartMetrics.length > 0 && (
+        <MetricDistribution jobs={finished} metrics={chartMetrics} defaultMetric={rankKey} />
       )}
 
+      {runGroupings.length > 0 && finished.length > 1 && chartMetrics.length > 0 && (
+        <GroupBreakdown jobs={finished} groupings={runGroupings} metrics={chartMetrics} defaultMetric={rankKey} />
+      )}
+
+      <div ref={tableRef} style={{ scrollMarginTop: 16 }} />
       <SegmentedControl
         size="xs"
         mb="xs"

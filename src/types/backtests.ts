@@ -50,6 +50,9 @@ export interface BacktestRun {
   strategyCommit?: string;
   // The gnome-backtest release the run used in place of the image's engine.
   engineVersion?: string;
+  // Every job's Batch size; absent on runs submitted before sizing was stored.
+  cpu?: number;
+  memoryGib?: number;
   configYaml?: string;
   jobs?: BacktestJob[];
 }

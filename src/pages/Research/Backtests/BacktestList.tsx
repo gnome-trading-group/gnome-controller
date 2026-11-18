@@ -1,5 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
-import { ActionIcon, Alert, Badge, Container, Group, Text, Title, Tooltip } from '@mantine/core';
+import {
+  ActionIcon, Alert, Badge, Container, Group, HoverCard, ScrollArea, Stack, Text, Title, Tooltip,
+} from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef, type MRT_Row } from 'mantine-react-table';
@@ -20,6 +22,34 @@ const RUN_LIMIT = 200;
 
 // Strategies are named by import path (pkg.module:Class or pkg.module.Class); the last part is the readable one.
 const shortStrategy = (name: string) => (name.includes(':') ? name.split(':').pop() : name.split('.').pop()) ?? name;
+
+const SCENARIOS_NAMED = 2;
+
+// MRT doesn't hold a column to its size, so a long list would widen the whole table; name a couple and hover for all.
+function ScenarioCell({ scenarios }: { scenarios: string[] }) {
+  if (scenarios.length === 0) return <Text size="sm" c="dimmed">—</Text>;
+  const rest = scenarios.length - SCENARIOS_NAMED;
+  const cell = (
+    <Group gap={4} wrap="nowrap" maw={200}>
+      <Text size="sm" truncate="end" style={{ minWidth: 0 }}>{scenarios.slice(0, SCENARIOS_NAMED).join(', ')}</Text>
+      {rest > 0 && <Badge size="sm" variant="light" color="gray" style={{ flexShrink: 0 }}>+{rest}</Badge>}
+    </Group>
+  );
+  if (rest <= 0 && scenarios.join(', ').length < 28) return cell;
+  return (
+    <HoverCard width={280} shadow="md" openDelay={200}>
+      <HoverCard.Target>{cell}</HoverCard.Target>
+      <HoverCard.Dropdown>
+        <Text size="xs" c="dimmed" mb={4}>{scenarios.length} scenarios</Text>
+        <ScrollArea.Autosize mah={300}>
+          <Stack gap={2}>
+            {scenarios.map(s => <Text key={s} size="xs" ff="monospace">{s}</Text>)}
+          </Stack>
+        </ScrollArea.Autosize>
+      </HoverCard.Dropdown>
+    </HoverCard>
+  );
+}
 
 function BacktestList() {
   const navigate = useNavigate();
@@ -92,13 +122,9 @@ function BacktestList() {
     {
       id: 'scenarios',
       header: 'Scenarios',
-      size: 180,
+      size: 200,
       accessorFn: r => (r.scenarios ?? []).join(', '),
-      Cell: ({ row }: { row: MRT_Row<BacktestRun> }) => (
-        <Text size="sm" c={row.original.scenarios?.length ? undefined : 'dimmed'} lineClamp={1}>
-          {row.original.scenarios?.join(', ') || '—'}
-        </Text>
-      ),
+      Cell: ({ row }: { row: MRT_Row<BacktestRun> }) => <ScenarioCell scenarios={row.original.scenarios ?? []} />,
     },
     { accessorKey: 'submittedBy', header: 'Submitted by', size: 150 },
     {
