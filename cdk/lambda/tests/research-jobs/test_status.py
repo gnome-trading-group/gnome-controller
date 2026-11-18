@@ -71,7 +71,8 @@ def test_a_late_event_does_not_undo_a_finished_task(table):
     assert t.items[("r1", "TASK#0000")]["status"] == "SUCCEEDED"
 
 
-def test_a_cancelled_run_stays_cancelled_as_its_tasks_fail(table):
+def test_a_cancelled_run_stays_cancelled_as_its_tasks_fail(table, monkeypatch):
+    monkeypatch.setattr(cancel, "_batch", FakeBatch())
     t = table(rows(["SUBMITTED"], run_status="RUNNING"))
     response = cancel.handler({"pathParameters": {"runId": "r1"}}, None)
     assert json.loads(response["body"])["status"] == "CANCELLED"

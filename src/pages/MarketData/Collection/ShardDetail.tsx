@@ -19,6 +19,7 @@ import { ShardLogsTab } from './shard/ShardLogsTab';
 import { ShardTasksTab } from './shard/ShardTasksTab';
 import { ShardPerformanceTab } from './shard/ShardPerformanceTab';
 import { samplesConfigured } from '../../../utils/api';
+import { shardZoneMeta } from '../../../utils/zones';
 
 function ecsUrl(region: string, shardId: string): string {
   return `https://${region}.console.aws.amazon.com/ecs/v2/clusters/CollectionCluster-${region}/services/shard-${shardId}/health?region=${region}`;
@@ -75,6 +76,7 @@ function ShardDetail() {
         }] : []}
         meta={shard ? [
           shard.region,
+          shardZoneMeta(shard.zoneId, detail.data?.placement?.availabilityZone, detail.data?.placement?.availabilityZoneId),
           `${shard.priority.toLowerCase()} · ${shard.tier}`,
           `orchestrator ${shard.version}`,
           `generation ${shard.generation}${status && status.appliedGeneration < shard.generation ? ` (applied ${status.appliedGeneration})` : ''}`,

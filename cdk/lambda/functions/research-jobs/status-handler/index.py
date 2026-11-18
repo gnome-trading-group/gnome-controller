@@ -5,11 +5,11 @@ from __future__ import annotations
 import os
 
 import boto3
-from batch_runs import array_task, finish_task, set_run_status
+from batch_runs import STATUS_HANDLER_CONFIG, array_task, finish_task, set_run_status
 
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
 
-_ddb = boto3.resource("dynamodb")
+_ddb = boto3.resource("dynamodb", config=STATUS_HANDLER_CONFIG)
 _table = _ddb.Table(DYNAMODB_TABLE)
 
 TERMINAL = {"SUCCEEDED", "FAILED"}

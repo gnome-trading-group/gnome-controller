@@ -18,6 +18,9 @@ export interface GatewayEndpoint {
   startedAt?: string | null;
   // A paper gateway's load against its caps; null for a live one or a release that doesn't say.
   paper?: GatewayPaperLoad | null;
+  // The zone its host runs in, by name and ID; null from a release that doesn't say.
+  availabilityZone?: string | null;
+  availabilityZoneId?: string | null;
 }
 
 // What a paper gateway carries against its caps. A book is a session's listing (heap); streams are the distinct ones its
@@ -118,6 +121,8 @@ export interface GatewayStatus {
   pinnedVersion: string | null;
   // What a start, and so a roll, would run: its pin, else the latest release; null if that couldn't be read.
   rollTargetVersion: string | null;
+  // Its exchange's home zone (an ID), where it starts; null when the exchange has none.
+  homeZoneId?: string | null;
   wantedAt: string | null;
   accounts: number;
   rollRequestedAt: string | null;

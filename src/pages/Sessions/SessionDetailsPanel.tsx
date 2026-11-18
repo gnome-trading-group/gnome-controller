@@ -299,7 +299,17 @@ export function SessionDetailsPanel({ session }: { session: StrategySession }) {
                   </Table.Td>
                   <Table.Td><Code>{session.instanceType ?? '—'}</Code></Table.Td>
                   <Table.Td><Code>{String(session.config['latency.profile'] ?? '—')}</Code></Table.Td>
-                  <Table.Td><Code>{session.launchRegion ?? '—'} / {session.availabilityZone ?? '—'}</Code></Table.Td>
+                  <Table.Td>
+                    <Group gap={4} wrap="nowrap">
+                      <Code>{session.launchRegion ?? '—'} / {session.availabilityZone ?? '—'}</Code>
+                      {session.gatewayZone && session.availabilityZone && session.gatewayZone !== session.availabilityZone && (
+                        <Tooltip withArrow label={`Its gateway ran in ${session.gatewayZone} when it launched:`
+                          + ' no capacity there, or a zone asked for. Each order crosses zones.'}>
+                          <Badge size="xs" color="orange" variant="light">gateway in {session.gatewayZone}</Badge>
+                        </Tooltip>
+                      )}
+                    </Group>
+                  </Table.Td>
                   <Table.Td>
                     <CommitLink strategyType={session.config['strategy.type']}
                       commit={session.config['strategy.type'] === 'java' ? session.strategyCommit : session.researchCommit}

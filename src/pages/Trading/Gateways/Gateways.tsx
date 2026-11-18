@@ -12,6 +12,7 @@ import { GatewayStatus } from '../../../types/gateways';
 import { StrategySession } from '../../../types/strategy-sessions';
 import { Alert } from '../../../types/alerts';
 import { PaperGatewayCapacity } from '../../../components/gateways/PaperGatewayCapacity';
+import { GatewayZone } from './GatewayZone';
 import {
   formatMicros, GATEWAY_ALERT_TYPES, gatewayHealth, isGatewayAlert, lastOf, linkedSessions, paperVenues,
 } from '../../../utils/gateways';
@@ -95,7 +96,7 @@ function GatewayTable({ gateways, sessions, alerts, loading }: {
       <Table.Thead>
         <Table.Tr>
           <Table.Th>Gateway</Table.Th>
-          <Table.Th>Region</Table.Th>
+          <Table.Th>Region / zone</Table.Th>
           <Table.Th>State</Table.Th>
           <Table.Th>Sessions</Table.Th>
           <Table.Th>Working orders</Table.Th>
@@ -118,7 +119,7 @@ function GatewayTable({ gateways, sessions, alerts, loading }: {
             <Table.Tr key={g.gatewayKey} style={{ cursor: 'pointer', opacity: health.running ? 1 : 0.6 }}
               onClick={() => navigate(`/trading/gateways/${encodeURIComponent(g.gatewayKey)}`)}>
               <Table.Td><Text ff="monospace" size="sm">{g.gatewayKey}</Text></Table.Td>
-              <Table.Td><Text size="sm">{g.region}</Text></Table.Td>
+              <Table.Td><GatewayZone gateway={g} /></Table.Td>
               <Table.Td><Badge color={health.color} variant="light">{health.label}</Badge></Table.Td>
               <Table.Td>
                 <Group gap={6} wrap="nowrap">

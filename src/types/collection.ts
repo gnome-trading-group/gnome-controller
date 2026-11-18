@@ -89,6 +89,9 @@ export interface CollectionShard {
   // Since when all its streams would fit on its partition's other shards (0: they wouldn't); after the reconciler's
   // consolidation wait it drains into them.
   mergeableSinceNs: number;
+  // A production shard's home zone (a zone ID): it runs only on that zone's hosts. Absent for research shards, which
+  // are zone-free, and for venues with no home zone.
+  zoneId?: string | null;
 }
 
 export const WARMING = 2147483647;
@@ -148,6 +151,8 @@ export interface ShardCaps {
 export interface ShardDetail {
   shard: CollectionShard;
   statuses: ShardTaskStatus[];
+  // The zone its running task's host is in, as the shard says; nulls while it says nothing, or from an older release.
+  placement?: { availabilityZone: string | null; availabilityZoneId: string | null };
 }
 
 export interface ShardLogs {

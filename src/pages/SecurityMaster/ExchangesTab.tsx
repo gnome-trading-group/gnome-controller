@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -18,6 +18,7 @@ import { useGlobalState } from '../../context/GlobalStateContext';
 import { AWS_REGIONS, Exchange } from '../../types';
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
+import { ExchangeDraft, exchangePatch, homeZoneOptions, zoneLabel } from '../../utils/zones';
 
 interface ExchangesTabProps {
   onDelete: (type: 'exchange', id: number, name: string) => void;
@@ -30,6 +31,14 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+  // The row being edited: its changes held apart from the table's data (sent, only what changed, on save; dropped on
+  // cancel), and its region as chosen, so the zone picker follows it.
+  const draft = useRef<ExchangeDraft>({});
+  const [draftRegion, setDraftRegion] = useState<string | null>(null);
+  const resetDraft = () => {
+    draft.current = {};
+    setDraftRegion(null);
+  };
   const [newExchangeForm, setNewExchangeForm] = useState({
     exchangeCode: '',
     exchangeName: '',
@@ -65,11 +74,11 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
       enableSorting: true,
       enableEditing: true,
       size: 160,
-      Edit: ({ cell, row }) => (
+      Edit: ({ cell }) => (
         <TextInput
           defaultValue={cell.getValue<string>()}
           onChange={(e) => {
-            row.original.exchangeCode = e.target.value.toUpperCase();
+            draft.current.exchangeCode = e.target.value.toUpperCase();
           }}
         />
       ),
@@ -79,11 +88,11 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
       header: 'Name',
       enableSorting: true,
       enableEditing: true,
-      Edit: ({ cell, row }) => (
+      Edit: ({ cell }) => (
         <TextInput
           defaultValue={cell.getValue<string>()}
           onChange={(e) => {
-            row.original.exchangeName = e.target.value;
+            draft.current.exchangeName = e.target.value;
           }}
         />
       ),
@@ -93,15 +102,54 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
       header: 'Region',
       enableSorting: true,
       enableEditing: true,
-      Edit: ({ cell, row }) => (
+      Edit: ({ cell }) => (
         <Select
           defaultValue={cell.getValue<string>()}
           data={AWS_REGIONS}
           onChange={(value) => {
-            row.original.region = value || '';
+            // A zone belongs to one region: a zone picked under the old region goes, and the zone picker follows. The
+            // registry drops the home zone on a move unless a new one comes with it.
+            draft.current.region = value || '';
+            delete draft.current.homeZoneId;
+            setDraftRegion(value || '');
           }}
         />
       ),
+    },
+    {
+      accessorKey: 'homeZoneId',
+      header: 'Home zone',
+      enableSorting: true,
+      enableEditing: true,
+      Header: () => (
+        <Tooltip
+          multiline
+          w={320}
+          withArrow
+          label={'Where its order gateways and production market-data shards run: the zone measured nearest the venue.'
+            + ' Changing it moves paper gateways and idle live gateways at once, a live gateway with orders at its next'
+            + ' start, and production shards without a gap.'}
+        >
+          <Text fw={600} size="sm">Home zone</Text>
+        </Tooltip>
+      ),
+      Cell: ({ row }: { row: MRT_Row<Exchange> }) => zoneLabel(row.original.homeZoneId),
+      Edit: ({ row }) => {
+        const region = draftRegion ?? row.original.region;
+        const moved = region !== row.original.region;
+        return (
+          <Select
+            key={region}
+            defaultValue={moved ? null : row.original.homeZoneId ?? null}
+            data={homeZoneOptions(region)}
+            placeholder="None"
+            clearable
+            onChange={(value) => {
+              draft.current.homeZoneId = value ?? null;
+            }}
+          />
+        );
+      },
     },
     {
       accessorKey: 'dateCreated',
@@ -123,7 +171,7 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
           <ReactTimeAgo date={new Date(row.original.dateModified)} timeStyle="round" /> :
           '-',
     },
-  ], []);
+  ], [draftRegion]);
 
   const table = useMantineReactTable({
     columns,
@@ -152,7 +200,10 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
         <ActionIcon
           variant="subtle"
           color="blue"
-          onClick={() => t.setEditingRow(row)}
+          onClick={() => {
+            resetDraft();
+            t.setEditingRow(row);
+          }}
         >
           <IconEdit size={16} />
         </ActionIcon>
@@ -167,15 +218,20 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
     ),
     onEditingRowSave: async ({ row, table: t }: { row: MRT_Row<Exchange>; table: MRT_TableInstance<Exchange> }) => {
       setEditError(null);
-      try {
-        await registryApi.updateExchange(row.original.exchangeId, row.original);
-      } catch (err) {
-        setEditError(errorMessage(err, 'Failed to update exchange'));
-        return;
+      const patch = exchangePatch(row.original, draft.current);
+      if (Object.keys(patch).length > 0) {
+        try {
+          await registryApi.updateExchange(row.original.exchangeId, patch);
+        } catch (err) {
+          setEditError(errorMessage(err, 'Failed to update exchange'));
+          return;
+        }
       }
+      resetDraft();
       t.setEditingRow(null);
       refreshExchanges();
     },
+    onEditingRowCancel: () => resetDraft(),
     renderTopToolbarCustomActions: () => (
       <Tooltip label="Add Exchange" position="bottom" withArrow openDelay={500}>
         <ActionIcon

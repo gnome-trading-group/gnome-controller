@@ -162,3 +162,25 @@ def test_a_failed_batch_submit_marks_the_run_failed(aws, monkeypatch):
     with pytest.raises(RuntimeError):
         post({})
     assert meta(table)["status"] == "FAILED"
+
+
+SCENARIOS = CONFIG.replace("listings:\n  - listing_id: 1\n", "scenarios:\n") + "".join(
+    f"  s{i}:\n    start_date: 2026-10-01\n    end_date: 2026-10-02\n    listings:\n      - listing_id: {i}\n"
+    for i in range(3))
+
+
+def test_meta_holds_neither_the_config_text_nor_the_scenario_names(aws, monkeypatch):
+    batch, table = aws
+    s3 = FakeS3()
+    monkeypatch.setattr(submit, "_s3", s3)
+    assert submit.handler({"body": json.dumps({"config": SCENARIOS})}, None)["statusCode"] == 200
+    run = meta(table)
+    assert "config_yaml" not in run and "scenarios" not in run
+    assert table.items[(run["run_id"], "CONFIG")]["scenarios"] == ["s0", "s1", "s2"]
+    assert s3.objects[f"backtests/{run['run_id']}/config.yaml"] == SCENARIOS.encode(), "the config as submitted"
+
+
+def test_a_run_without_scenarios_has_no_config_row(aws):
+    _, table = aws
+    assert post({})["statusCode"] == 200
+    assert [sk for (_, sk) in table.items if not sk.startswith("JOB#")] == ["META"]

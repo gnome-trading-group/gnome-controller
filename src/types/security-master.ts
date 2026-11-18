@@ -56,6 +56,8 @@ export interface Exchange {
   exchangeCode: string;
   exchangeName: string;
   region: string;
+  // The availability zone ID (e.g. use2-az2) its gateways and production shards run in; null for none.
+  homeZoneId?: string | null;
   dateCreated: string;
   dateModified: string;
 }

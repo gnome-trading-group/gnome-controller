@@ -6,7 +6,7 @@ import os
 from decimal import Decimal
 
 import boto3
-from batch_runs import FINISHED_INDEXES
+from batch_runs import CONFIG_SK, FINISHED_INDEXES
 from boto3.dynamodb.conditions import Key
 from utils import create_response
 
@@ -79,6 +79,9 @@ def handler(event: dict, context) -> dict:
     )
 
     meta.pop(FINISHED_INDEXES, None)
+    meta.pop("config_yaml", None)
+    if config := next((i for i in items if i.get("sk") == CONFIG_SK), None):
+        meta.update({k: v for k, v in config.items() if k not in ("run_id", "sk", "ttl")})
     for job in jobs:
         # A job writes its summary alongside its report, and the status handler stores the summary only when found.
         if job.get("status") == "SUCCEEDED" and job.get("summary"):

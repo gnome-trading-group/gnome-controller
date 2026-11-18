@@ -91,6 +91,8 @@ describe('isGatewayAlert', () => {
     expect(isGatewayAlert(alert('GATEWAY_VENUE_RATE_LIMITED:live:kalshi:main:7'), 'live:kalshi:main')).toBe(true);
     expect(isGatewayAlert(alert('GATEWAY_DOWN:paper:kalshi:main'), 'live:kalshi:main')).toBe(false);
     expect(isGatewayAlert(alert('GATEWAY_DOWN:live:kalshi:main2'), 'live:kalshi:main')).toBe(false);
+    expect(isGatewayAlert(alert('HOME_ZONE_NO_CAPACITY:live:kalshi:main'), 'live:kalshi:main')).toBe(true);
+    expect(isGatewayAlert(alert('HOME_ZONE_NO_CAPACITY:use2-1a2b3c'), 'live:kalshi:main')).toBe(false);
   });
 });
 

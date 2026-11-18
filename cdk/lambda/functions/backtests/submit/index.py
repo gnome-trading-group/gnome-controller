@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import boto3
 import yaml
 from botocore.config import Config
+from batch_runs import CONFIG_SK
 from utils import create_response
 
 from sweep import expand_scenarios_and_sweeps, get_param_value, scenario_names, sweep_params
@@ -155,7 +156,8 @@ def handler(event: dict, context) -> dict:
     scenarios = scenario_names(config)
     params = sweep_params(config)
 
-    _put_s3_yaml(run_id, "config.yaml", config)
+    _s3.put_object(Bucket=S3_BUCKET, Key=_s3_key(run_id, "config.yaml"), Body=config_yaml.encode(),
+                   ContentType="application/x-yaml")
     with ThreadPoolExecutor(max_workers=UPLOAD_THREADS) as pool:
         list(pool.map(lambda i: _put_s3_yaml(run_id, f"jobs/{i}/config.yaml", jobs[i][1]), range(job_count)))
 
@@ -169,7 +171,6 @@ def handler(event: dict, context) -> dict:
         "job_count": job_count,
         "completed_count": 0,
         "failed_count": 0,
-        "config_yaml": config_yaml,
         "cpu": cpu or DEFAULT_CPU,
         "memory_gib": memory_gib or DEFAULT_MEMORY_GIB,
         "report": report,
@@ -185,14 +186,16 @@ def handler(event: dict, context) -> dict:
         "engine_version": engine_version,
     }
     meta_item.update({k: v for k, v in sources.items() if v})
-    if scenarios:
-        meta_item["scenarios"] = scenarios
     environment = [{"name": k.upper(), "value": v} for k, v in sources.items() if v]
     if not report:
         environment.append({"name": "NO_REPORT", "value": "1"})
     # Rows go in before the job exists: its first state changes arrive within seconds and update them. Job rows
     # carry no submitted_at, which keeps them out of the status index the list reads.
     _table.put_item(Item=meta_item)
+    if scenarios:
+        # DynamoDB bills a write by the whole row, and every finished job writes META, so what is never updated after
+        # submit, like a long list of scenario names, lives in a row of its own.
+        _table.put_item(Item={"run_id": run_id, "sk": CONFIG_SK, "scenarios": scenarios, "ttl": _ttl()})
     with _table.batch_writer() as writer:
         for i, (scenario_name, cfg) in enumerate(jobs):
             job_item: dict = {

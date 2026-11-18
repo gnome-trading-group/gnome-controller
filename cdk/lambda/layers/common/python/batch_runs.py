@@ -9,9 +9,20 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from boto3.dynamodb.conditions import Attr, Key
+from botocore.config import Config
+from boto3.dynamodb.types import TypeDeserializer
+
+# A run's fields that never change after submit, kept off META so the writes each finished task makes stay small.
+CONFIG_SK = "CONFIG"
 
 # The task indexes already counted. A Lambda retried after its count landed must not count the same task twice.
 FINISHED_INDEXES = "finished_indexes"
+
+_deserializer = TypeDeserializer()
+
+# A run's tasks all write under its one partition key, and a burst of finishes can briefly pass what a key takes; the
+# default three attempts give up before DynamoDB recovers.
+STATUS_HANDLER_CONFIG = Config(retries={"mode": "standard", "max_attempts": 10})
 
 
 def array_task(detail: dict, prefix: str) -> tuple[str, int] | None:
@@ -39,18 +50,32 @@ def final_status(succeeded: int, failed: int, total: int) -> str | None:
     return "FAILED" if failed == total else "PARTIALLY_FAILED"
 
 
-def count_finished(table, run_id: str, index: int, counter: str) -> dict | None:
-    """Add one to `counter` on the run's META row for this task, once only; the META row afterwards, None if absent."""
+def count_finished(table, run_id: str, index: int, counter: str, unfinished: tuple[str, ...]) -> dict | None:
+    """Add one to `counter` on the run's META row for this task, once only; the META row afterwards.
+
+    None once the run has left `unfinished`. Cancelling a run fails all its tasks at once, and counting each of them on
+    the one META row is a burst of writes to a single key that DynamoDB throttles, for counts nothing reads.
+    """
+    allowed = {f":from{i}": s for i, s in enumerate(unfinished)}
     try:
         return table.update_item(
             Key={"run_id": run_id, "sk": "META"},
             UpdateExpression=f"ADD {counter} :one, {FINISHED_INDEXES} :idx",
-            ConditionExpression=f"attribute_exists(sk) AND NOT contains({FINISHED_INDEXES}, :i)",
-            ExpressionAttributeValues={":one": 1, ":idx": {index}, ":i": index},
+            ConditionExpression=(f"attribute_exists(sk) AND #st IN ({', '.join(allowed)}) "
+                                 f"AND NOT contains({FINISHED_INDEXES}, :i)"),
+            ExpressionAttributeNames={"#st": "status"},
+            ExpressionAttributeValues={":one": 1, ":idx": {index}, ":i": index, **allowed},
             ReturnValues="ALL_NEW",
+            # The failed write returns the row it was checked against, so telling a finished run from a task already
+            # counted needs no second request.
+            ReturnValuesOnConditionCheckFailure="ALL_OLD",
         )["Attributes"]
-    except table.meta.client.exceptions.ConditionalCheckFailedException:
-        return table.get_item(Key={"run_id": run_id, "sk": "META"}, ConsistentRead=True).get("Item")
+    except table.meta.client.exceptions.ConditionalCheckFailedException as e:
+        raw = e.response.get("Item")
+        if not raw:
+            return None
+        meta = {k: _deserializer.deserialize(v) for k, v in raw.items()}
+        return meta if meta.get("status") in unfinished else None
 
 
 def set_run_status(table, run_id: str, status: str, allowed_from: tuple[str, ...], stamp: str) -> None:
@@ -73,9 +98,9 @@ def finish_task(table, run_id: str, index: int, succeeded: bool, counters: tuple
     """Count a finished task and, once every task has, give the run its final status.
 
     `counters` names the (succeeded, failed) count fields. A cancelled run is not in `unfinished`, so it stays
-    CANCELLED as its terminated tasks fail.
+    CANCELLED, and uncounted, as its terminated tasks fail.
     """
-    meta = count_finished(table, run_id, index, counters[0] if succeeded else counters[1])
+    meta = count_finished(table, run_id, index, counters[0] if succeeded else counters[1], unfinished)
     if meta is None:
         return
     final = final_status(int(meta.get(counters[0], 0)), int(meta.get(counters[1], 0)), int(meta[total_field]))

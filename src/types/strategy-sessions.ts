@@ -23,6 +23,8 @@ export interface StrategySession {
   instanceType: string | null;
   launchRegion: string | null;
   availabilityZone: string | null;
+  // The zone of the gateway it trades through in its region, as the launcher saw it; null when none ran yet.
+  gatewayZone?: string | null;
   // What the session ran on, read from its commit at launch.
   orchestratorVersion: string | null;
   gnomepyVersion: string | null;

@@ -94,6 +94,22 @@ def test_a_cancelled_run_stays_cancelled_as_its_jobs_fail(table):
     assert t.items[("r-1", "META")]["status"] == "CANCELLED"
 
 
+def test_cancelling_a_run_records_each_job_but_never_writes_the_run_row(table):
+    """Cancelling fails every job at once; a write to META for each would be a burst on one key."""
+    t = table(rows(["RUNNING"] * 200, run_status="CANCELLED"))
+    for i in range(200):
+        status.handler(batch_event("FAILED", i, statusReason="Cancelled by user"), None)
+    assert ("r-1", "META") not in t.writes
+    assert all(t.items[("r-1", f"JOB#{i:04d}")]["status"] == "FAILED" for i in range(200))
+    assert t.items[("r-1", "META")]["failed_count"] == 0
+
+
+def test_a_finished_run_does_not_count_a_late_finish(table):
+    t = table(rows(["SUCCEEDED", "RUNNING"], run_status="FAILED"))
+    status.handler(batch_event("SUCCEEDED", 1), None)
+    assert ("r-1", "META") not in t.writes
+
+
 def test_a_retried_finish_is_counted_once(table):
     t = table(rows(["RUNNING", "RUNNING"]))
     status.handler(batch_event("FAILED", 1), None)
@@ -129,6 +145,13 @@ def test_get_links_reports_of_jobs_with_a_summary_and_hides_the_counted_set(tabl
     assert [("report_url" in j) for j in body["jobs"]] == [True, False, False]
 
 
+def test_get_returns_the_scenarios_from_the_config_row(table):
+    t = table(rows(["SUCCEEDED"]) + [{"run_id": "r-1", "sk": "CONFIG", "scenarios": ["a", "b"], "ttl": 1}])
+    body = json.loads(get.handler({"pathParameters": {"runId": "r-1"}}, None)["body"])
+    assert body["scenarios"] == ["a", "b"] and body["sk"] == "META"
+    assert [j["sk"] for j in body["jobs"]] == ["JOB#0000"]
+
+
 def test_cancel_terminates_the_array_parent_once(table, monkeypatch):
     batch = FakeBatch()
     monkeypatch.setattr(cancel, "_batch", batch)
@@ -161,6 +184,10 @@ def test_the_list_reads_the_newest_runs_of_each_status_and_drops_job_rows(monkey
             return response
 
     monkeypatch.setattr(listing, "_table", Index())
+    configs = FakeTable([{"run_id": "c2", "sk": "CONFIG", "scenarios": ["a", "b"], "ttl": 1}])
+    monkeypatch.setattr(listing, "_ddb", configs)
     body = json.loads(listing.handler({"queryStringParameters": {"limit": "2"}}, None)["body"])
     assert [r["run_id"] for r in body["runs"]] == ["c2", "f1"]
     assert "config_yaml" not in body["runs"][0] and "finished_indexes" not in body["runs"][1]
+    assert body["runs"][0]["scenarios"] == ["a", "b"] and body["runs"][0]["sk"] == "META"
+    assert "scenarios" not in body["runs"][1]
