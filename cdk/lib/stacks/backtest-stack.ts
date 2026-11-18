@@ -23,6 +23,11 @@ export interface BacktestStackProps extends cdk.StackProps {
   auth: GnomeApiAuthorizer;
 }
 
+// Per job unless a submit asks for another size. A backtest's work is one thread (the engine and its Python strategy
+// take turns); the rest only download market data.
+const DEFAULT_CPU = 2;
+const DEFAULT_MEMORY_GIB = 8;
+
 export class BacktestStack extends cdk.Stack {
   // Driven by Batch events, not the API, so its failures need their own alarm (MonitoringStack).
   public readonly statusHandler: lambda.IFunction;
@@ -144,8 +149,8 @@ export class BacktestStack extends cdk.Stack {
       jobDefinitionName: "gnome-backtest",
       container: new batch.EcsEc2ContainerDefinition(this, "BacktestContainer", {
         image: ecs.ContainerImage.fromEcrRepository(ecrRepo, "latest"),
-        cpu: 4,
-        memory: cdk.Size.gibibytes(8),
+        cpu: DEFAULT_CPU,
+        memory: cdk.Size.gibibytes(DEFAULT_MEMORY_GIB),
         jobRole: batchJobRole,
         executionRole: batchExecutionRole,
         environment: { AWS_DEFAULT_REGION: this.region, STAGE: props.stage },
@@ -172,6 +177,8 @@ export class BacktestStack extends cdk.Stack {
         ...commonEnv,
         BATCH_JOB_QUEUE: jobQueue.jobQueueArn,
         BATCH_JOB_DEFINITION: jobDefinition.jobDefinitionArn,
+        DEFAULT_CPU: String(DEFAULT_CPU),
+        DEFAULT_MEMORY_GIB: String(DEFAULT_MEMORY_GIB),
       },
     });
     table.grantWriteData(submitLambda.function);

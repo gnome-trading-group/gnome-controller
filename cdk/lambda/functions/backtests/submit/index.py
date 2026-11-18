@@ -19,6 +19,9 @@ DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE"]
 S3_BUCKET = os.environ["S3_BUCKET"]
 BATCH_JOB_QUEUE = os.environ["BATCH_JOB_QUEUE"]
 BATCH_JOB_DEFINITION = os.environ["BATCH_JOB_DEFINITION"]
+# The job definition's size, which a run keeps unless it asks for another.
+DEFAULT_CPU = int(os.environ["DEFAULT_CPU"])
+DEFAULT_MEMORY_GIB = int(os.environ["DEFAULT_MEMORY_GIB"])
 UPLOAD_THREADS = 32
 
 _ddb = boto3.resource("dynamodb")
@@ -33,6 +36,10 @@ MAX_JOBS = 10_000
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 # gnome-backtest publishes only releases to GitHub Packages, where the job fetches an engine version from.
 RELEASE_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+# The largest job the compute environment's instance types hold (m5.2xlarge, less what ECS keeps): a bigger one would
+# wait in RUNNABLE forever.
+MAX_CPU = 8
+MAX_MEMORY_GIB = 30
 
 
 def _run_id() -> str:
@@ -62,15 +69,31 @@ def _put_s3_yaml(run_id: str, suffix: str, data: dict) -> None:
     )
 
 
-def submit_job_kwargs(run_id: str, job_count: int, environment: list[dict]) -> dict:
+def _whole(value, name: str, most: int) -> int | None:
+    """An optional whole number from 1 to ``most``."""
+    if value is not None and (not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= most):
+        raise ValueError(f"{name} must be a whole number from 1 to {most}")
+    return value
+
+
+def submit_job_kwargs(run_id: str, job_count: int, environment: list[dict], cpu: int | None = None,
+                      memory_gib: int | None = None) -> dict:
+    overrides: dict = {
+        "environment": [{"name": "RUN_ID", "value": run_id}, {"name": "S3_BUCKET", "value": S3_BUCKET},
+                        *environment],
+    }
+    resources = []
+    if cpu is not None:
+        resources.append({"type": "VCPU", "value": str(cpu)})
+    if memory_gib is not None:
+        resources.append({"type": "MEMORY", "value": str(memory_gib * 1024)})
+    if resources:
+        overrides["resourceRequirements"] = resources
     kwargs = {
         "jobName": f"backtest-{run_id}",
         "jobQueue": BATCH_JOB_QUEUE,
         "jobDefinition": BATCH_JOB_DEFINITION,
-        "containerOverrides": {
-            "environment": [{"name": "RUN_ID", "value": run_id}, {"name": "S3_BUCKET", "value": S3_BUCKET},
-                            *environment],
-        },
+        "containerOverrides": overrides,
         "retryStrategy": {"attempts": 2},
     }
     # Batch array jobs need at least two children; a single job runs as a plain job (index 0).
@@ -98,6 +121,7 @@ def handler(event: dict, context) -> dict:
     research_commit = body.get("research_commit")
     strategy_commit = body.get("strategy_commit")
     engine_version = body.get("engine_version")
+    report = body.get("report", True)
     submitted_by = _submitted_by(event)
 
     if not config_yaml:
@@ -106,6 +130,13 @@ def handler(event: dict, context) -> dict:
         return create_response(400, {"error": "strategy_commit must be a full 40-character commit SHA"})
     if engine_version is not None and not (isinstance(engine_version, str) and RELEASE_VERSION.match(engine_version)):
         return create_response(400, {"error": "engine_version must be a gnome-backtest release (X.Y.Z)"})
+    if not isinstance(report, bool):
+        return create_response(400, {"error": "report must be true or false"})
+    try:
+        cpu = _whole(body.get("cpu"), "cpu", MAX_CPU)
+        memory_gib = _whole(body.get("memory_gib"), "memory_gib", MAX_MEMORY_GIB)
+    except ValueError as e:
+        return create_response(400, {"error": str(e)})
     if not research_commit and not strategy_commit:
         research_commit = "main"
 
@@ -139,6 +170,9 @@ def handler(event: dict, context) -> dict:
         "completed_count": 0,
         "failed_count": 0,
         "config_yaml": config_yaml,
+        "cpu": cpu or DEFAULT_CPU,
+        "memory_gib": memory_gib or DEFAULT_MEMORY_GIB,
+        "report": report,
         "sweep_params": {
             k: [json.dumps(v, sort_keys=True) if isinstance(v, dict) else str(v) for v in vals]
             for k, vals in params.items()
@@ -154,6 +188,8 @@ def handler(event: dict, context) -> dict:
     if scenarios:
         meta_item["scenarios"] = scenarios
     environment = [{"name": k.upper(), "value": v} for k, v in sources.items() if v]
+    if not report:
+        environment.append({"name": "NO_REPORT", "value": "1"})
     # Rows go in before the job exists: its first state changes arrive within seconds and update them. Job rows
     # carry no submitted_at, which keeps them out of the status index the list reads.
     _table.put_item(Item=meta_item)
@@ -172,7 +208,8 @@ def handler(event: dict, context) -> dict:
             writer.put_item(Item=job_item)
 
     try:
-        batch_job_id = _batch.submit_job(**submit_job_kwargs(run_id, job_count, environment))["jobId"]
+        kwargs = submit_job_kwargs(run_id, job_count, environment, cpu, memory_gib)
+        batch_job_id = _batch.submit_job(**kwargs)["jobId"]
     except Exception as e:
         _set_meta(run_id, {"status": "FAILED", "error": f"Batch submit failed: {e}"})
         raise

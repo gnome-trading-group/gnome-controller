@@ -7,7 +7,8 @@ import pytest
 from conftest import FUNCTIONS, load
 from fakes import FakeBatch, FakeS3, FakeTable
 
-os.environ.update({"BATCH_JOB_QUEUE": "backtests", "BATCH_JOB_DEFINITION": "backtest"})
+os.environ.update({"BATCH_JOB_QUEUE": "backtests", "BATCH_JOB_DEFINITION": "backtest", "DEFAULT_CPU": "2",
+                   "DEFAULT_MEMORY_GIB": "8"})
 sys.path.insert(0, os.path.join(FUNCTIONS, "submit"))
 submit = load("submit")
 
@@ -74,6 +75,58 @@ def test_unrunnable_sources_are_refused(aws, body, message):
     assert res["statusCode"] == 400
     assert message in json.loads(res["body"])["error"]
     assert batch.submitted == []
+
+
+def test_a_run_keeps_the_job_definitions_size_unless_it_asks(aws):
+    batch, table = aws
+    assert post({})["statusCode"] == 200
+    assert "resourceRequirements" not in batch.submitted[0]["containerOverrides"]
+    assert (meta(table)["cpu"], meta(table)["memory_gib"]) == (2, 8)
+
+
+def test_a_run_sized_by_its_submit_runs_every_job_at_that_size(aws):
+    batch, table = aws
+    assert post({"cpu": 2, "memory_gib": 16})["statusCode"] == 200
+    assert batch.submitted[0]["containerOverrides"]["resourceRequirements"] == [
+        {"type": "VCPU", "value": "2"}, {"type": "MEMORY", "value": "16384"}]
+    assert (meta(table)["cpu"], meta(table)["memory_gib"]) == (2, 16)
+
+
+def test_memory_alone_keeps_the_default_vcpus(aws):
+    batch, _ = aws
+    assert post({"memory_gib": 12})["statusCode"] == 200
+    assert batch.submitted[0]["containerOverrides"]["resourceRequirements"] == [{"type": "MEMORY", "value": "12288"}]
+
+
+@pytest.mark.parametrize("body, message", [
+    ({"cpu": 0}, "cpu"),
+    ({"cpu": 9}, "cpu"),
+    ({"cpu": 2.5}, "cpu"),
+    ({"cpu": True}, "cpu"),
+    ({"memory_gib": 31}, "memory_gib"),
+    ({"memory_gib": "8"}, "memory_gib"),
+    ({"report": "no"}, "report"),
+])
+def test_sizes_no_instance_holds_and_odd_values_are_refused(aws, body, message):
+    batch, _ = aws
+    res = post(body)
+    assert res["statusCode"] == 400
+    assert message in json.loads(res["body"])["error"]
+    assert batch.submitted == []
+
+
+def test_a_run_without_the_report_tells_its_jobs(aws):
+    batch, table = aws
+    assert post({"report": False})["statusCode"] == 200
+    assert env(batch)["NO_REPORT"] == "1"
+    assert meta(table)["report"] is False
+
+
+def test_a_run_writes_its_report_by_default(aws):
+    batch, table = aws
+    assert post({})["statusCode"] == 200
+    assert "NO_REPORT" not in env(batch)
+    assert meta(table)["report"] is True
 
 
 SWEEP = CONFIG.replace("PlatformCheck\n", "PlatformCheck\n  args: {}\n") + "sweep:\n  strategy:\n    spread: [1, 2, 3]\n"
