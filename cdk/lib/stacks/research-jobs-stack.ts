@@ -286,6 +286,9 @@ export class ResearchJobsStack extends cdk.Stack {
       description: "Record research job task state changes from Batch",
       timeout: cdk.Duration.seconds(60),
       environment: { ...commonEnv },
+      // Cancelling a run fails every task at once, one event each; uncapped, a large run takes the account's whole
+      // concurrency and throttles every other API. Lambda retries throttled async events.
+      reservedConcurrentExecutions: 50,
     });
     table.grantReadWriteData(statusHandlerLambda.function);
     this.statusHandler = statusHandlerLambda.function;
@@ -294,7 +297,12 @@ export class ResearchJobsStack extends cdk.Stack {
       eventPattern: {
         source: ["aws.batch"],
         detailType: ["Batch Job State Change"],
-        detail: { jobQueue: [jobQueue.jobQueueArn] },
+        detail: {
+          jobQueue: [jobQueue.jobQueueArn],
+          // Every task of a run goes RUNNABLE at once on submit. The earlier states only mark a task as waiting, which
+          // its SUBMITTED row already shows, and a task that never starts still reports FAILED.
+          status: ["RUNNING", "SUCCEEDED", "FAILED"],
+        },
       },
       targets: [new targets.LambdaFunction(statusHandlerLambda.function)],
     });

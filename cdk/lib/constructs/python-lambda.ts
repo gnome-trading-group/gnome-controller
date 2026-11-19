@@ -15,6 +15,7 @@ export interface PythonLambdaFunctionProps {
   readonly functionName?: string;
   // A fixed name for the execution role, for when another account trusts it by ARN; otherwise CDK generates one.
   readonly roleName?: string;
+  readonly reservedConcurrentExecutions?: number;
 }
 
 /**
@@ -68,6 +69,7 @@ export class PythonLambdaFunction extends Construct {
       timeout: props.timeout ?? cdk.Duration.seconds(30),
       description: props.description,
       environment: props.environment,
+      reservedConcurrentExecutions: props.reservedConcurrentExecutions,
     });
   }
 
