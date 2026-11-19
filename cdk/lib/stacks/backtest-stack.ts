@@ -16,11 +16,13 @@ import {
 } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 import { grantResearchDatasetRead } from "../research-datasets";
+import { BATCH_SPOT_INSTANCE_TYPES } from "../batch-instance-types";
 
 export interface BacktestStackProps extends cdk.StackProps {
   stage: Stage;
   apiGateway: apigateway.RestApi;
   auth: GnomeApiAuthorizer;
+  maxVcpus: number;
 }
 
 // Per job unless a submit asks for another size. A backtest's work is one thread (the engine and its Python strategy
@@ -128,13 +130,10 @@ export class BacktestStack extends cdk.Stack {
       // Renamed when it moved to the platform network: a named compute environment can't be replaced in place.
       computeEnvironmentName: "gnome-backtest-spot-platform",
       spot: true,
-      instanceTypes: [
-        ec2.InstanceType.of(ec2.InstanceClass.C5, ec2.InstanceSize.XLARGE),
-        ec2.InstanceType.of(ec2.InstanceClass.C5, ec2.InstanceSize.XLARGE2),
-        ec2.InstanceType.of(ec2.InstanceClass.M5, ec2.InstanceSize.XLARGE),
-        ec2.InstanceType.of(ec2.InstanceClass.M5, ec2.InstanceSize.XLARGE2),
-      ],
-      maxvCpus: 64,
+      instanceTypes: BATCH_SPOT_INSTANCE_TYPES,
+      useOptimalInstanceClasses: false,
+      allocationStrategy: batch.AllocationStrategy.SPOT_PRICE_CAPACITY_OPTIMIZED,
+      maxvCpus: props.maxVcpus,
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       securityGroups: [securityGroup],

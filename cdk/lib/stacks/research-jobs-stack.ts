@@ -16,6 +16,7 @@ import {
 } from "@gnome-trading-group/gnome-shared-cdk";
 import { PythonLambdaFunction } from "../constructs/python-lambda";
 import { grantResearchDatasetRead } from "../research-datasets";
+import { BATCH_SPOT_INSTANCE_TYPES } from "../batch-instance-types";
 
 export interface ResearchJobsStackProps extends cdk.StackProps {
   stage: Stage;
@@ -26,7 +27,7 @@ export interface ResearchJobsStackProps extends cdk.StackProps {
   maxVcpus: number;
 }
 
-// Per task unless a submit overrides them: NUTS runs 4 chains, and 13 such tasks fit under prod's 128-vCPU cap at once.
+// Per task unless a submit overrides them: NUTS runs 4 chains, and 64 such tasks fit under prod's 256-vCPU cap at once.
 const DEFAULT_CPU = 4;
 const DEFAULT_MEMORY_GIB = 14;
 
@@ -130,20 +131,11 @@ export class ResearchJobsStack extends cdk.Stack {
       ],
     });
 
-    // Research jobs are CPU-bound numeric work (NUTS samples one chain per thread). c7a/m7a give one physical core
-    // per vCPU; c7i/m7i are the fastest Intel; 6th-generation types stay as fallbacks so spot capacity never runs
-    // dry. c5/m5 ran a monthly fit about 2.5x slower than a laptop, so they are not offered.
-    const instanceTypes = [
-      ec2.InstanceClass.C7A, ec2.InstanceClass.M7A, ec2.InstanceClass.C7I, ec2.InstanceClass.M7I,
-      ec2.InstanceClass.C6I, ec2.InstanceClass.M6I,
-    ].flatMap((cls) => [ec2.InstanceSize.XLARGE, ec2.InstanceSize.XLARGE2, ec2.InstanceSize.XLARGE4]
-      .map((size) => ec2.InstanceType.of(cls, size)));
-
     const computeEnvironment = new batch.ManagedEc2EcsComputeEnvironment(this, "ResearchJobComputeEnv", {
       // Renamed when it moved to the platform network: a named compute environment can't be replaced in place.
       computeEnvironmentName: "gnome-research-spot-platform",
       spot: true,
-      instanceTypes,
+      instanceTypes: BATCH_SPOT_INSTANCE_TYPES,
       useOptimalInstanceClasses: false,
       allocationStrategy: batch.AllocationStrategy.SPOT_PRICE_CAPACITY_OPTIMIZED,
       maxvCpus: props.maxVcpus,

@@ -11,9 +11,11 @@ export interface ControllerConfig {
   // Whether this stage's System page may approve or reject deploy-pipeline approvals (prod only).
   approvesPipelines: boolean;
 
-  // The most vCPUs research jobs may use at once across all their tasks. Research runs in prod; dev only tests the
-  // runner itself. Spot quota is 128 in both accounts.
+  // The most vCPUs research jobs and backtests may each use at once across all their tasks. Research runs in prod; dev
+  // only tests the runners. Both share the account's spot quota (256 vCPUs in prod), so when both are busy the later
+  // instances wait for quota.
   researchJobMaxVcpus: number;
+  backtestMaxVcpus: number;
 }
 
 const defaultConfig = {
@@ -28,6 +30,7 @@ export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
     domainName: "controller-dev.gnometrading.group",
     approvesPipelines: false,
     researchJobMaxVcpus: 16,
+    backtestMaxVcpus: 64,
     certificateArn: "arn:aws:acm:us-east-1:443370708724:certificate/3c450979-67db-4ad1-bdad-a6dd1c0001c0",
   },
   // [Stage.STAGING]: {
@@ -42,6 +45,7 @@ export const CONFIGS: { [stage in Stage]?:  ControllerConfig } = {
     domainName: "controller.gnometrading.group",
     approvesPipelines: true,
     researchJobMaxVcpus: 256,
+    backtestMaxVcpus: 256,
     certificateArn: "arn:aws:acm:us-east-1:241533121172:certificate/10d470fd-e43a-4145-9a7b-4dc7a48ee42a",
   },
 }

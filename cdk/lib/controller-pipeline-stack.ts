@@ -36,6 +36,7 @@ class AppStage extends cdk.Stage {
 
     const backtestStack = new BacktestStack(this, "ControllerBacktestStack", {
       stage: config.account.stage,
+      maxVcpus: config.backtestMaxVcpus,
       apiGateway: backendStack.apiGateway,
       auth: backendStack.auth,
     });
