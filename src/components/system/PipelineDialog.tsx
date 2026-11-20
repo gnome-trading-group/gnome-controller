@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert, Anchor, Badge, Button, Group, Loader, Modal, Paper, ScrollArea, Select, Stack, Table, Tabs, Text, ThemeIcon,
+  Alert, Anchor, Badge, Box, Button, Group, Loader, Modal, Paper, ScrollArea, Select, Skeleton, Stack, Table, Tabs, Text,
+  ThemeIcon,
 } from '@mantine/core';
 import { IconExternalLink, IconFileText, IconPlayerPlay, IconPlayerStop, IconRefresh } from '@tabler/icons-react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -29,6 +30,8 @@ export interface PipelineDialogTarget {
   region: string;
   // The stage to open on; otherwise the one the run stopped at or is in.
   stage?: string;
+  // The stages the health page already knows, so the dialog can lay them out while it loads.
+  stageNames?: string[];
 }
 
 function StatusBadge({ status }: { status: string | null }) {
@@ -224,6 +227,59 @@ function StagePanel({ detail, stage, onOperate }: {
   );
 }
 
+function SkeletonLines({ widths }: { widths: (number | string)[] }) {
+  return <Stack gap={6}>{widths.map((w, i) => <Skeleton key={i} h={10} w={w} radius="sm" />)}</Stack>;
+}
+
+// The dialog's layout while it first loads: the stages are known from the health page, the rest is placeholder.
+function DetailSkeleton({ target }: { target: PipelineDialogTarget }) {
+  const stages = target.stageNames?.length ? target.stageNames : ['', '', '', ''];
+  return (
+    <Stack gap="md" aria-busy="true">
+      <Group justify="space-between" align="flex-end">
+        <Stack gap={6}>
+          <Skeleton h={10} w={30} radius="sm" />
+          <Skeleton h={30} w={520} maw="100%" radius="sm" />
+        </Stack>
+        <Skeleton h={30} w={130} radius="sm" />
+      </Group>
+      <Paper withBorder p="sm" radius="sm">
+        <Group gap="lg" align="flex-start">
+          {[60, 140, 50].map((w, i) => <SkeletonLines key={i} widths={[40, w]} />)}
+          <Box style={{ flex: 1, minWidth: 240 }}><SkeletonLines widths={[50, '80%', '60%']} /></Box>
+        </Group>
+      </Paper>
+      <Group gap="md" wrap="nowrap" style={{ borderBottom: '1px solid var(--mantine-color-default-border)', overflow: 'hidden' }} pb={8}>
+        {stages.map((name, i) => (
+          <Group key={`${name}-${i}`} gap={6} wrap="nowrap" px={4}>
+            <Skeleton h={18} w={18} circle />
+            {name ? <Text size="sm" c="dimmed" style={{ whiteSpace: 'nowrap' }}>{name}</Text> : <Skeleton h={10} w={60} radius="sm" />}
+          </Group>
+        ))}
+      </Group>
+      <Stack gap={10}>
+        {[0, 1, 2, 3].map(i => (
+          <Group key={i} justify="space-between" wrap="nowrap">
+            <SkeletonLines widths={[120 + 30 * (i % 2), 80]} />
+            <Skeleton h={16} w={64} radius="xl" />
+            <Skeleton h={10} w={70} radius="sm" />
+            <Skeleton h={10} w={40} radius="sm" />
+            <Skeleton h={10} w={90} radius="sm" />
+          </Group>
+        ))}
+      </Stack>
+      <Stack gap={6}>
+        <Text size="sm" fw={500}>Where each stage is</Text>
+        <Skeleton h={22 * Math.min(stages.length, 6)} radius="sm" />
+      </Stack>
+      <Group gap={6}>
+        <Loader size={12} type="dots" />
+        <Text size="xs" c="dimmed">Reading runs and actions from CodePipeline…</Text>
+      </Group>
+    </Stack>
+  );
+}
+
 // One pipeline: pick a run, see each stage's actions with their errors and build logs, where every stage last
 // succeeded, and (on the prod controller) retry, release or stop.
 export function PipelineDialog({ target, onClose, onChanged }: {
@@ -254,6 +310,8 @@ export function PipelineDialog({ target, onClose, onChanged }: {
   });
 
   const data = detail.data;
+  // Another run was picked and is loading; the previous one stays on screen, faded.
+  const switching = detail.isPlaceholderData;
   const shownStage = stage && data?.stages.some(s => s.name === stage) ? stage : data ? defaultStage(data) : null;
 
   if (!target) return null;
@@ -271,10 +329,22 @@ export function PipelineDialog({ target, onClose, onChanged }: {
         </Group>
       }
     >
-      {detail.isLoading ? <Loader size="sm" /> : detail.error ? (
-        <Alert color="red">{errorMessage(detail.error, 'Failed to load the pipeline')}</Alert>
+      {detail.isLoading ? <DetailSkeleton target={target} /> : detail.error && !data ? (
+        <Alert color="red" title="Couldn't load the pipeline">
+          <Stack gap="xs" align="flex-start">
+            <Text size="sm">{errorMessage(detail.error, 'Failed to load the pipeline')}</Text>
+            <Button size="xs" variant="light" color="red" loading={detail.isFetching} onClick={() => detail.refetch()}>
+              Try again
+            </Button>
+          </Stack>
+        </Alert>
       ) : data && (
         <Stack gap="md">
+          {detail.error && (
+            <Alert color="orange" variant="light" p="xs">
+              Couldn't refresh: {errorMessage(detail.error, 'request failed')}. Showing the last read.
+            </Alert>
+          )}
           <Group justify="space-between" align="flex-end">
             <Select
               label="Run"
@@ -284,6 +354,7 @@ export function PipelineDialog({ target, onClose, onChanged }: {
               value={data.runId}
               onChange={value => value && setRunId(value)}
               allowDeselect={false}
+              rightSection={switching ? <Loader size={14} /> : undefined}
             />
             {data.canOperate ? (
               <Group gap="xs">
@@ -301,35 +372,37 @@ export function PipelineDialog({ target, onClose, onChanged }: {
             ) : <Text size="xs" c="dimmed">Retry, release and stop from the prod controller.</Text>}
           </Group>
 
-          {data.run && <RunSummary run={data.run} />}
+          <Stack gap="md" style={{ opacity: switching ? 0.45 : 1, transition: 'opacity 150ms', pointerEvents: switching ? 'none' : undefined }}>
+            {data.run && <RunSummary run={data.run} />}
 
-          <Tabs value={shownStage} onChange={setStage} keepMounted={false}>
-            <ScrollArea type="auto" scrollbarSize={6}>
-              <Tabs.List style={{ flexWrap: 'nowrap' }}>
-                {data.stages.map(s => {
-                  const status = stageStatus(data, s.name);
-                  const waiting = status === 'InProgress'
-                    && actionsOf(data, s.name).some(a => a.category === 'Approval' && a.status === 'InProgress');
-                  const { color, icon } = look(status, waiting);
-                  return (
-                    <Tabs.Tab key={s.name} value={s.name}
-                      leftSection={<ThemeIcon size={18} radius="xl" variant="light" color={color}>{icon}</ThemeIcon>}>
-                      {s.name}
-                    </Tabs.Tab>
-                  );
-                })}
-              </Tabs.List>
-            </ScrollArea>
-            {data.stages.map(s => (
-              <Tabs.Panel key={s.name} value={s.name} pt="sm">
-                <StagePanel detail={data} stage={s.name} onOperate={setOperation} />
-              </Tabs.Panel>
-            ))}
-          </Tabs>
+            <Tabs value={shownStage} onChange={setStage} keepMounted={false}>
+              <ScrollArea type="auto" scrollbarSize={6}>
+                <Tabs.List style={{ flexWrap: 'nowrap' }}>
+                  {data.stages.map(s => {
+                    const status = stageStatus(data, s.name);
+                    const waiting = status === 'InProgress'
+                      && actionsOf(data, s.name).some(a => a.category === 'Approval' && a.status === 'InProgress');
+                    const { color, icon } = look(status, waiting);
+                    return (
+                      <Tabs.Tab key={s.name} value={s.name}
+                        leftSection={<ThemeIcon size={18} radius="xl" variant="light" color={color}>{icon}</ThemeIcon>}>
+                        {s.name}
+                      </Tabs.Tab>
+                    );
+                  })}
+                </Tabs.List>
+              </ScrollArea>
+              {data.stages.map(s => (
+                <Tabs.Panel key={s.name} value={s.name} pt="sm">
+                  <StagePanel detail={data} stage={s.name} onOperate={setOperation} />
+                </Tabs.Panel>
+              ))}
+            </Tabs>
 
-          <Stack gap={4}>
-            <Text size="sm" fw={500}>Where each stage is</Text>
-            <StagePositions detail={data} />
+            <Stack gap={4}>
+              <Text size="sm" fw={500}>Where each stage is</Text>
+              <StagePositions detail={data} />
+            </Stack>
           </Stack>
         </Stack>
       )}

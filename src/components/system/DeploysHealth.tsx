@@ -78,7 +78,7 @@ export function DeploysHealth() {
               <Table.Tr key={`${p.region}/${p.name}`}>
                 <Table.Td>
                   <Group gap={4} wrap="nowrap">
-                    <Anchor component="button" size="sm" onClick={() => setOpened({ name: p.name, region: p.region })}>{p.name}</Anchor>
+                    <Anchor component="button" size="sm" onClick={() => setOpened({ name: p.name, region: p.region, stageNames: p.stages.map(st => st.name) })}>{p.name}</Anchor>
                     <ActionIcon component="a" href={pipelineConsoleUrl(p.region, p.name)} target="_blank" size="xs"
                       variant="subtle" color="gray" aria-label="Open in CodePipeline">
                       <IconExternalLink size={12} />
@@ -104,7 +104,7 @@ export function DeploysHealth() {
                   </Stack>
                 </Table.Td>
                 <Table.Td>
-                  <PipelineFlow pipeline={p} onStageClick={stage => setOpened({ name: p.name, region: p.region, stage })} />
+                  <PipelineFlow pipeline={p} onStageClick={stage => setOpened({ name: p.name, region: p.region, stage, stageNames: p.stages.map(st => st.name) })} />
                 </Table.Td>
               </Table.Tr>
             ))}
