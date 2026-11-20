@@ -6,29 +6,45 @@ import { useDailyPnl } from '../../query/hooks';
 import { dailyStats } from '../../utils/performance';
 import { Kpi } from './layout';
 import { Money } from './values';
-import { DailyBars } from './DailyBars';
+import { DailyBars, DailyMetric } from './DailyBars';
+import { VolumeKpi } from './VolumeKpi';
+import { addVolumes } from '../../utils/volume';
 
 const WINDOWS: Record<string, number> = { '30d': 30, '90d': 90, '1y': 365 };
+const METRIC_TITLES: Record<DailyMetric, string> = { pnl: 'PnL', volume: 'volume', fees: 'fees' };
 
 // How a strategy's days have gone: one bar per day in the viewer's time zone, and what they add up to.
 export function PerformancePanel({ strategyId, mode }: { strategyId: number; mode: Mode }) {
   const tz = useDayZone();
   const [window, setWindow] = useState('30d');
+  const [metric, setMetric] = useState<DailyMetric>('pnl');
   const daily = useDailyPnl({ strategyId, mode }, tz, WINDOWS[window]);
   const stats = useMemo(() => (daily.data ? dailyStats(daily.data.days) : null), [daily.data]);
+  const volume = useMemo(
+    () => (daily.data ? addVolumes(daily.data.days.flatMap(d => (d.volume ? [d.volume] : []))) : undefined),
+    [daily.data]);
   const pct = stats?.winRate === null || stats?.winRate === undefined ? '—' : `${Math.round(stats.winRate * 100)}%`;
 
   return (
     <>
       <Card withBorder mb="md">
         <Group justify="space-between" mb="xs">
-          <Text fw={600}>Daily PnL ({daily.data?.timeZone ?? tz})</Text>
-          <SegmentedControl size="xs" value={window} onChange={setWindow} data={Object.keys(WINDOWS)} />
+          <Text fw={600}>Daily {METRIC_TITLES[metric]} ({daily.data?.timeZone ?? tz})</Text>
+          <Group gap="xs">
+            <SegmentedControl
+              size="xs"
+              value={metric}
+              onChange={v => setMetric(v as DailyMetric)}
+              data={[{ value: 'pnl', label: 'PnL' }, { value: 'volume', label: 'Volume' }, { value: 'fees', label: 'Fees' }]}
+            />
+            <SegmentedControl size="xs" value={window} onChange={setWindow} data={Object.keys(WINDOWS)} />
+          </Group>
         </Group>
-        <DailyBars daily={daily.data} loading={daily.isLoading} />
+        <DailyBars daily={daily.data} loading={daily.isLoading} refreshing={daily.isPlaceholderData} metric={metric} />
       </Card>
       <SimpleGrid cols={{ base: 2, sm: 3, lg: 4 }} spacing="sm">
         <Kpi label={`PnL over ${window}`} value={<Money value={stats?.total} arrow />} />
+        <VolumeKpi label={`Volume over ${window}`} volume={volume} />
         <Kpi label="Best day" value={<Money value={stats?.best?.pnl} />} footer={stats?.best?.date} />
         <Kpi label="Worst day" value={<Money value={stats?.worst?.pnl} />} footer={stats?.worst?.date} />
         <Kpi

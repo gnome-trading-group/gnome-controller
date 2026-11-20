@@ -93,7 +93,7 @@ export function FillsTable(props: PagedTableProps<LedgerFill>) {
       { id: 'qty', header: 'Qty', size: 80, ...right, Cell: ({ row }) => <Qty value={row.original.fillQty} lotSize={row.original.lotSize} size="sm" /> },
       {
         id: 'price', header: 'Price', size: 80, ...right,
-        Cell: ({ row }) => <Price value={row.original.fillPrice} exchangeId={row.original.exchangeId} tickSize={row.original.tickSize} size="sm" />,
+        Cell: ({ row }) => <Price value={row.original.fillPrice} exchangeId={row.original.exchangeId} priceBands={row.original.priceBands} size="sm" />,
       },
       { id: 'fee', header: 'Fee', size: 80, ...right, Cell: ({ row }) => <Money value={row.original.fee} pnl={false} size="sm" /> },
       {
@@ -111,7 +111,7 @@ export function FillsTable(props: PagedTableProps<LedgerFill>) {
       },
       {
         id: 'mark', header: 'Mark then', size: 85, ...right,
-        Cell: ({ row }) => <Price value={row.original.markPrice} exchangeId={row.original.exchangeId} tickSize={row.original.tickSize} derived size="sm" />,
+        Cell: ({ row }) => <Price value={row.original.markPrice} exchangeId={row.original.exchangeId} priceBands={row.original.priceBands} derived size="sm" />,
       },
       {
         id: 'slippage', header: 'vs mark', size: 85, ...right,
@@ -184,7 +184,7 @@ export function OrdersTable(props: PagedTableProps<LedgerOrder>) {
         id: 'price', header: 'Price', size: 80, ...right,
         Cell: ({ row }) => row.original.price === null
           ? <Text span size="sm" c="dimmed">market</Text>
-          : <Price value={row.original.price} exchangeId={row.original.exchangeId} tickSize={row.original.tickSize} size="sm" />,
+          : <Price value={row.original.price} exchangeId={row.original.exchangeId} priceBands={row.original.priceBands} size="sm" />,
       },
       {
         id: 'filled', header: 'Filled / size', size: 110, ...right,
@@ -196,7 +196,7 @@ export function OrdersTable(props: PagedTableProps<LedgerOrder>) {
       },
       {
         id: 'avg', header: 'Avg fill', size: 85, ...right,
-        Cell: ({ row }) => <Price value={row.original.avgFillPrice} exchangeId={row.original.exchangeId} tickSize={row.original.tickSize} derived size="sm" />,
+        Cell: ({ row }) => <Price value={row.original.avgFillPrice} exchangeId={row.original.exchangeId} priceBands={row.original.priceBands} derived size="sm" />,
       },
       { id: 'fees', header: 'Fees', size: 80, ...right, Cell: ({ row }) => <Money value={row.original.fees} pnl={false} size="sm" /> },
       { id: 'status', header: 'Status', size: 95, Cell: ({ row }) => <OrderStatus order={row.original} /> },

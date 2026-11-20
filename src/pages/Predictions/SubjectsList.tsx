@@ -25,11 +25,18 @@ import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { PropositionSubject, SubjectKeyAlias, SubjectKeyAliasOrigin, SubjectMergeCandidate } from '../../types';
 import { registryApi } from '../../utils/api';
+import { formatPrice } from '../../utils/format';
 import { errorMessage } from '../../utils/kill-switch';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import { SkeletonRows } from '../../components/SkeletonRows';
 import { AliasText, OriginBadge } from './SubjectKeys';
 
+
+// The candidate check's prices are dollars as floats; written in cents with every digit they have, as the trading
+// pages write a prediction market's prices.
+function dollars(price: number | undefined): string {
+  return price === undefined ? '?' : formatPrice(Math.round(price * 1e9), { cents: true });
+}
 const PAGE_LIMIT = 500;
 const QUEUE_STATUS_OPTIONS = [
   { value: 'PENDING', label: 'Pending' },
@@ -169,15 +176,15 @@ function HoldDetails({ candidate }: { candidate: SubjectMergeCandidate }) {
         if (p.bid === undefined || p.ask === undefined || p.bidSecurityId === undefined || p.askSecurityId === undefined) {
           return (
             <Text key={`${p.securityIdA}-${p.securityIdB}`} size="xs">
-              {sign} {security(p.securityIdA)} mid {p.midA?.toFixed(2) ?? '?'} vs {security(p.securityIdB)} mid{' '}
-              {p.midB?.toFixed(2) ?? '?'}
+              {sign} {security(p.securityIdA)} mid {dollars(p.midA)} vs {security(p.securityIdB)} mid{' '}
+              {dollars(p.midB)}
             </Text>
           );
         }
         return (
           <Text key={`${p.securityIdA}-${p.securityIdB}`} size="xs">
-            {sign} {security(p.bidSecurityId)} bid {p.bid.toFixed(2)} above {security(p.askSecurityId)} ask{' '}
-            {p.ask.toFixed(2)}
+            {sign} {security(p.bidSecurityId)} bid {dollars(p.bid)} above {security(p.askSecurityId)} ask{' '}
+            {dollars(p.ask)}
           </Text>
         );
       })}

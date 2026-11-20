@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
+  Anchor,
   Button,
   Group,
   Modal,
@@ -19,6 +20,14 @@ import { AWS_REGIONS, Exchange } from '../../types';
 import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { ExchangeDraft, exchangePatch, homeZoneOptions, zoneLabel } from '../../utils/zones';
+import { Link } from 'react-router-dom';
+import { useDayZone } from '../../context/PreferencesContext';
+import { useExchangeVolumes } from '../../query/hooks';
+import { makerPercent } from '../../utils/volume';
+import { Money } from '../../components/trading/values';
+
+// The live trading the table sums for each exchange.
+const VOLUME_DAYS = 30;
 
 interface ExchangesTabProps {
   onDelete: (type: 'exchange', id: number, name: string) => void;
@@ -26,6 +35,11 @@ interface ExchangesTabProps {
 
 function ExchangesTab({ onDelete }: ExchangesTabProps) {
   const { exchanges, loading, refreshExchanges } = useGlobalState();
+  const tz = useDayZone();
+  const volumes = useExchangeVolumes('live', tz, VOLUME_DAYS);
+  const volumeOf = useMemo(
+    () => new Map((volumes.data?.exchanges ?? []).map(v => [v.exchangeId, v])),
+    [volumes.data]);
 
   const [createExchangeOpen, setCreateExchangeOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -88,6 +102,11 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
       header: 'Name',
       enableSorting: true,
       enableEditing: true,
+      Cell: ({ row }: { row: MRT_Row<Exchange> }) => (
+        <Anchor component={Link} to={`/security-master/exchanges/${row.original.exchangeId}`} size="sm">
+          {row.original.exchangeName}
+        </Anchor>
+      ),
       Edit: ({ cell }) => (
         <TextInput
           defaultValue={cell.getValue<string>()}
@@ -152,6 +171,44 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
       },
     },
     {
+      id: 'volume',
+      header: `Volume (${VOLUME_DAYS}d live)`,
+      enableEditing: false,
+      accessorFn: (e: Exchange) => Number(volumeOf.get(e.exchangeId)?.volume.notional ?? -1),
+      Cell: ({ row }: { row: MRT_Row<Exchange> }) => <Money value={volumeOf.get(row.original.exchangeId)?.volume.notional} pnl={false} size="sm" />,
+    },
+    {
+      id: 'maker',
+      header: 'Maker',
+      enableEditing: false,
+      size: 90,
+      accessorFn: (e: Exchange) => makerPercent(volumeOf.get(e.exchangeId)?.volume) ?? -1,
+      Cell: ({ row }: { row: MRT_Row<Exchange> }) => {
+        const maker = makerPercent(volumeOf.get(row.original.exchangeId)?.volume);
+        return maker === null ? <Text span c="dimmed" size="sm">—</Text> : `${maker}%`;
+      },
+    },
+    {
+      id: 'fees',
+      header: 'Fees',
+      enableEditing: false,
+      size: 100,
+      accessorFn: (e: Exchange) => Number(volumeOf.get(e.exchangeId)?.volume.fees ?? -1),
+      Cell: ({ row }: { row: MRT_Row<Exchange> }) => <Money value={volumeOf.get(row.original.exchangeId)?.volume.fees} pnl={false} size="sm" />,
+    },
+    {
+      id: 'netCost',
+      header: 'Net cost / $100',
+      enableEditing: false,
+      size: 120,
+      accessorFn: (e: Exchange) => Number(volumeOf.get(e.exchangeId)?.netCostPer100 ?? Number.NEGATIVE_INFINITY),
+      Cell: ({ row }: { row: MRT_Row<Exchange> }) => (
+        <Tooltip label="Fees less the rewards and rebates the exchange paid, per $100 traded" withArrow openDelay={400}>
+          <span><Money value={volumeOf.get(row.original.exchangeId)?.netCostPer100 ?? undefined} pnl={false} size="sm" /></span>
+        </Tooltip>
+      ),
+    },
+    {
       accessorKey: 'dateCreated',
       header: 'Created',
       enableSorting: true,
@@ -171,7 +228,7 @@ function ExchangesTab({ onDelete }: ExchangesTabProps) {
           <ReactTimeAgo date={new Date(row.original.dateModified)} timeStyle="round" /> :
           '-',
     },
-  ], [draftRegion]);
+  ], [draftRegion, volumeOf]);
 
   const table = useMantineReactTable({
     columns,

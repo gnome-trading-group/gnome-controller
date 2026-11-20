@@ -1,15 +1,27 @@
 // The registry's PnL and ledger reads. Money, prices and quantities are scaled-integer strings (prices and money
 // 1e9 per dollar, quantities 1e6 per unit), formatted only by utils/format; times are ISO UTC.
 
+import type { PriceBand } from './security-master';
+
 export type Mode = 'paper' | 'live';
 
 export type OpeningSource = 'INHERITED' | 'FLAT' | 'NONE';
+
+// Money traded in venue fills (quantity x price), split by fills that rested (maker) and crossed (taker); a fill the
+// venue didn't classify is in notional only. Settlements, resets, corrections and hand-booked trades don't count.
+export interface Volume {
+  notional: string;
+  maker: string;
+  taker: string;
+  fills: number;
+  fees: string;
+}
 
 export interface ListingRef {
   listingId: number;
   symbol: string | null;
   exchangeId: number | null;
-  tickSize: string | null;
+  priceBands: PriceBand[] | null;
   lotSize: string | null;
 }
 
@@ -81,6 +93,7 @@ export interface SessionSummary {
     openingUnrealized: string;
   };
   counts: { fills: number; orders: number; openOrders: number; refused: number };
+  volume: Volume;
   refusals: { listingId: number; reason: string; count: number }[];
   // A paper session's own estimate of the venue liquidity rewards its orders earned, outside its trading PnL; a live
   // session has none. Absent from registries that predate it.
@@ -150,6 +163,7 @@ export interface StrategySummary {
     };
   };
   openPositions: number;
+  volumeToday: Volume;
   // The rows left out of listings: flat and untraded since the day started, each one's PnL closed. Paged on demand.
   history: { count: number; total: string; realized: string; fees: string };
   // Rows held, needing review or traded today; with a listingId, that listing's rows instead.
@@ -172,7 +186,11 @@ export interface FirmSummary {
     byProgram: Record<string, { lifetime: string; today: string }>;
     byExchange: Record<string, { lifetime: string; today: string }>;
   };
-  strategies: { strategyId: number; lifetime: string; today: string; unrealized: string; rewards: string; openPositions: number }[];
+  volumeToday: Volume;
+  strategies: {
+    strategyId: number; lifetime: string; today: string; unrealized: string; rewards: string; openPositions: number;
+    volumeToday: Volume;
+  }[];
 }
 
 export interface SessionTotals {
@@ -180,6 +198,7 @@ export interface SessionTotals {
   opening: OpeningSource;
   totals: SessionSummary['totals'];
   fills: number;
+  volume: Volume;
   // The session's estimated venue rewards (paper), outside its trading PnL.
   rewardsEstimated?: string;
 }
@@ -195,11 +214,41 @@ export interface PriceHistory {
 }
 
 // PnL per day in a time zone: the change in lifetime PnL over each local day, oldest first (today's so far).
+export interface DailyPnlDay {
+  date: string;
+  start: string;
+  pnl: string;
+  volume: Volume;
+}
+
 export interface DailyPnl {
   timeZone: string;
-  days: { date: string; start: string; pnl: string }[];
+  days: DailyPnlDay[];
   // Only for the firm-wide read asked to break it down: each strategy's own days.
-  strategies?: { strategyId: number; days: { date: string; start: string; pnl: string }[] }[];
+  strategies?: { strategyId: number; days: DailyPnlDay[] }[];
+}
+
+// Trading on each exchange over the last `days` local days (registry /pnl/exchanges). rewards are what the exchange paid
+// for it (live: rewards and rebates booked on its accounts; paper: the sessions' estimates); netCostPer100 is fees less
+// rewards per $100 traded, in price units (null without volume). Live breaks it down by venue account, the unit an
+// exchange's fee tiers count; paper trades through no account.
+export interface ExchangeVolume {
+  exchangeId: number;
+  exchangeCode: string | null;
+  exchangeName: string | null;
+  volume: Volume;
+  rewards: string;
+  netCostPer100: string | null;
+  accounts: { accountId: number; label: string | null; volume: Volume; rewards: string }[];
+  strategies: { strategyId: number; name: string | null; volume: Volume }[];
+}
+
+export interface ExchangeVolumes {
+  scope: { mode: Mode; timeZone: string; days: number; from: string; to: string };
+  // Every exchange traded or rewarded in the window; with an exchangeId, that one, active or not.
+  exchanges: ExchangeVolume[];
+  // Only with an exchangeId: its volume per local day, oldest first.
+  daily?: { date: string; start: string; volume: Volume }[];
 }
 
 // How close a running session is to each risk limit that applies to it (registry /risk/usage).
@@ -229,7 +278,7 @@ export interface HeldPosition {
   listingId: number;
   symbol: string | null;
   exchangeId: number | null;
-  tickSize: string | null;
+  priceBands: PriceBand[] | null;
   lotSize: string | null;
   netQuantity: string;
   avgEntryPrice: string;
@@ -331,6 +380,12 @@ export interface PnlSeries {
   realized: string[];
   unrealized: string[];
   fees: string[];
+  // Money traded since the point before (the first point's is 0), and what the positions held at each point tie up:
+  // a binary contract's worst loss at settlement, anything else its cost.
+  volume: string[];
+  maker: string[];
+  taker: string[];
+  capital: string[];
   // Each listing's own line, only when asked for (byListing, listingIds or a listingId): the ones that moved most, at
   // most 25 of the listingCount held or traded in the window, with `other` summing the rest so the lines add up.
   listings: { listingId: number; symbol: string | null; lotSize: string | null; total: string[]; netQuantity: string[] }[];
@@ -374,7 +429,7 @@ export interface LedgerFill {
   recordedAt: string;
   symbol: string | null;
   exchangeId: number | null;
-  tickSize: string | null;
+  priceBands: PriceBand[] | null;
   lotSize: string | null;
   markPrice: string | null;
   slippage: string | null;
@@ -407,7 +462,7 @@ export interface LedgerOrder {
   ackedAt: string | null;
   closedAt: string | null;
   symbol: string | null;
-  tickSize: string | null;
+  priceBands: PriceBand[] | null;
   lotSize: string | null;
   fills: string;
   fillQty: string;

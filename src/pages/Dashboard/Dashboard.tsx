@@ -4,7 +4,7 @@ import { IconAlertOctagon } from '@tabler/icons-react';
 import ReactTimeAgo from 'react-time-ago';
 import { MantineReactTable, useMantineReactTable, type MRT_ColumnDef } from 'mantine-react-table';
 import { Link, useNavigate } from 'react-router-dom';
-import { StrategySession, StrategySessionStatus } from '../../types';
+import { StrategySession, StrategySessionStatus, Volume } from '../../types';
 import { FirmSummary } from '../../types/pnl';
 import { formatMoney } from '../../utils/format';
 import { programLabel } from '../../utils/treasury';
@@ -23,6 +23,7 @@ import { PnlChart } from '../../components/trading/PnlChart';
 import { Sparkline } from '../../components/trading/Sparkline';
 import { AttentionList } from '../../components/trading/AttentionList';
 import { PlatformSection } from './PlatformSection';
+import { VolumeKpi } from '../../components/trading/VolumeKpi';
 
 const RANGES: Record<string, number | null> = { '1d': 86_400_000, '7d': 7 * 86_400_000, '30d': 30 * 86_400_000, All: null };
 // Matches the session page's heartbeat colours.
@@ -50,6 +51,7 @@ interface StrategyRow {
   running: number;
   today: string | undefined;
   lifetime: string | undefined;
+  volumeToday: Volume | undefined;
   openPositions: number;
   week: string[] | undefined;
   heardAt: string | null;
@@ -122,6 +124,7 @@ function Dashboard() {
           running: own.filter(x => x.status === StrategySessionStatus.RUNNING).length,
           today: pnl?.today,
           lifetime: pnl?.lifetime,
+          volumeToday: pnl?.volumeToday,
           openPositions: pnl?.openPositions ?? 0,
           week: weeks.get(s.strategyId),
           heardAt: heard,
@@ -149,6 +152,10 @@ function Dashboard() {
       },
       { id: 'today', header: 'Today', size: 100, ...right, Cell: ({ row }) => <Money value={row.original.today} size="sm" /> },
       { id: 'lifetime', header: 'Lifetime', size: 110, ...right, Cell: ({ row }) => <Money value={row.original.lifetime} size="sm" /> },
+      {
+        id: 'volume', header: 'Volume today', size: 120, ...right,
+        Cell: ({ row }) => <Money value={row.original.volumeToday?.notional} pnl={false} size="sm" />,
+      },
       { id: 'week', header: 'Last 7 days', size: 140, Cell: ({ row }) => <Sparkline values={row.original.week} label="7 days" /> },
       { id: 'open', header: 'Open positions', size: 110, ...right, Cell: ({ row }) => row.original.openPositions || '—' },
       { id: 'heard', header: 'Last heartbeat', size: 130, Cell: ({ row }) => <HeardCell at={row.original.heardAt} /> },
@@ -208,6 +215,7 @@ function Dashboard() {
           label="Lifetime PnL"
           hint="Every strategy's lifetime PnL, with the venue rewards each was given, plus the firm's own non-trading PnL"
           value={<Money value={totals?.lifetime} arrow />}
+          footer={totals && <>after fees <Money value={totals.fees} pnl={false} size="xs" /></>}
         />
         <Kpi label="Unrealized" value={<Money value={totals?.unrealized} />} />
         {mode === 'live' && (
@@ -222,7 +230,7 @@ function Dashboard() {
             )}
           />
         )}
-        <Kpi label="Fees" value={<Money value={totals?.fees} pnl={false} />} />
+        <VolumeKpi label="Volume today" volume={firm.data?.volumeToday} />
         <Kpi label="Open positions" value={openPositions ?? '—'} />
         <Kpi
           label="Running sessions"
@@ -241,7 +249,7 @@ function Dashboard() {
               <SegmentedControl size="xs" value={range} onChange={next => { setRange(next); setStart(rangeStart(next)); }}
                 data={Object.keys(RANGES)} />
             </Group>
-            <PnlChart series={series.data} loading={series.isLoading} height={240} />
+            <PnlChart series={series.data} loading={series.isLoading} refreshing={series.isPlaceholderData} height={240} />
           </Card>
         </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 4 }}>

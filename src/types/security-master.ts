@@ -143,9 +143,17 @@ export interface PaginationParams {
   [key: string]: string | number | boolean | undefined;
 }
 
+// One band of a listing's price grid as the registry serves it, in price units: [start, end) stepping step; end null
+// is open.
+export interface PriceBand {
+  start: number;
+  end: number | null;
+  step: number;
+}
+
 export interface ListingSpec {
   listingId: number;
-  tickSize: number;
+  priceBands: PriceBand[];
   lotSize: number;
   minNotional: number;
   contractMultiplier: number;

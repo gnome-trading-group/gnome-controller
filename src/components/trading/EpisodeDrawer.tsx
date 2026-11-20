@@ -90,7 +90,7 @@ export function EpisodeDrawer({ episode, onClose }: { episode: EpisodeRef | null
                       <Table.Td><ListingLabel listingId={f.listingId} symbol={f.symbol} /></Table.Td>
                       <Table.Td><SideLabel side={f.side} /></Table.Td>
                       <Table.Td ta="right"><Qty value={f.fillQty} lotSize={f.lotSize} size="sm" /></Table.Td>
-                      <Table.Td ta="right"><Price value={f.fillPrice} exchangeId={f.exchangeId} tickSize={f.tickSize} size="sm" /></Table.Td>
+                      <Table.Td ta="right"><Price value={f.fillPrice} exchangeId={f.exchangeId} priceBands={f.priceBands} size="sm" /></Table.Td>
                       <Table.Td ta="right"><Money value={f.slippage} size="sm" /></Table.Td>
                     </Table.Tr>
                   ))}

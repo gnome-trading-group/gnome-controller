@@ -24,6 +24,7 @@ import {
   accountTotals, ecsServiceUrl, formatMicros, GATEWAY_ALERT_TYPES, gatewayHealth, isGatewayAlert, lastOf, linkedSessions,
   logGroupUrl, rollPhaseLabel, rollPlan, rollUnderWay, shares,
 } from '../../../utils/gateways';
+import { ExchangeLink } from '../../../components/ExchangeLink';
 
 const RECENT_ALERTS = { type: GATEWAY_ALERT_TYPES, limit: 500 };
 const TOOLTIP_STYLE = { background: '#1a1b1e', border: '1px solid #373a40' };
@@ -312,7 +313,7 @@ function GatewayDetail() {
           { label: 'Open logs in CloudWatch', icon: <IconExternalLink size={14} />, onClick: () => window.open(logGroupUrl(g.region), '_blank') },
         ] : []}
         meta={g ? [
-          `${g.exchangeCode ?? `exchange ${g.exchangeId}`} · ${g.region}`,
+          <><ExchangeLink exchangeId={g.exchangeId}>{g.exchangeCode ?? `exchange ${g.exchangeId}`}</ExchangeLink> · {g.region}</>,
           `${g.profile} profile`,
           g.endpoint ? `orchestrator ${g.endpoint.version}` : null,
           g.pinnedVersion ? `pinned ${g.pinnedVersion}` : null,

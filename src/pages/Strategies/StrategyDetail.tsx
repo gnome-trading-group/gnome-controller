@@ -40,6 +40,7 @@ import { Kpi, KpiStrip, ModeBand, ModeSwitch } from '../../components/trading/la
 import { PageHeader } from '../../components/PageHeader';
 import { useModeParam } from '../../hooks/useModeParam';
 import { Money, Time } from '../../components/trading/values';
+import { VolumeKpi } from '../../components/trading/VolumeKpi';
 import { PnlChart } from '../../components/trading/PnlChart';
 import { PerformancePanel } from '../../components/trading/PerformancePanel';
 import { GroupPositions } from '../../components/trading/GroupPositions';
@@ -349,9 +350,13 @@ function StrategyDetail() {
           hint={summary.data ? `Since ${new Date(summary.data.scope.dayStart).toLocaleString()} (${summary.data.scope.timeZone})` : undefined}
           value={<Money value={totals?.today} arrow />}
         />
-        <Kpi label="Realized" value={<Money value={totals?.realized} />} />
+        <Kpi
+          label="Realized"
+          value={<Money value={totals?.realized} />}
+          footer={totals && <>fees <Money value={totals.fees} pnl={false} size="xs" /></>}
+        />
         <Kpi label="Unrealized" value={<Money value={totals?.unrealized} />} />
-        <Kpi label="Fees" value={<Money value={totals?.fees} pnl={false} />} />
+        <VolumeKpi label="Volume today" volume={summary.data?.volumeToday} />
         <Kpi
           label={mode === 'live' ? 'Rewards' : 'Rewards (est.)'}
           hint={mode === 'live'
@@ -367,7 +372,7 @@ function StrategyDetail() {
           <Text fw={600}>PnL ({mode}, lifetime)</Text>
           <SegmentedControl size="xs" value={range} onChange={chooseRange} data={Object.keys(RANGES)} />
         </Group>
-        <PnlChart series={series.data} loading={series.isLoading} />
+        <PnlChart series={series.data} loading={series.isLoading} refreshing={series.isPlaceholderData} />
       </Card>
 
       <Tabs value={tab} onChange={setTab} keepMounted={false}>

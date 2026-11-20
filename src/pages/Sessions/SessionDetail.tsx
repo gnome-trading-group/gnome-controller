@@ -25,6 +25,7 @@ import { Heartbeat } from '../../components/trading/Heartbeat';
 import { Kpi, KpiStrip, ModeBadge, ModeBand } from '../../components/trading/layout';
 import { PageHeader } from '../../components/PageHeader';
 import { Money, Time } from '../../components/trading/values';
+import { VolumeKpi } from '../../components/trading/VolumeKpi';
 import { ChartView, PnlChart } from '../../components/trading/PnlChart';
 import { PositionsTable } from '../../components/trading/PositionsTable';
 import { GroupPositions } from '../../components/trading/GroupPositions';
@@ -248,7 +249,7 @@ function SessionDetail() {
                 footer={rewards.estimatedPaid !== '0' && <span>paid on ended periods <Money value={rewards.estimatedPaid} size="xs" /></span>}
               />
             )}
-            <Kpi label="Fills" value={counts?.fills ?? '—'} footer={counts && `${counts.orders} orders`} />
+            <VolumeKpi label="Volume" volume={summary.data?.volume} extra={counts && `${counts.orders} orders`} />
             <Kpi
               label="Open orders"
               value={counts?.openOrders ?? '—'}
@@ -283,6 +284,7 @@ function SessionDetail() {
             <PnlChart
               series={series.data}
               loading={series.isLoading}
+              refreshing={series.isPlaceholderData}
               views={['total', 'listings', 'position', 'fees']}
               onViewChange={setChartView}
             />

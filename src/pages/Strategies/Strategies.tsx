@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  ActionIcon, Alert, Anchor, Badge, Button, Chip, Container, Group, Modal, Progress, Stack, Text, Title, Tooltip,
+  ActionIcon, Alert, Anchor, Badge, Button, Chip, Container, Group, Loader, Modal, Progress, Stack, Text, Title, Tooltip,
 } from '@mantine/core';
 import {
   IconArchive, IconArchiveOff, IconEdit, IconPlayerPlay, IconPlayerStop, IconPlus, IconRocket, IconTrash,
@@ -15,6 +15,7 @@ import { navigateRowProps } from '../../utils/navigation';
 import { errorMessage, findKillSwitch, isKilled, setKillSwitch } from '../../utils/kill-switch';
 import { strategyActivity } from '../../utils/strategy-activity';
 import { dailyStats } from '../../utils/performance';
+import { addVolumes } from '../../utils/volume';
 import { closestLimit, usageColor } from '../../utils/risk-usage';
 import { useDayZone } from '../../context/PreferencesContext';
 import { useModeParam } from '../../hooks/useModeParam';
@@ -41,6 +42,7 @@ interface Row {
   today: bigint | null;
   lifetime: bigint | null;
   week: string[] | undefined;
+  volume: bigint | null;
   winRate: number | null;
   maxDrawdown: bigint | null;
   openPositions: number;
@@ -88,6 +90,9 @@ function Strategies() {
     const pnl = new Map((firm.data?.strategies ?? []).map(s => [s.strategyId, s]));
     const weeks = new Map((sparklines.data?.strategies ?? []).map(s => [s.strategyId, s.total]));
     const days = new Map((daily.data?.strategies ?? []).map(s => [s.strategyId, dailyStats(s.days)]));
+    const volumes = new Map((daily.data?.strategies ?? []).map(s => [
+      s.strategyId, BigInt(addVolumes(s.days.flatMap(d => (d.volume ? [d.volume] : []))).notional),
+    ]));
     const knownPolicies: RiskPolicy[] | null = policies.data ?? null;
     return (strategies.data ?? []).map(strategy => {
       const id = strategy.strategyId;
@@ -109,6 +114,7 @@ function Strategies() {
         today: summary ? BigInt(summary.today) : null,
         lifetime: summary ? BigInt(summary.lifetime) : null,
         week: weeks.get(id),
+        volume: volumes.get(id) ?? null,
         winRate: stats?.winRate ?? null,
         maxDrawdown: stats?.maxDrawdown?.amount ?? (stats ? 0n : null),
         openPositions: summary?.openPositions ?? 0,
@@ -126,7 +132,10 @@ function Strategies() {
   const shown = useMemo(() => rows.filter(r => filters.includes(r.state)), [rows, filters]);
   const count = (f: Filter) => rows.filter(r => r.state === f).length;
 
+  // The 30-day columns wait for this mode's own read; the previous one stands in meanwhile and isn't this mode's.
+  const dailyLoading = daily.isLoading || daily.isPlaceholderData;
   const columns = useMemo<MRT_ColumnDef<Row>[]>(() => {
+    const loading = <Loader size={12} type="dots" />;
     const right = { mantineTableHeadCellProps: { align: 'right' as const }, mantineTableBodyCellProps: { align: 'right' as const } };
     const big = (v: bigint | null) => (v === null ? Number.NEGATIVE_INFINITY : Number(v));
     // While loading, the table fills its skeleton with blank rows, so the accessors can't assume a row's fields.
@@ -155,12 +164,17 @@ function Strategies() {
       { id: 'lifetime', header: 'Lifetime', size: 110, ...right, accessorFn: r => big(r.lifetime), Cell: ({ row }) => <Money value={row.original.lifetime} size="sm" /> },
       { id: 'week', header: '7 days', size: 130, enableSorting: false, Cell: ({ row }) => <Sparkline values={row.original.week} width={110} label="7 days" /> },
       {
+        id: 'volume', header: `Volume (${DAYS}d)`, size: 120, ...right, accessorFn: r => big(r.volume),
+        Cell: ({ row }) => (dailyLoading ? loading : <Money value={row.original.volume} pnl={false} size="sm" />),
+      },
+      {
         id: 'winRate', header: `Win days (${DAYS}d)`, size: 110, ...right, accessorFn: r => r.winRate ?? -1,
-        Cell: ({ row }) => (row.original.winRate === null ? <Text span c="dimmed">—</Text> : `${Math.round(row.original.winRate * 100)}%`),
+        Cell: ({ row }) => (dailyLoading ? loading
+          : row.original.winRate === null ? <Text span c="dimmed">—</Text> : `${Math.round(row.original.winRate * 100)}%`),
       },
       {
         id: 'drawdown', header: `Max DD (${DAYS}d)`, size: 110, ...right, accessorFn: r => big(r.maxDrawdown),
-        Cell: ({ row }) => <Money value={row.original.maxDrawdown} size="sm" />,
+        Cell: ({ row }) => (dailyLoading ? loading : <Money value={row.original.maxDrawdown} size="sm" />),
       },
       { id: 'open', header: 'Open', size: 70, ...right, accessorFn: r => r.openPositions, Cell: ({ row }) => row.original.openPositions || '—' },
       {
@@ -185,7 +199,7 @@ function Strategies() {
           : row.original.lastRun ? <ReactTimeAgo date={new Date(row.original.lastRun)} timeStyle="round" /> : <Text span c="dimmed">never</Text>,
       },
     ];
-  }, [mode]);
+  }, [mode, dailyLoading]);
 
   const table = useMantineReactTable({
     columns,

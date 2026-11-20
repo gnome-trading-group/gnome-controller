@@ -5,6 +5,7 @@ import { PnlSeries } from '../types';
 function series(t: number[], total: string[], extra: Partial<PnlSeries> = {}): PnlSeries {
   return {
     resolutionMs: 1000, t, total, realized: total, unrealized: total, fees: total.map(() => '0'),
+    volume: total, maker: total, taker: total.map(() => '0'), capital: total,
     listings: [{ listingId: 1, symbol: 'A', lotSize: null, total, netQuantity: total }], listingCount: 1, other: null,
     events: [], ...extra,
   };
@@ -27,6 +28,15 @@ describe('appending polled points to a chart', () => {
     const merged = mergeSeries(series([1000, 2000], ['1', '2'], { events: [event] }), tail);
     expect(merged.listings).toEqual([{ listingId: 2, symbol: 'B', lotSize: null, total: ['0', '0', '9'], netQuantity: ['0', '0', '1'] }]);
     expect(merged.events).toHaveLength(1);
+  });
+
+  it("keeps the newest shown point's volume, which the poll's first point doesn't carry", () => {
+    const merged = mergeSeries(
+      series([1000, 2000, 2500], ['1', '2', '3']),
+      series([2500, 3000], ['4', '5'], { volume: ['0', '7'], maker: ['0', '7'] }));
+    expect(merged.volume).toEqual(['1', '2', '3', '7']);
+    expect(merged.maker).toEqual(['1', '2', '3', '7']);
+    expect(merged.capital).toEqual(['1', '2', '4', '5']);
   });
 
   it('keeps the chart as it was when a poll brings nothing', () => {

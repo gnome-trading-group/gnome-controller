@@ -8,6 +8,7 @@ import { isMode } from '../utils/mode';
 const TIME_ZONE_KEY = 'pref.timeZone';
 const MODE_KEY = 'pref.mode';
 const HIDDEN_MARKERS_KEY = 'pref.hiddenMarkers';
+const HIDDEN_PANES_KEY = 'pref.hiddenPanes';
 
 function read(key: string): string | null {
   try {
@@ -25,9 +26,9 @@ function write(key: string, value: string) {
   }
 }
 
-function readHiddenMarkers(): ReadonlySet<string> {
+function readKeys(key: string): ReadonlySet<string> {
   try {
-    const parsed: unknown = JSON.parse(read(HIDDEN_MARKERS_KEY) ?? '[]');
+    const parsed: unknown = JSON.parse(read(key) ?? '[]');
     return new Set(Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : []);
   } catch {
     return new Set();
@@ -42,6 +43,9 @@ interface Preferences {
   // Chart marker kinds switched off, keyed by chart (`pnl:SETTLEMENT`, `price:buy`) so every chart of a kind agrees.
   hiddenMarkers: ReadonlySet<string>;
   setMarkersHidden: (keys: string[], hidden: boolean) => void;
+  // Chart panes switched off (`drawdown`, `volume`, `capital`); stored as hidden so a new pane starts shown.
+  hiddenPanes: ReadonlySet<string>;
+  setPaneHidden: (pane: string, hidden: boolean) => void;
 }
 
 const PreferencesContext = createContext<Preferences | null>(null);
@@ -52,7 +56,8 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     const stored = read(MODE_KEY);
     return isMode(stored) ? stored : null;
   });
-  const [hiddenMarkers, setHiddenMarkers] = useState<ReadonlySet<string>>(readHiddenMarkers);
+  const [hiddenMarkers, setHiddenMarkers] = useState<ReadonlySet<string>>(() => readKeys(HIDDEN_MARKERS_KEY));
+  const [hiddenPanes, setHiddenPanes] = useState<ReadonlySet<string>>(() => readKeys(HIDDEN_PANES_KEY));
   const setTimeZone = useCallback((zone: TimeZoneChoice) => {
     setZone(zone);
     write(TIME_ZONE_KEY, zone);
@@ -72,9 +77,20 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+  const setPaneHidden = useCallback((pane: string, hidden: boolean) => {
+    setHiddenPanes(prior => {
+      const next = new Set(prior);
+      if (hidden) next.add(pane);
+      else next.delete(pane);
+      write(HIDDEN_PANES_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
   const value = useMemo(
-    () => ({ timeZone, setTimeZone, rememberedMode, rememberMode, hiddenMarkers, setMarkersHidden }),
-    [timeZone, setTimeZone, rememberedMode, rememberMode, hiddenMarkers, setMarkersHidden],
+    () => ({
+      timeZone, setTimeZone, rememberedMode, rememberMode, hiddenMarkers, setMarkersHidden, hiddenPanes, setPaneHidden,
+    }),
+    [timeZone, setTimeZone, rememberedMode, rememberMode, hiddenMarkers, setMarkersHidden, hiddenPanes, setPaneHidden],
   );
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }

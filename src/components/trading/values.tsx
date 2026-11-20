@@ -28,9 +28,9 @@ interface PriceProps extends TextProps, Omit<PriceFormat, 'cents'> {
   exchangeId: number | null | undefined;
 }
 
-export function Price({ value, exchangeId, tickSize, derived, ...text }: PriceProps) {
+export function Price({ value, exchangeId, priceBands, derived, ...text }: PriceProps) {
   const cents = useCents(exchangeId);
-  return <Text span style={NUMERIC} {...text}>{formatPrice(value, { tickSize, cents, derived })}</Text>;
+  return <Text span style={NUMERIC} {...text}>{formatPrice(value, { priceBands, cents, derived })}</Text>;
 }
 
 interface QtyProps extends TextProps {

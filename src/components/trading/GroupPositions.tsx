@@ -6,7 +6,7 @@ import { IconChevronDown, IconChevronRight, IconRefresh, IconSearch } from '@tab
 import { SkeletonRows } from '../SkeletonRows';
 import { Link, useSearchParams } from 'react-router-dom';
 import { GroupPositions as Groups, HeldPosition, Mode, RiskGroup } from '../../types';
-import { formatQty } from '../../utils/format';
+import { formatQty, formatSettlement } from '../../utils/format';
 import { capital, exposure } from '../../utils/exposure';
 import { groupStatus, GroupStatus, lockedReturn } from '../../utils/groups';
 import { GroupScope } from '../../utils/api';
@@ -54,7 +54,7 @@ function abs(value: bigint) {
 }
 
 function HeldCells({ held }: { held: HeldPosition }) {
-  const price = { exchangeId: held.exchangeId, tickSize: held.tickSize, derived: true, size: 'sm' as const };
+  const price = { exchangeId: held.exchangeId, priceBands: held.priceBands, derived: true, size: 'sm' as const };
   const money = exposure(held.netQuantity, held.avgEntryPrice, held.markPrice);
   const dash = <Text span size="sm" c="dimmed">—</Text>;
   return (
@@ -116,7 +116,7 @@ function settlementNote(group: RiskGroup, venue: (exchangeId: number | null) => 
 function SettledBadge({ price }: { price: string | null }) {
   if (price === null) return null;
   const value = BigInt(price);
-  const label = value === DOLLAR ? 'paid $1' : value === 0n ? 'paid $0' : `settled ${(Number(value) / 1e9).toFixed(2)}`;
+  const label = value === DOLLAR ? 'paid $1' : value === 0n ? 'paid $0' : `settled ${formatSettlement(value, false)}`;
   return <Badge size="xs" variant="light" color={value === DOLLAR ? 'teal' : 'gray'} ml={6}>{label}</Badge>;
 }
 

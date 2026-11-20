@@ -3,7 +3,7 @@ import {
   DryRunResult, EditableRule, LaunchRequest, LaunchRequestDetail, LaunchRule, Page, RequestAction, RuleRevision, RuleStats,
   RuleType, TriggerEvaluation,
 } from '../types/launcher';
-import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractProposition, ContractRelationship, DailyPnl, GroupPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PropositionSubject, PnlSeries, RewardAccrual, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope, SubjectMergeCandidate, SubjectMergeLogEntry, SubjectKeyAlias, SetSubjectKeyAlias, SubjectKeyAliasKind, SubjectKeyAliasOrigin } from '../types';
+import { Alert, AlertFacets, AlertFilters, AttentionItem, ContractProposition, ContractRelationship, DailyPnl, ExchangeVolumes, GroupPositions, PriceHistory, RiskUsage, TableSizes, CreateContractRelationship, Currency, DenormalizedListing, Event, EventContract, Exchange, FirmSummary, LedgerFill, LedgerOrder, LedgerPage, Listing, ListingSpec, FeeScheduleRow, FeeTimelineEntry, CreateFeeSchedule, Mode, PaginationParams, PropositionSubject, PnlSeries, RewardAccrual, RiskPolicy, SessionSummary, SessionTotals, StrategyListingPnl, StrategySummary, RiskPolicyHistory, Security, Source, Strategy, Stream, ConnectionScope, SubjectMergeCandidate, SubjectMergeLogEntry, SubjectKeyAlias, SetSubjectKeyAlias, SubjectKeyAliasKind, SubjectKeyAliasOrigin } from '../types';
 import { ResearchSession, ResearchSessionListResponse } from '../types/research';
 import { ResearchJob } from '../types/research-jobs';
 import { BacktestRun } from '../types/backtests';
@@ -11,6 +11,7 @@ import { ArtifactDetail, ArtifactSummary, Dataset, DatasetDetail } from '../type
 import { PipelineDetailResponse, PipelineListResponse, PipelineRun, RunLogsResponse } from '../types/pipeline';
 import { CreateStrategySessionRequest, StrategySession } from '../types/strategy-sessions';
 import { LatencyProbeRequest, LatencyProbeResponse } from '../types/latency-probe';
+import { BuildLogs, PipelineDetail, PipelineOperation } from '../types/system';
 import {
   AccountConfigUpdate, AccountStatus, AccountStatusChange, CreateAccountRequest, CreatedAccount, DeletedSecrets, UpdateCredentialsRequest, ManualSnapshot, ReconDetail, SessionAccount, Transfer, TransferFilters, TransferKind, TransferProgram, TreasurySummary, VenueAccount,
 } from '../types/treasury';
@@ -627,25 +628,6 @@ export const registryApi = {
       queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
     });
   },
-  createListingSpec: (spec: Omit<ListingSpec, 'dateCreated' | 'dateModified'>) =>
-    sendApiRequest<ListingSpec>('/listing-specs', 'POST', {
-      apiUrl: REGISTRY_API_URL,
-      convertToCamelCase: true,
-      body: spec,
-    }),
-  updateListingSpec: (listingId: number, spec: Partial<ListingSpec>) =>
-    sendApiRequest<{ message: string }>('/listing-specs', 'PATCH', {
-      apiUrl: REGISTRY_API_URL,
-      convertToCamelCase: true,
-      body: spec,
-      queryParams: { listingId },
-    }),
-  deleteListingSpec: (listingId: number) =>
-    sendApiRequest<{ message: string }>('/listing-specs', 'DELETE', {
-      apiUrl: REGISTRY_API_URL,
-      convertToCamelCase: true,
-      body: { listingId },
-    }),
   // Every stored fee schedule matching the filters, newest effective first; corrections included.
   listFeeSchedules: (filters: { exchangeId?: number; feeGroup?: string; feeEvent?: string; scopeListingId?: number } = {}) =>
     sendApiRequest<FeeScheduleRow[]>('/fees', 'GET', {
@@ -740,6 +722,11 @@ export const registryApi = {
     sendApiRequest<DailyPnl>('/pnl/daily', 'GET', {
       apiUrl: REGISTRY_API_URL,
       queryParams: definedParams({ ...scope, tz, days, byStrategy: byStrategy ? 'true' : undefined }),
+    }),
+  getExchangeVolumes: (mode: Mode, tz: string, days: number, exchangeId?: number) =>
+    sendApiRequest<ExchangeVolumes>('/pnl/exchanges', 'GET', {
+      apiUrl: REGISTRY_API_URL,
+      queryParams: definedParams({ mode, tz, days, exchangeId }),
     }),
   getMarks: (listingId: number, start?: string) =>
     sendApiRequest<PriceHistory>('/ledger/marks', 'GET', {
@@ -1171,6 +1158,24 @@ export const controllerApi = {
     sendApiRequest<{ status: string; by: string }>('/system/approvals', 'POST', {
       apiUrl: CONTROLLER_API_URL,
       body: decision,
+    }),
+  // One pipeline's runs, a run's actions and where each stage last succeeded. `region` only matters to a local
+  // controller API reading its own account's pipelines.
+  getPipelineDetail: (name: string, region: string, run?: string) =>
+    sendApiRequest<PipelineDetail>(`/system/pipelines/${encodeURIComponent(name)}`, 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      queryParams: run ? { region, run } : { region },
+    }),
+  getPipelineBuildLogs: (name: string, region: string, build: string, before?: string) =>
+    sendApiRequest<BuildLogs>(`/system/pipelines/${encodeURIComponent(name)}/logs`, 'GET', {
+      apiUrl: CONTROLLER_API_URL,
+      queryParams: before ? { region, build, before } : { region, build },
+    }),
+  // Prod controller only: retry a failed stage, release the latest change, or stop a run.
+  operatePipeline: (name: string, operation: PipelineOperation) =>
+    sendApiRequest<{ runId: string; by: string }>(`/system/pipelines/${encodeURIComponent(name)}/operations`, 'POST', {
+      apiUrl: CONTROLLER_API_URL,
+      body: operation,
     }),
   runLatencyProbe: (request: LatencyProbeRequest) =>
     sendApiRequest<LatencyProbeResponse>('/latency-probe/run', 'POST', {

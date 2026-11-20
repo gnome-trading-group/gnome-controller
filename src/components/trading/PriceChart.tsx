@@ -5,8 +5,8 @@ import {
   LineSeries, LineStyle, LineType, SeriesMarker, Time, UTCTimestamp,
 } from 'lightweight-charts';
 import { usePreferences } from '../../context/PreferencesContext';
-import { LedgerFill, PnlSeries, PriceHistory } from '../../types';
-import { formatMoney, formatPrice, formatQty, formatTime, moneyToNumber, sizeToNumber } from '../../utils/format';
+import { LedgerFill, PnlSeries, PriceBand, PriceHistory } from '../../types';
+import { finestStep, formatMoney, formatPrice, formatQty, formatTime, moneyToNumber, sizeToNumber } from '../../utils/format';
 import { chartPoints, chartTime, ChartPoint, chartZoneOptions, fromChartTime, snapToPoint } from './chart-data';
 import { ChartTooltip, TooltipState } from './ChartTooltip';
 import { MarkerKind, MarkerToggles } from './MarkerToggles';
@@ -24,7 +24,7 @@ interface PriceChartProps {
   // The strategy's series for this one listing: its position and PnL over the same window.
   series: PnlSeries | undefined;
   fills: LedgerFill[] | undefined;
-  tickSize: string | null;
+  priceBands: PriceBand[] | null;
   lotSize: string | null;
   cents: boolean;
   loading: boolean;
@@ -49,7 +49,7 @@ function known(points: ChartPoint[]): ChartPoint[] {
   return points.filter(p => p.value !== 0);
 }
 
-export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, loading, height = 420 }: PriceChartProps) {
+export function PriceChart({ prices, series, fills, priceBands, lotSize, cents, loading, height = 420 }: PriceChartProps) {
   const { timeZone, hiddenMarkers } = usePreferences();
   const scheme = useComputedColorScheme('dark');
   const container = useRef<HTMLDivElement>(null);
@@ -57,7 +57,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
   const drawn = useRef<Drawn | null>(null);
   const fitted = useRef<string | null>(null);
 
-  const price = useMemo(() => (v: number) => formatPrice(BigInt(Math.round(v * 1e9)), { tickSize, cents, derived: true }), [tickSize, cents]);
+  const price = useMemo(() => (v: number) => formatPrice(BigInt(Math.round(v * 1e9)), { priceBands, cents, derived: true }), [priceBands, cents]);
   const quantity = useMemo(() => (v: number) => formatQty(BigInt(Math.round(v * 1e6)), lotSize), [lotSize]);
   const money = (v: number) => formatMoney(BigInt(Math.round(v * 1e9))).text;
   const [hover, setHover] = useState<{ time: number; x: number; y: number } | null>(null);
@@ -95,7 +95,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
       timeScale: { timeVisible: true, secondsVisible: true, borderVisible: false },
       rightPriceScale: { borderVisible: false },
     });
-    const priceFormat = { type: 'custom' as const, formatter: price, minMove: tickSize ? Number(tickSize) / 1e9 : 0.0001 };
+    const priceFormat = { type: 'custom' as const, formatter: price, minMove: (finestStep(priceBands) ?? 100_000) / 1e9 };
     const common = { lastValueVisible: false, priceLineVisible: false };
     const mark = created.addSeries(LineSeries, { ...common, color: '#4dabf7', lineWidth: 2, priceFormat, lastValueVisible: true, title: 'mark' });
     const bid = created.addSeries(LineSeries, { ...common, color: 'rgba(56,217,169,0.6)', lineWidth: 1, lineStyle: LineStyle.Dotted, priceFormat, title: 'bid' });
@@ -120,7 +120,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
       setChart(null);
       created.remove();
     };
-  }, [scheme, height, price, quantity, tickSize, lotSize]);
+  }, [scheme, height, price, quantity, priceBands, lotSize]);
 
   useEffect(() => {
     chart?.applyOptions(chartZoneOptions(timeZone));
@@ -149,7 +149,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
         position: buy ? 'belowBar' : 'aboveBar',
         shape: buy ? 'arrowUp' : 'arrowDown',
         color: buy ? '#38d9a9' : '#ff6b6b',
-        text: labelled ? `${buy ? '+' : '−'}${formatQty(f.fillQty, lotSize)} @ ${formatPrice(f.fillPrice, { tickSize, cents })}` : undefined,
+        text: labelled ? `${buy ? '+' : '−'}${formatQty(f.fillQty, lotSize)} @ ${formatPrice(f.fillPrice, { priceBands, cents })}` : undefined,
       });
     }
     d.markers.setMarkers(markers);
@@ -159,7 +159,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
       fitted.current = key;
       chart.timeScale().fitContent();
     }
-  }, [chart, lines, traded, prices, tickSize, lotSize, cents, hiddenMarkers]);
+  }, [chart, lines, traded, prices, priceBands, lotSize, cents, hiddenMarkers]);
 
   const at = (points: ChartPoint[], time: number) => [...points].reverse().find(p => p.time <= time);
   const tooltip: TooltipState | null = hover && (() => {
@@ -176,7 +176,7 @@ export function PriceChart({ prices, series, fills, tickSize, lotSize, cents, lo
     const fillRows = here.slice(0, 3).map((f, i) => ({
       label: `${f.side === 0 ? 'Bought' : 'Sold'}${here.length > 1 ? ` #${i + 1}` : ''}`,
       color: f.side === 0 ? '#38d9a9' : '#ff6b6b',
-      value: `${formatQty(f.fillQty, lotSize)} @ ${formatPrice(f.fillPrice, { tickSize, cents })}`,
+      value: `${formatQty(f.fillQty, lotSize)} @ ${formatPrice(f.fillPrice, { priceBands, cents })}`,
     }));
     if (here.length > 3) fillRows.push({ label: `and ${here.length - 3} more fills`, color: '', value: '' });
     return {

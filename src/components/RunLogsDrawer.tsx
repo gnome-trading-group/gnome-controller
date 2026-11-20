@@ -9,14 +9,13 @@ const POLL_MS = 5000;
 export type LoadLogs = (before?: string) => Promise<RunLogsResponse>;
 
 // One task's CloudWatch stream, newest page first, followed while the task is active. `load` must be stable for the
-// task it reads (useCallback on its ids): a new one starts the drawer over.
-function RunLogsDrawer({ opened, title, active, load, consoleUrl, onClose }: {
-  opened: boolean;
-  title: string;
+// task it reads (useCallback on its ids): a new one starts the view over.
+export function RunLogs({ active, load, consoleUrl, height = 'calc(100vh - 160px)', emptyText }: {
   active: boolean;
   load: LoadLogs | null;
   consoleUrl?: string;
-  onClose: () => void;
+  height?: string | number;
+  emptyText?: string;
 }) {
   const [lines, setLines] = useState<RunLogLine[]>([]);
   const [before, setBefore] = useState<string | null>(null);
@@ -64,30 +63,43 @@ function RunLogsDrawer({ opened, title, active, load, consoleUrl, onClose }: {
   };
 
   return (
-    <Drawer opened={opened} onClose={onClose} position="right" size="xl" title={title}>
-      <Stack gap="xs">
-        {error && <Alert color="red">{error}</Alert>}
-        <Group justify="space-between">
-          <Button size="xs" variant="default" onClick={loadEarlier} disabled={!before} loading={loading}>Load earlier</Button>
-          <Group gap="sm">
-            {active && <Text size="xs" c="dimmed">Following every {POLL_MS / 1000}s</Text>}
-            {consoleUrl && (
-              <Anchor href={consoleUrl} target="_blank" size="xs">
-                <Group gap={4}>CloudWatch <IconExternalLink size={12} /></Group>
-              </Anchor>
-            )}
-          </Group>
+    <Stack gap="xs">
+      {error && <Alert color="red">{error}</Alert>}
+      <Group justify="space-between">
+        <Button size="xs" variant="default" onClick={loadEarlier} disabled={!before} loading={loading}>Load earlier</Button>
+        <Group gap="sm">
+          {active && <Text size="xs" c="dimmed">Following every {POLL_MS / 1000}s</Text>}
+          {consoleUrl && (
+            <Anchor href={consoleUrl} target="_blank" size="xs">
+              <Group gap={4}>CloudWatch <IconExternalLink size={12} /></Group>
+            </Anchor>
+          )}
         </Group>
-        {loading && lines.length === 0 ? (
-          <Loader size="sm" />
-        ) : lines.length === 0 ? (
-          <Text size="sm" c="dimmed">No log lines yet — they appear once the container starts.</Text>
-        ) : (
-          <ScrollArea h="calc(100vh - 160px)">
-            <LogLines lines={lines} />
-          </ScrollArea>
-        )}
-      </Stack>
+      </Group>
+      {loading && lines.length === 0 ? (
+        <Loader size="sm" />
+      ) : lines.length === 0 ? (
+        <Text size="sm" c="dimmed">{emptyText ?? 'No log lines yet — they appear once the container starts.'}</Text>
+      ) : (
+        <ScrollArea h={height}>
+          <LogLines lines={lines} />
+        </ScrollArea>
+      )}
+    </Stack>
+  );
+}
+
+function RunLogsDrawer({ opened, title, active, load, consoleUrl, onClose }: {
+  opened: boolean;
+  title: string;
+  active: boolean;
+  load: LoadLogs | null;
+  consoleUrl?: string;
+  onClose: () => void;
+}) {
+  return (
+    <Drawer opened={opened} onClose={onClose} position="right" size="xl" title={title}>
+      <RunLogs active={active} load={load} consoleUrl={consoleUrl} />
     </Drawer>
   );
 }

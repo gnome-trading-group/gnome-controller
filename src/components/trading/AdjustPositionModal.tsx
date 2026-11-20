@@ -101,13 +101,13 @@ export function AdjustPositionModal({ strategyId, mode, position, onClose, onAdj
   };
 
   const lot = position?.lotSize;
-  const tick = { tickSize: position?.tickSize };
+  const grid = { priceBands: position?.priceBands };
   return (
     <Modal opened={!!position} onClose={onClose} title={`Adjust position: ${position?.symbol ?? position?.listingId ?? ''}`} size="md">
       <Stack gap="sm">
         <Text size="sm">
           Holds <b>{formatQty(held, lot, true)}</b>
-          {held !== 0n && <> at <b>{formatPrice(position?.avgEntryPrice ?? '0', tick)}</b> (mark {formatPrice(position?.markPrice ?? '0', tick)})</>}
+          {held !== 0n && <> at <b>{formatPrice(position?.avgEntryPrice ?? '0', grid)}</b> (mark {formatPrice(position?.markPrice ?? '0', grid)})</>}
           {' '}in {mode}{position?.accountLabel && <> on account <b>{position.accountLabel}</b></>}.
         </Text>
         <SegmentedControl fullWidth value={kind} onChange={v => setKind(v as Kind)}
@@ -132,7 +132,7 @@ export function AdjustPositionModal({ strategyId, mode, position, onClose, onAdj
             {trade && (
               <Text size="sm">
                 Leaves <b>{formatQty(trade.netQuantity, lot, true)}</b>
-                {trade.netQuantity !== 0n && <> at {formatPrice((trade.totalCost * UNIT) / (trade.netQuantity < 0n ? -trade.netQuantity : trade.netQuantity), tick)}</>}
+                {trade.netQuantity !== 0n && <> at {formatPrice((trade.totalCost * UNIT) / (trade.netQuantity < 0n ? -trade.netQuantity : trade.netQuantity), grid)}</>}
                 ; realizes <Text span fw={700} c={trade.realized < 0n ? 'red' : trade.realized > 0n ? 'teal' : undefined}>
                   {formatMoney(trade.realized).text}</Text>
                 {feeValue !== null && feeValue > 0n && <> less {money(feeValue)} fee</>}.

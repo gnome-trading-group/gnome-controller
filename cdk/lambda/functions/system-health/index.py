@@ -242,17 +242,23 @@ def read_pipelines(codepipeline, region: str) -> list[dict]:
     return rows
 
 
-def pipelines_client():
-    """CodePipeline in the account the deploy pipelines live in, through its read-only role for this page."""
+def pipelines_session(region: str | None = None) -> boto3.Session:
+    """The account the deploy pipelines live in, through its read-only role for this page. Without the role (a local
+    run), this account, in the region asked for."""
+    if not os.environ.get("PIPELINES_READ_ROLE_ARN"):
+        return boto3.Session(region_name=region)
     credentials = boto3.client("sts").assume_role(
         RoleArn=os.environ["PIPELINES_READ_ROLE_ARN"], RoleSessionName="system-health")["Credentials"]
-    return boto3.client(
-        "codepipeline",
+    return boto3.Session(
         region_name=os.environ["PIPELINES_REGION"],
         aws_access_key_id=credentials["AccessKeyId"],
         aws_secret_access_key=credentials["SecretAccessKey"],
         aws_session_token=credentials["SessionToken"],
     )
+
+
+def pipelines_client():
+    return pipelines_session().client("codepipeline")
 
 
 def pipelines_section() -> dict:
@@ -264,6 +270,105 @@ def pipelines_section() -> dict:
         return {"pipelines": health.sort_pipelines(rows), "errors": errors, "canApprove": can_approve}
     return {"pipelines": health.sort_pipelines(read_pipelines(pipelines_client(), os.environ["PIPELINES_REGION"])),
             "errors": [], "canApprove": can_approve}
+
+
+# Enough history to pick a recent run. CDK pipelines run 100+ actions a run (one per asset), so a few pages of action
+# history covers only the last few runs; stages it misses fall back to the newest run that succeeded.
+RECENT_RUNS = 15
+ACTION_PAGES = 5
+LOG_LINES = 500
+
+
+def pipeline_detail(name: str, run_id: str | None, region: str | None) -> dict:
+    """One pipeline's recent runs, one run's actions in order, and the run each stage last succeeded in."""
+    codepipeline = pipelines_session(region).client("codepipeline")
+    structure = codepipeline.get_pipeline(name=name)["pipeline"]
+    state = codepipeline.get_pipeline_state(name=name)
+    runs = [health.run_row(r) for r in codepipeline.list_pipeline_executions(
+        pipelineName=name, maxResults=RECENT_RUNS)["pipelineExecutionSummaries"]]
+    run_id = run_id or (runs[0]["id"] if runs else None)
+
+    stage_names = [stage["name"] for stage in structure.get("stages", [])]
+    successes = health.succeeded_in_state(state)
+    history: list[dict] = []
+    request = {"pipelineName": name, "maxResults": 100}
+    for _ in range(ACTION_PAGES):
+        if all(stage in successes for stage in stage_names):
+            break
+        page = codepipeline.list_action_executions(**request)
+        history.extend(page["actionExecutionDetails"])
+        successes = {**health.last_successes(history, structure), **successes}
+        if not page.get("nextToken"):
+            break
+        request["nextToken"] = page["nextToken"]
+    fallback = health.newest_succeeded_run(runs)
+    if fallback:
+        successes = {stage: successes.get(stage, fallback) for stage in stage_names}
+
+    actions = []
+    if run_id:
+        in_history = [a for a in history if a["pipelineExecutionId"] == run_id]
+        # History pages are newest first, so a run partly in them may have older actions beyond the last page read.
+        if not in_history or history[-1]["pipelineExecutionId"] == run_id:
+            in_history = []
+            for page in codepipeline.get_paginator("list_action_executions").paginate(
+                    pipelineName=name, filter={"pipelineExecutionId": run_id}):
+                in_history.extend(page["actionExecutionDetails"])
+        # Retried actions run again in the same run; the newest attempt is what the stage shows.
+        newest: dict[tuple[str, str], dict] = {}
+        for action in in_history:
+            newest.setdefault((action["stageName"], action["actionName"]), action)
+        actions = health.order_actions([health.action_row(a) for a in newest.values()], structure)
+
+    known = {r["id"]: r for r in runs}
+    for stage, success in successes.items():
+        if success["runId"] not in known:
+            execution = codepipeline.get_pipeline_execution(
+                pipelineName=name, pipelineExecutionId=success["runId"])["pipelineExecution"]
+            known[success["runId"]] = {"revisions": health.revisions(execution)}
+        success["revisions"] = known[success["runId"]]["revisions"]
+
+    return {
+        "name": name,
+        "region": codepipeline.meta.region_name,
+        "stages": [{"name": stage["name"],
+                    "actions": [{"name": a["name"], "category": a.get("actionTypeId", {}).get("category")}
+                                for a in stage.get("actions", [])]}
+                   for stage in structure.get("stages", [])],
+        "runs": runs,
+        "runId": run_id,
+        "run": next((r for r in runs if r["id"] == run_id), None),
+        "actions": actions,
+        "lastSuccesses": successes,
+        "retryable": health.retryable_stages(state),
+        "canOperate": os.environ.get("APPROVALS_ENABLED") == "true",
+    }
+
+
+def build_logs(build: str, before: str | None, region: str | None) -> dict:
+    """A page of one CodeBuild build's log, newest first, and whether the build is still going."""
+    session = pipelines_session(region)
+    builds = session.client("codebuild").batch_get_builds(ids=[build])["builds"]
+    if not builds:
+        raise LookupError(f"no build {build}")
+    found = builds[0]
+    logs = found.get("logs") or {}
+    active = found.get("buildStatus") == "IN_PROGRESS"
+    response = {"lines": [], "before": None, "active": active, "consoleUrl": logs.get("deepLink")}
+    if not logs.get("groupName") or not logs.get("streamName"):
+        return response
+    request = {"logGroupName": logs["groupName"], "logStreamName": logs["streamName"], "limit": LOG_LINES,
+               "startFromHead": False}
+    if before:
+        request["nextToken"] = before
+    client = session.client("logs")
+    try:
+        page = client.get_log_events(**request)
+    except client.exceptions.ResourceNotFoundException:
+        # CodeBuild names the stream before the build has written to it.
+        return response
+    lines = [{"at": e["timestamp"], "message": e["message"].rstrip("\n")} for e in page["events"]]
+    return {**response, "lines": lines, "before": page["nextBackwardToken"] if lines else None}
 
 
 # ---- Fleet ------------------------------------------------------------------------------------------------------------
@@ -322,7 +427,26 @@ SECTIONS: dict[str, Callable[[], dict]] = {
 }
 
 
+def pipeline_handler(event: dict) -> dict:
+    name = (event.get("pathParameters") or {}).get("name")
+    params = event.get("queryStringParameters") or {}
+    if not name:
+        return create_response(400, {"message": "a pipeline name is required"})
+    try:
+        if event["resource"].endswith("/logs"):
+            if not params.get("build"):
+                return create_response(400, {"message": "build is required"})
+            return create_response(200, build_logs(params["build"], params.get("before"), params.get("region")))
+        return create_response(200, pipeline_detail(name, params.get("run"), params.get("region")))
+    except LookupError as error:
+        return create_response(404, {"message": str(error)})
+    except Exception as error:  # an unknown pipeline or run, or AWS refusing; the page shows why
+        return create_response(502, {"message": str(error)})
+
+
 def handler(event: dict, context) -> dict:
+    if (event.get("resource") or "").startswith("/system/pipelines/"):
+        return pipeline_handler(event)
     params = event.get("queryStringParameters") or {}
     section = params.get("section")
     build = SECTIONS.get(section or "")

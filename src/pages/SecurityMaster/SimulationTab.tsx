@@ -12,6 +12,7 @@ import {
   blocksProblem, describeLatency, describeQueue, SimulationBlocks, SimulationParametersRow,
 } from '../../utils/simulation';
 import { SimulationBlocksForm } from '../../components/simulation/SimulationBlocksForm';
+import { ExchangeLink } from '../../components/ExchangeLink';
 
 const RECORDED_BLOCKS = ['network_latency', 'order_processing_latency', 'market_data_latency', 'queue_model', 'self_trade_prevention'] as const;
 
@@ -31,7 +32,10 @@ function SimulationTab() {
   const unrecorded = exchanges.filter(e => !history && rows.data && !rows.data.some(r => r.exchange_id === e.exchangeId));
 
   const columns = useMemo<MRT_ColumnDef<SimulationParametersRow>[]>(() => [
-    { id: 'exchange', header: 'Exchange', size: 140, accessorFn: r => code.get(r.exchange_id) ?? r.exchange_id },
+    {
+      id: 'exchange', header: 'Exchange', size: 140, accessorFn: r => code.get(r.exchange_id) ?? r.exchange_id,
+      Cell: ({ row }) => <ExchangeLink exchangeId={row.original.exchange_id}>{code.get(row.original.exchange_id) ?? row.original.exchange_id}</ExchangeLink>,
+    },
     {
       id: 'network', header: 'Network latency', size: 230,
       Cell: ({ row: { original: r } }) => <Text size="sm">{describeLatency(r.definition.network_latency)}</Text>,

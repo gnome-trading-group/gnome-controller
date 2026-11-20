@@ -25,7 +25,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 // One order's whole life: sent, acknowledged by the venue, each fill, and how it ended.
 export function OrderDrawer({ order, onClose }: { order: LedgerOrder | null; onClose: () => void }) {
   const fills = useOrderFills(order);
-  const format = { exchangeId: order?.exchangeId, tickSize: order?.tickSize };
+  const format = { exchangeId: order?.exchangeId, priceBands: order?.priceBands };
   const ended = order && order.status !== 'OPEN';
   const outcome = order?.status === 'RECOVERED' ? 'Recovered' : order?.closeState ? order.closeState.toLowerCase() : 'closed';
 
@@ -79,7 +79,7 @@ export function OrderDrawer({ order, onClose }: { order: LedgerOrder | null; onC
                 key={f.fillId}
                 bullet={<IconCheck size={12} />}
                 color={f.source === 'RECOVERY' ? 'blue' : 'teal'}
-                title={<>Filled <Qty value={f.fillQty} lotSize={f.lotSize} /> @ <Price value={f.fillPrice} exchangeId={f.exchangeId} tickSize={f.tickSize} /> {after(order.openedAt, f.recordedAt)}</>}
+                title={<>Filled <Qty value={f.fillQty} lotSize={f.lotSize} /> @ <Price value={f.fillPrice} exchangeId={f.exchangeId} priceBands={f.priceBands} /> {after(order.openedAt, f.recordedAt)}</>}
               >
                 <Text size="xs" c="dimmed" component="div">
                   <Time value={f.recordedAt} precision="ms" size="xs" />

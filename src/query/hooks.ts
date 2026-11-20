@@ -153,6 +153,15 @@ export function useDailyPnl(scope: { strategyId?: number; mode: Mode }, tz: stri
   });
 }
 
+export function useExchangeVolumes(mode: Mode, tz: string, days: number, exchangeId?: number) {
+  return useQuery({
+    queryKey: ['exchangeVolumes', mode, tz, days, exchangeId ?? null],
+    queryFn: () => registryApi.getExchangeVolumes(mode, tz, days, exchangeId),
+    refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
+  });
+}
+
 export function useRiskUsage(sessionId: string | undefined, live: boolean) {
   return useQuery({
     queryKey: ['riskUsage', sessionId],

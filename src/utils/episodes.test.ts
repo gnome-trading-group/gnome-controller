@@ -13,7 +13,7 @@ function fill(role: OrderRole, listingId: number, side: 0 | 1, qty: bigint, pric
     mode: 'paper', clientOidCounter: '1', side, fillQty: String(qty), fillPrice: String(price), fee: String(CENT),
     liquidity: null, netQuantityAfter: '0', realizedPnlAfter: null, actor: null, reason: null,
     eventTimeNs: String((T0 + BigInt(ms)) * 1_000_000n), recordedAt: new Date(Number(T0) + ms + 5_000).toISOString(),
-    symbol: `L${listingId}`, exchangeId: 1, tickSize: null, lotSize: null, markPrice: null, slippage: null,
+    symbol: `L${listingId}`, exchangeId: 1, priceBands: null, lotSize: null, markPrice: null, slippage: null,
     orderRole: role, orderEpisodeId: '31', ...extra,
   };
 }

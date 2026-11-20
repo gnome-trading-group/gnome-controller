@@ -181,3 +181,102 @@ def test_an_approval_knows_its_run_whether_earlier_stages_passed_and_what_it_wou
         {"source": "Source", "revision": "abc123", "message": "fix: ledger fills tab", "url": "https://github.com/x/commit/abc123"},
         {"source": "Plain", "revision": "def", "message": "just text", "url": None},
     ]
+
+
+def test_a_failed_pipeline_names_the_action_that_failed_and_why():
+    state = {"stageStates": [
+        {"stageName": "Build", "latestExecution": {"status": "Failed"}, "actionStates": [
+            {"actionName": "Synth", "latestExecution": {"status": "Succeeded"}},
+            {"actionName": "Tests", "latestExecution": {"status": "Failed", "errorDetails": {"message": "3 tests failed"}}},
+        ]}]}
+    row = health.pipeline_row("ctl", "us-east-1", {"stages": []}, state, {"status": "Failed"}, NOW)
+    assert row["failedAction"] == {"stage": "Build", "action": "Tests", "message": "3 tests failed"}
+    assert health.pipeline_row("ctl", "us-east-1", {"stages": []}, {"stageStates": []}, None, NOW)["failedAction"] is None
+
+
+T0 = datetime(2026, 11, 20, 9, tzinfo=timezone.utc)
+
+
+def action_execution(stage, action, run, status="Succeeded", minutes=0, provider="CloudFormation", result=None):
+    return {"stageName": stage, "actionName": action, "pipelineExecutionId": run, "status": status,
+            "startTime": T0 + timedelta(minutes=minutes), "lastUpdateTime": T0 + timedelta(minutes=minutes + 2),
+            "input": {"actionTypeId": {"category": "Build" if provider == "CodeBuild" else "Deploy", "provider": provider},
+                      "configuration": {"StackName": "Prod-Stack"} if provider == "CloudFormation" else {},
+                      "region": "us-east-1"},
+            "output": {"executionResult": result or {}}}
+
+
+STRUCTURE = {"stages": [
+    {"name": "Source", "actions": [{"name": "GitHub"}]},
+    {"name": "Build", "actions": [{"name": "Synth", "runOrder": 1}, {"name": "Assets", "runOrder": 2}]},
+    {"name": "Prod", "actions": [{"name": "ApproveProd", "runOrder": 1}, {"name": "Deploy", "runOrder": 2}]},
+]}
+
+
+def test_a_run_lists_what_it_started_from_and_how_long_it_took():
+    run = health.run_row({
+        "pipelineExecutionId": "r2", "status": "Succeeded", "startTime": T0, "lastUpdateTime": T0 + timedelta(minutes=14),
+        "trigger": {"triggerType": "Webhook", "triggerDetail": "arn:webhook"},
+        "sourceRevisions": [{"actionName": "GitHub", "revisionId": "abc", "revisionUrl": "u",
+                             "revisionSummary": json.dumps({"CommitMessage": "feat: x\n"})}]})
+    assert (run["id"], run["durationSeconds"], run["trigger"]) == ("r2", 14 * 60, "Webhook")
+    assert run["revisions"] == [{"source": "GitHub", "revision": "abc", "message": "feat: x", "url": "u"}]
+
+
+def test_an_action_says_where_to_look_and_builds_carry_their_build_for_logs():
+    build = health.action_row(action_execution("Build", "Synth", "r1", "Failed", provider="CodeBuild", result={
+        "externalExecutionId": "proj:123", "externalExecutionUrl": "https://build", "errorDetails": {"message": "exit 1"}}))
+    assert (build["buildId"], build["error"], build["url"], build["durationSeconds"]) == (
+        "proj:123", "exit 1", "https://build", 120)
+    deploy = health.action_row(action_execution("Prod", "Deploy", "r1", result={"externalExecutionId": "stack-arn"}))
+    assert (deploy["buildId"], deploy["stackName"], deploy["error"]) == (None, "Prod-Stack", None)
+    ordered = health.order_actions([deploy, build, {**build, "action": "Assets"}, {**deploy, "action": "ApproveProd"}],
+                                   STRUCTURE)
+    assert [(a["stage"], a["action"]) for a in ordered] == [
+        ("Build", "Synth"), ("Build", "Assets"), ("Prod", "ApproveProd"), ("Prod", "Deploy")]
+
+
+def test_each_stage_shows_the_newest_run_it_fully_succeeded_in():
+    newest_first = [
+        action_execution("Prod", "ApproveProd", "r3", "InProgress", minutes=30),
+        action_execution("Build", "Assets", "r3", minutes=25),
+        action_execution("Build", "Synth", "r3", minutes=20),
+        # r2's deploy failed after a retry; the retry is newer, so r2 never passed Prod.
+        action_execution("Prod", "Deploy", "r2", "Failed", minutes=16),
+        action_execution("Prod", "Deploy", "r2", "Succeeded", minutes=15),
+        action_execution("Prod", "ApproveProd", "r2", minutes=12),
+        action_execution("Build", "Synth", "r2", "Failed", minutes=10),
+        action_execution("Prod", "Deploy", "r1", minutes=5),
+        action_execution("Prod", "ApproveProd", "r1", minutes=4),
+    ]
+    found = health.last_successes(newest_first, STRUCTURE)
+    assert {stage: s["runId"] for stage, s in found.items()} == {"Build": "r3", "Prod": "r1"}
+    assert found["Prod"]["at"] == "2026-11-20T09:07:00+00:00"
+
+
+def test_only_failed_or_stopped_stages_can_be_retried_and_only_in_their_run():
+    state = {"stageStates": [
+        {"stageName": "Build", "latestExecution": {"status": "Succeeded", "pipelineExecutionId": "r3"}},
+        {"stageName": "Dev", "latestExecution": {"status": "Failed", "pipelineExecutionId": "r2"}},
+        {"stageName": "Prod", "latestExecution": {"status": "Stopped", "pipelineExecutionId": "r1"}},
+        {"stageName": "Never"},
+    ]}
+    assert health.retryable_stages(state) == {"Dev": "r2", "Prod": "r1"}
+
+
+def test_build_actions_sort_by_number_not_by_text():
+    rows = [health.action_row(action_execution("Assets", f"FileAsset{n}", "r1")) for n in (10, 2, 1)]
+    assert [a["action"] for a in health.order_actions(rows, {"stages": []})] == ["FileAsset1", "FileAsset2", "FileAsset10"]
+
+
+def test_where_a_stage_is_comes_from_its_latest_success_else_the_newest_run_that_succeeded():
+    state = {"stageStates": [
+        {"stageName": "Build", "latestExecution": {"status": "Succeeded", "pipelineExecutionId": "r5"}, "actionStates": [
+            {"actionName": "Synth", "latestExecution": {"lastStatusChange": T0}},
+            {"actionName": "Assets", "latestExecution": {"lastStatusChange": T0 + timedelta(minutes=3)}}]},
+        {"stageName": "Prod", "latestExecution": {"status": "Failed", "pipelineExecutionId": "r5"}, "actionStates": []},
+    ]}
+    assert health.succeeded_in_state(state) == {"Build": {"runId": "r5", "at": "2026-11-20T09:03:00+00:00"}}
+    runs = [{"id": "r5", "status": "InProgress", "updatedAt": "b"}, {"id": "r4", "status": "Succeeded", "updatedAt": "a"}]
+    assert health.newest_succeeded_run(runs) == {"runId": "r4", "at": "a"}
+    assert health.newest_succeeded_run(runs[:1]) is None

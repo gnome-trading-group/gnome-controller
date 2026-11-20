@@ -5,6 +5,7 @@ import {
   Badge,
   Container,
   Group,
+  Loader,
   Select,
   Text,
   Title,
@@ -113,107 +114,124 @@ function SessionsList() {
   const pageIds = useMemo(() => data.map(s => s.sessionId), [data]);
   const pageTotals = useSessionsTotals(pageIds, data.some(s => isActiveSession(s.status)));
   const totalsById = useMemo(() => new Map((pageTotals.data ?? []).map(t => [t.sessionId, t])), [pageTotals.data]);
+  // A row's totals are on their way while the page's read runs and hasn't brought them yet; a failed read leaves "—".
+  const totalsFetching = pageTotals.isFetching;
 
-  const columns = useMemo<MRT_ColumnDef<StrategySession>[]>(() => [
-    {
-      accessorKey: 'sessionId',
-      header: 'Session ID',
-      size: 120,
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
-        <Tooltip label={row.original.sessionId} position="right" withArrow openDelay={300}>
-          <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-            {row.original.sessionId.slice(0, 8)}…
-          </span>
-        </Tooltip>
-      ),
-    },
-    {
-      accessorKey: 'strategyId',
-      header: 'Strategy',
-      size: 160,
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) =>
-        strategyMap[row.original.strategyId] ?? String(row.original.strategyId),
-    },
-    {
-      accessorKey: 'status',
-      header: 'Status',
-      size: 110,
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => {
-        const reason = failedReason(row.original) ?? stopSummary(row.original);
-        return (
-          <Group gap={4} wrap="nowrap">
-            <Tooltip label={reason} disabled={!reason} multiline w={320} withArrow>
-              <Badge color={SESSION_STATUS_COLORS[row.original.status] ?? 'gray'} variant="light" size="sm">
-                {row.original.status}
-              </Badge>
-            </Tooltip>
-            <SessionKillBadge session={row.original} policies={policies.data} exchangeName={exchangeName} />
-          </Group>
-        );
+  const columns = useMemo<MRT_ColumnDef<StrategySession>[]>(() => {
+    const pending = (sessionId: string) => totalsFetching && !totalsById.has(sessionId);
+    const loading = <Loader size={12} type="dots" />;
+    return [
+      {
+        accessorKey: 'sessionId',
+        header: 'Session ID',
+        size: 120,
+        Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
+          <Tooltip label={row.original.sessionId} position="right" withArrow openDelay={300}>
+            <span style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+              {row.original.sessionId.slice(0, 8)}…
+            </span>
+          </Tooltip>
+        ),
       },
-    },
-    {
-      accessorKey: 'startedAt',
-      header: 'Started',
-      size: 130,
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) =>
-        row.original.startedAt
-          ? <ReactTimeAgo date={new Date(row.original.startedAt)} timeStyle="round" />
-          : '—',
-    },
-    {
-      id: 'duration',
-      header: 'Ran for',
-      size: 100,
-      enableSorting: false,
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => {
-        const { startedAt, stoppedAt } = row.original;
-        if (!startedAt) return '—';
-        return formatDuration((stoppedAt ? Date.parse(stoppedAt) : Date.now()) - Date.parse(startedAt));
+      {
+        accessorKey: 'strategyId',
+        header: 'Strategy',
+        size: 160,
+        Cell: ({ row }: { row: MRT_Row<StrategySession> }) =>
+          strategyMap[row.original.strategyId] ?? String(row.original.strategyId),
       },
-    },
-    {
-      id: 'pnl',
-      header: 'Session PnL',
-      size: 110,
-      enableSorting: false,
-      mantineTableHeadCellProps: { align: 'right' },
-      mantineTableBodyCellProps: { align: 'right' },
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
-        <Money value={totalsById.get(row.original.sessionId)?.totals.total ?? null} size="sm" />
-      ),
-    },
-    {
-      id: 'fills',
-      header: 'Fills',
-      size: 70,
-      enableSorting: false,
-      mantineTableHeadCellProps: { align: 'right' },
-      mantineTableBodyCellProps: { align: 'right' },
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => totalsById.get(row.original.sessionId)?.fills ?? '—',
-    },
-    {
-      id: 'opening',
-      header: 'Started with',
-      size: 110,
-      enableSorting: false,
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => {
-        const opening = totalsById.get(row.original.sessionId)?.opening;
-        if (opening === 'INHERITED') return <Badge size="xs" variant="outline" color="blue">Inherited</Badge>;
-        if (opening === 'FLAT') return <Text span size="xs" c="dimmed">Flat</Text>;
-        return <Text span size="xs" c="dimmed">—</Text>;
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        size: 110,
+        Cell: ({ row }: { row: MRT_Row<StrategySession> }) => {
+          const reason = failedReason(row.original) ?? stopSummary(row.original);
+          return (
+            <Group gap={4} wrap="nowrap">
+              <Tooltip label={reason} disabled={!reason} multiline w={320} withArrow>
+                <Badge color={SESSION_STATUS_COLORS[row.original.status] ?? 'gray'} variant="light" size="sm">
+                  {row.original.status}
+                </Badge>
+              </Tooltip>
+              <SessionKillBadge session={row.original} policies={policies.data} exchangeName={exchangeName} />
+            </Group>
+          );
+        },
       },
-    },
-    {
-      accessorKey: 'orchestratorVersion',
-      header: 'Version',
-      size: 90,
-      enableSorting: false,
-      Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
-        <Text span size="xs" ff="monospace">{row.original.orchestratorVersion ?? '—'}</Text>
-      ),
-    },
-  ], [strategyMap, totalsById, policies.data, exchangeName]);
+      {
+        accessorKey: 'startedAt',
+        header: 'Started',
+        size: 130,
+        Cell: ({ row }: { row: MRT_Row<StrategySession> }) =>
+          row.original.startedAt
+            ? <ReactTimeAgo date={new Date(row.original.startedAt)} timeStyle="round" />
+            : '—',
+      },
+      {
+        id: 'duration',
+        header: 'Ran for',
+        size: 100,
+        enableSorting: false,
+        Cell: ({ row }: { row: MRT_Row<StrategySession> }) => {
+          const { startedAt, stoppedAt } = row.original;
+          if (!startedAt) return '—';
+          return formatDuration((stoppedAt ? Date.parse(stoppedAt) : Date.now()) - Date.parse(startedAt));
+        },
+      },
+      {
+        id: 'pnl',
+        header: 'Session PnL',
+        size: 110,
+        enableSorting: false,
+        mantineTableHeadCellProps: { align: 'right' },
+        mantineTableBodyCellProps: { align: 'right' },
+        Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (pending(row.original.sessionId) ? loading
+          : <Money value={totalsById.get(row.original.sessionId)?.totals.total ?? null} size="sm" />),
+      },
+      {
+        id: 'fills',
+        header: 'Fills',
+        size: 70,
+        enableSorting: false,
+        mantineTableHeadCellProps: { align: 'right' },
+        mantineTableBodyCellProps: { align: 'right' },
+        Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (pending(row.original.sessionId) ? loading
+          : totalsById.get(row.original.sessionId)?.fills ?? '—'),
+      },
+      {
+        id: 'volume',
+        header: 'Volume',
+        size: 100,
+        enableSorting: false,
+        mantineTableHeadCellProps: { align: 'right' },
+        mantineTableBodyCellProps: { align: 'right' },
+        Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (pending(row.original.sessionId) ? loading
+          : <Money value={totalsById.get(row.original.sessionId)?.volume?.notional ?? null} pnl={false} size="sm" />),
+      },
+      {
+        id: 'opening',
+        header: 'Started with',
+        size: 110,
+        enableSorting: false,
+        Cell: ({ row }: { row: MRT_Row<StrategySession> }) => {
+          if (pending(row.original.sessionId)) return loading;
+          const opening = totalsById.get(row.original.sessionId)?.opening;
+          if (opening === 'INHERITED') return <Badge size="xs" variant="outline" color="blue">Inherited</Badge>;
+          if (opening === 'FLAT') return <Text span size="xs" c="dimmed">Flat</Text>;
+          return <Text span size="xs" c="dimmed">—</Text>;
+        },
+      },
+      {
+        accessorKey: 'orchestratorVersion',
+        header: 'Version',
+        size: 90,
+        enableSorting: false,
+        Cell: ({ row }: { row: MRT_Row<StrategySession> }) => (
+          <Text span size="xs" ff="monospace">{row.original.orchestratorVersion ?? '—'}</Text>
+        ),
+      },
+    ];
+  }, [strategyMap, totalsById, totalsFetching, policies.data, exchangeName]);
 
   useEffect(() => {
     const interval = setInterval(silentRefresh, POLL_INTERVAL_MS);

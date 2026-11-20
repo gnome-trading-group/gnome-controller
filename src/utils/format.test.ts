@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-  formatDuration, formatMoney, formatPrice, formatVolume, formatQty, formatSettlement, formatTime, parseScaled, plainDecimal,
-  settlementState,
+  formatDuration, formatMoney, formatPrice, formatPriceBands, formatVolume, formatQty, formatSettlement, formatTime,
+  parseScaled, plainDecimal, settlementState,
 } from './format';
+import type { PriceBand } from '../types/security-master';
 
-const CENT_TICK = '10000000';
-const TENTH_CENT_TICK = '1000000';
+const CENTS: PriceBand[] = [{ start: 0, end: 1_000_000_000, step: 10_000_000 }];
+const TENTH_CENTS: PriceBand[] = [{ start: 0, end: 1_000_000_000, step: 1_000_000 }];
+const TAPERED: PriceBand[] = [
+  { start: 0, end: 100_000_000, step: 1_000_000 },
+  { start: 100_000_000, end: 900_000_000, step: 10_000_000 },
+  { start: 900_000_000, end: 1_000_000_000, step: 1_000_000 },
+];
 
 describe('money', () => {
   it('rounds to the cent with a sign and separators, keeping the exact value', () => {
@@ -22,22 +28,36 @@ describe('money', () => {
 });
 
 describe('prices', () => {
-  it('shows a book price at exactly the tick, in cents on prediction markets', () => {
-    expect(formatPrice('430000000', { tickSize: CENT_TICK, cents: true })).toBe('43¢');
-    expect(formatPrice('435000000', { tickSize: TENTH_CENT_TICK, cents: true })).toBe('43.5¢');
-    expect(formatPrice('64231100000000', { tickSize: '100000000' })).toBe('$64,231.10');
-    expect(formatPrice('64231000000000', { tickSize: '1000000000' })).toBe('$64,231.00');
+  it('shows a book price at exactly its step, in cents on prediction markets', () => {
+    expect(formatPrice('430000000', { priceBands: CENTS, cents: true })).toBe('43¢');
+    expect(formatPrice('435000000', { priceBands: TENTH_CENTS, cents: true })).toBe('43.5¢');
+    expect(formatPrice('64231100000000', { priceBands: [{ start: 0, end: null, step: 100_000_000 }] })).toBe('$64,231.10');
+    expect(formatPrice('64231000000000', { priceBands: [{ start: 0, end: null, step: 1_000_000_000 }] })).toBe('$64,231.00');
   });
 
   it('gives a derived price one more digit, and never rounds away digits a value has', () => {
-    expect(formatPrice('435000000', { tickSize: CENT_TICK, cents: true, derived: true })).toBe('43.5¢');
-    expect(formatPrice('430000000', { tickSize: CENT_TICK, cents: true, derived: true })).toBe('43.0¢');
-    expect(formatPrice('432500000', { tickSize: CENT_TICK, cents: true })).toBe('43.25¢');
-    expect(formatPrice('432512345', { tickSize: CENT_TICK, cents: true })).toBe('43.25¢');
+    expect(formatPrice('435000000', { priceBands: CENTS, cents: true, derived: true })).toBe('43.5¢');
+    expect(formatPrice('430000000', { priceBands: CENTS, cents: true, derived: true })).toBe('43.0¢');
+    expect(formatPrice('432500000', { priceBands: CENTS, cents: true })).toBe('43.25¢');
+    expect(formatPrice('432512345', { priceBands: CENTS, cents: true })).toBe('43.25¢');
+  });
+
+  it('shows each price at the step of the band it sits in', () => {
+    expect(formatPrice('47000000', { priceBands: TAPERED, cents: true })).toBe('4.7¢');
+    expect(formatPrice('470000000', { priceBands: TAPERED, cents: true })).toBe('47¢');
+    expect(formatPrice('995000000', { priceBands: TAPERED, cents: true })).toBe('99.5¢');
+  });
+
+  it('writes a grid in a line, each band with where it applies', () => {
+    expect(formatPriceBands(CENTS, true)).toBe('1¢');
+    expect(formatPriceBands(TAPERED, true)).toBe('0.1¢ <10¢ · 1¢ 10¢–90¢ · 0.1¢ ≥90¢');
+    expect(formatPriceBands([{ start: 0, end: 10_000_000_000_000, step: 100_000_000 },
+      { start: 10_000_000_000_000, end: null, step: 1_000_000_000 }], false)).toBe('$0.1 <$10,000 · $1 ≥$10,000');
+    expect(formatPriceBands(null, true)).toBe('—');
   });
 
   it('shows nothing for an unknown price', () => {
-    expect(formatPrice('0', { tickSize: CENT_TICK })).toBe('—');
+    expect(formatPrice('0', { priceBands: CENTS })).toBe('—');
     expect(formatPrice(null)).toBe('—');
   });
 });

@@ -43,7 +43,7 @@ function MarkCell({ row }: { row: Row }) {
       openDelay={300}
       label={row.markTime ? `Bid ${row.bid ?? '—'} · ask ${row.ask ?? '—'} · updated ${formatDuration(age)} ago` : 'No price recorded yet'}
     >
-      <span><Price value={row.markPrice} exchangeId={row.exchangeId} tickSize={row.tickSize} derived /></span>
+      <span><Price value={row.markPrice} exchangeId={row.exchangeId} priceBands={row.priceBands} derived /></span>
     </Tooltip>
   );
 }
@@ -135,7 +135,7 @@ function AfterSessionCell({ row }: { row: SessionListingPnl }) {
         {after.kind === 'AWAITING_SETTLEMENT' && price !== null ? 'settled at' : label}{' '}
         {sessionLink}
         {price !== null && (after.kind === 'SETTLED' || after.kind === 'CLOSED_MANUALLY' || after.kind === 'AWAITING_SETTLEMENT') && (
-          <Price value={price} exchangeId={row.exchangeId} tickSize={row.tickSize} size="sm" />
+          <Price value={price} exchangeId={row.exchangeId} priceBands={row.priceBands} size="sm" />
         )}
         {after.kind === 'AWAITING_SETTLEMENT' && price !== null && ', not booked yet'}
         {after.impact !== null && <> · <Money value={after.impact} size="sm" /></>}
@@ -221,7 +221,7 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref, history }: Po
       {
         id: 'avg', header: 'Avg entry', size: 90,
         mantineTableHeadCellProps: { align: 'right' }, mantineTableBodyCellProps: { align: 'right' },
-        Cell: ({ row }) => <Price value={row.original.avgEntryPrice} exchangeId={row.original.exchangeId} tickSize={row.original.tickSize} derived size="sm" />,
+        Cell: ({ row }) => <Price value={row.original.avgEntryPrice} exchangeId={row.original.exchangeId} priceBands={row.original.priceBands} derived size="sm" />,
       },
       {
         id: 'mark', header: 'Mark', size: 90,
@@ -267,7 +267,7 @@ export function PositionsTable({ rows, loading, onAdjust, rowHref, history }: Po
             >
               <Text span size="sm" c={r.opening.markMissing ? 'orange' : undefined}>
                 <Qty value={r.opening.netQuantity} lotSize={r.lotSize} signed size="sm" /> @{' '}
-                <Price value={r.opening.avgEntryPrice} exchangeId={r.exchangeId} tickSize={r.tickSize} derived size="sm" />
+                <Price value={r.opening.avgEntryPrice} exchangeId={r.exchangeId} priceBands={r.priceBands} derived size="sm" />
               </Text>
             </Tooltip>
           );

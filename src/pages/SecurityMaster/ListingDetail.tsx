@@ -21,7 +21,7 @@ import { IconAlertTriangle, IconHistory, IconPlayerPlay, IconPlayerStop } from '
 import { useGlobalState } from '../../context/GlobalStateContext';
 import { DenormalizedListing, Event, EventContract, FeeTimelineEntry, Listing, ListingSpec, RiskPolicy, Security, SecurityType, Stream } from '../../types';
 import { registryApi } from '../../utils/api';
-import { formatVolume } from '../../utils/format';
+import { formatPriceBands, formatVolume, isPredictionMarket } from '../../utils/format';
 import {
   formatAssetClass,
   formatContractType,
@@ -43,6 +43,7 @@ import { usePageTitleLabels } from '../../context/PageTitleContext';
 import { useTradedSessions } from '../../query/hooks';
 import { RunningSessionsBadge, TradedSessionsPanel } from '../../components/TradedSessions';
 import { StreamCoverage } from '../../components/collection/StreamCoverage';
+import { ExchangeLink } from '../../components/ExchangeLink';
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -457,7 +458,7 @@ function ListingDetail() {
             <Title order={4} mb="md">Exchange</Title>
             <Stack gap={0}>
               <InfoRow label="Exchange ID" value={exchange?.exchangeId ?? listing.exchangeId} />
-              <InfoRow label="Name" value={listing.exchangeName} />
+              <InfoRow label="Name" value={<ExchangeLink exchangeId={listing.exchangeId}>{listing.exchangeName}</ExchangeLink>} />
               <InfoRow label="Region" value={exchange?.region ?? '-'} />
             </Stack>
           </Paper>
@@ -500,7 +501,7 @@ function ListingDetail() {
               <Table striped withColumnBorders highlightOnHover>
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>Tick Size</Table.Th>
+                    <Table.Th>Price Grid</Table.Th>
                     <Table.Th>Lot Size</Table.Th>
                     <Table.Th>Min Size</Table.Th>
                     <Table.Th>Min Notional</Table.Th>
@@ -512,7 +513,7 @@ function ListingDetail() {
                 <Table.Tbody>
                   {specs.map((spec, i) => (
                     <Table.Tr key={i}>
-                      <Table.Td>{formatUnscaled(unscalePrice(spec.tickSize))}</Table.Td>
+                      <Table.Td>{formatPriceBands(spec.priceBands, isPredictionMarket(exchange?.exchangeCode))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscaleSize(spec.lotSize))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscaleSize(spec.minSize))}</Table.Td>
                       <Table.Td>{formatUnscaled(unscalePrice(spec.minNotional))}</Table.Td>

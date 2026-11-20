@@ -21,6 +21,7 @@ const ShardDetail = lazy(() => import('./pages/MarketData/Collection/ShardDetail
 const SecurityMaster = lazy(() => import('./pages/SecurityMaster/SecurityMaster'));
 const ListingDetail = lazy(() => import('./pages/SecurityMaster/ListingDetail'));
 const SecurityDetail = lazy(() => import('./pages/SecurityMaster/SecurityDetail'));
+const ExchangeDetail = lazy(() => import('./pages/SecurityMaster/ExchangeDetail'));
 const LatencyProbe = lazy(() => import('./pages/LatencyProbe/LatencyProbe'));
 const Strategies = lazy(() => import('./pages/Strategies/Strategies'));
 const StrategyDetail = lazy(() => import('./pages/Strategies/StrategyDetail'));
@@ -185,6 +186,7 @@ function AppContent() {
                   <Route path="/security-master" element={<SecurityMaster />} />
                   <Route path="/security-master/listings/:listingId" element={<ListingDetail />} />
                   <Route path="/security-master/securities/:securityId" element={<SecurityDetail />} />
+                  <Route path="/security-master/exchanges/:exchangeId" element={<ExchangeDetail />} />
                   <Route path="/market-data/credentials" element={<MarketDataCredentials />} />
                   <Route path="/market-data/collection" element={<Collection />} />
                   <Route path="/market-data/collection/shards/:shardId" element={<ShardDetail />} />

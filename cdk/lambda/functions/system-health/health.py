@@ -6,6 +6,7 @@ them, so a new alarm, queue, job or pipeline appears without a code change.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from typing import Any
 
@@ -267,6 +268,12 @@ def pipeline_row(name: str, region: str, structure: dict, state: dict, latest: d
                     "revisions": [],
                 })
     failed = next((s["name"] for s in stages if s["status"] == "Failed"), None)
+    failed_action = next((
+        {"stage": stage["stageName"], "action": action["actionName"],
+         "message": (action["latestExecution"].get("errorDetails") or {}).get("message")}
+        for stage in state.get("stageStates", []) if stage["stageName"] == failed
+        for action in stage.get("actionStates", []) if action.get("latestExecution", {}).get("status") == "Failed"
+    ), None)
     return {
         "name": name,
         "region": region,
@@ -277,26 +284,153 @@ def pipeline_row(name: str, region: str, structure: dict, state: dict, latest: d
         "updatedAt": _iso(latest.get("lastUpdateTime")) if latest else None,
         "stages": stages,
         "failedStage": failed,
+        "failedAction": failed_action,
         "waitingApprovals": waiting,
     }
 
 
+def commit_message(summary: str | None) -> str | None:
+    """A source revision's message; GitHub sources put it in a JSON summary."""
+    message = summary or ""
+    try:
+        parsed = json.loads(message)
+        if isinstance(parsed, dict):
+            message = parsed.get("CommitMessage", message)
+    except ValueError:
+        pass
+    return message.strip() or None
+
+
 def revisions(execution: dict) -> list[dict]:
-    """What a pipeline run would ship: each source's commit, with its message when the source gives one (GitHub
-    sources put it in a JSON summary)."""
-    rows = []
-    for revision in execution.get("artifactRevisions", []):
-        summary = revision.get("revisionSummary") or ""
-        message = summary
-        try:
-            parsed = json.loads(summary)
-            if isinstance(parsed, dict):
-                message = parsed.get("CommitMessage", summary)
-        except ValueError:
-            pass
-        rows.append({"source": revision.get("name"), "revision": revision.get("revisionId"),
-                     "message": message.strip() or None, "url": revision.get("revisionUrl")})
-    return rows
+    """What a pipeline run would ship: each source's commit."""
+    return [{"source": revision.get("name"), "revision": revision.get("revisionId"),
+             "message": commit_message(revision.get("revisionSummary")), "url": revision.get("revisionUrl")}
+            for revision in execution.get("artifactRevisions", [])]
+
+
+def _seconds_between(start: Any, end: Any) -> float | None:
+    return (end - start).total_seconds() if isinstance(start, datetime) and isinstance(end, datetime) else None
+
+
+def run_row(summary: dict) -> dict:
+    """One run from a pipeline's history: how it went, what started it and what it carried."""
+    trigger = summary.get("trigger") or {}
+    return {
+        "id": summary["pipelineExecutionId"],
+        "status": summary.get("status"),
+        "statusSummary": summary.get("statusSummary"),
+        "startedAt": _iso(summary.get("startTime")),
+        "updatedAt": _iso(summary.get("lastUpdateTime")),
+        "durationSeconds": _seconds_between(summary.get("startTime"), summary.get("lastUpdateTime")),
+        "trigger": trigger.get("triggerType"),
+        "triggerDetail": trigger.get("triggerDetail"),
+        "revisions": [{"source": r.get("actionName"), "revision": r.get("revisionId"),
+                       "message": commit_message(r.get("revisionSummary")), "url": r.get("revisionUrl")}
+                      for r in summary.get("sourceRevisions", [])],
+    }
+
+
+def build_id(action: dict) -> str | None:
+    """The CodeBuild build an action ran, whose logs the page can show."""
+    if action.get("input", {}).get("actionTypeId", {}).get("provider") != "CodeBuild":
+        return None
+    return (action.get("output", {}).get("executionResult") or {}).get("externalExecutionId")
+
+
+def action_row(action: dict) -> dict:
+    """One action of one run (as ListActionExecutions returns it): what it is, how it went, and where to look."""
+    kind = action.get("input", {}).get("actionTypeId", {})
+    result = action.get("output", {}).get("executionResult") or {}
+    configuration = action.get("input", {}).get("configuration") or {}
+    return {
+        "stage": action["stageName"],
+        "action": action["actionName"],
+        "category": kind.get("category"),
+        "provider": kind.get("provider"),
+        "status": action.get("status"),
+        "startedAt": _iso(action.get("startTime")),
+        "updatedAt": _iso(action.get("lastUpdateTime")),
+        "durationSeconds": _seconds_between(action.get("startTime"), action.get("lastUpdateTime")),
+        "summary": result.get("externalExecutionSummary"),
+        "error": (result.get("errorDetails") or {}).get("message"),
+        "url": result.get("externalExecutionUrl"),
+        "buildId": build_id(action),
+        "stackName": configuration.get("StackName"),
+        "region": action.get("input", {}).get("region"),
+    }
+
+
+def order_actions(actions: list[dict], structure: dict) -> list[dict]:
+    """A run's actions in the order the pipeline runs them: by stage, then run order, then name."""
+    position = {}
+    for stage_index, stage in enumerate(structure.get("stages", [])):
+        for action in stage.get("actions", []):
+            position[(stage["name"], action["name"])] = (stage_index, action.get("runOrder", 1))
+    last = (len(position) + 1, 0)
+    return sorted(actions, key=lambda a: (*position.get((a["stage"], a["action"]), last), natural_key(a["action"])))
+
+
+def natural_key(name: str) -> list:
+    """FileAsset2 before FileAsset10."""
+    return [(0, int(part), "") if part.isdigit() else (1, 0, part) for part in re.split(r"(\d+)", name)]
+
+
+def succeeded_in_state(state: dict) -> dict[str, dict]:
+    """Stages whose latest attempt succeeded: that run is the one they last succeeded in."""
+    found = {}
+    for stage in state.get("stageStates", []):
+        latest = stage.get("latestExecution") or {}
+        if latest.get("status") != "Succeeded" or not latest.get("pipelineExecutionId"):
+            continue
+        times = [a["latestExecution"]["lastStatusChange"] for a in stage.get("actionStates", [])
+                 if isinstance((a.get("latestExecution") or {}).get("lastStatusChange"), datetime)]
+        found[stage["stageName"]] = {"runId": latest["pipelineExecutionId"], "at": _iso(max(times)) if times else None}
+    return found
+
+
+def newest_succeeded_run(runs: list[dict]) -> dict | None:
+    """A run that succeeded passed every stage; the newest one bounds where a stage is when its own history is out
+    of reach."""
+    run = next((r for r in runs if r["status"] == "Succeeded"), None)
+    return {"runId": run["id"], "at": run["updatedAt"]} if run else None
+
+
+def last_successes(actions: list[dict], structure: dict) -> dict[str, dict]:
+    """For each stage, the newest run in which every one of its actions succeeded, from action executions newest
+    first. A stage whose newest attempts failed still shows what it last deployed."""
+    expected = {stage["name"]: {a["name"] for a in stage.get("actions", [])} for stage in structure.get("stages", [])}
+    by_run: dict[tuple[str, str], dict] = {}
+    order: list[tuple[str, str]] = []
+    for action in actions:
+        key = (action["stageName"], action["pipelineExecutionId"])
+        if key not in by_run:
+            by_run[key] = {"statuses": {}, "at": action.get("lastUpdateTime")}
+            order.append(key)
+        run = by_run[key]
+        run["statuses"].setdefault(action["actionName"], action.get("status"))
+        if isinstance(action.get("lastUpdateTime"), datetime) and (
+                not isinstance(run["at"], datetime) or action["lastUpdateTime"] > run["at"]):
+            run["at"] = action["lastUpdateTime"]
+    found: dict[str, dict] = {}
+    for stage, run_id in order:
+        if stage in found or stage not in expected:
+            continue
+        statuses = by_run[(stage, run_id)]["statuses"]
+        # A run sees only the actions it reached, so a stage passed when what it ran succeeded and covered them all.
+        if set(statuses) >= expected[stage] and all(v == "Succeeded" for v in statuses.values()):
+            found[stage] = {"runId": run_id, "at": _iso(by_run[(stage, run_id)]["at"])}
+    return found
+
+
+def retryable_stages(state: dict) -> dict[str, str]:
+    """Stages whose latest attempt failed or was stopped, by the run that attempt belonged to; CodePipeline retries
+    only those, and only in that run."""
+    return {
+        stage["stageName"]: stage["latestExecution"]["pipelineExecutionId"]
+        for stage in state.get("stageStates", [])
+        if (stage.get("latestExecution") or {}).get("status") in ("Failed", "Stopped")
+        and stage["latestExecution"].get("pipelineExecutionId")
+    }
 
 
 def sort_pipelines(rows: list[dict]) -> list[dict]:

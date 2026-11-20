@@ -92,3 +92,29 @@ export function pointAt(points: ChartPoint[], time: number): ChartPoint | undefi
 export function snapToPoint(points: ChartPoint[], time: number): number | null {
   return (pointAt(points, time) ?? points[0])?.time ?? null;
 }
+
+export interface VolumeBar {
+  time: number;
+  total: number;
+  maker: number;
+}
+
+// Each point's volume is what traded since the point before. Polls append points between the resolution's steps, so
+// bars are summed per step (a point belongs to the step it ends in) and drawn at that step's newest point. Chart times
+// are whole seconds, so at a one-second step a point between steps can land on the previous bar's second: it joins
+// that bar, as the chart needs strictly increasing times.
+export function volumeBars(times: number[], total: number[], maker: number[], resolutionMs: number): VolumeBar[] {
+  const bars: (VolumeBar & { step: number })[] = [];
+  times.forEach((ms, i) => {
+    const step = Math.ceil(ms / resolutionMs);
+    const last = bars[bars.length - 1];
+    if (last && (last.step === step || last.time === chartTime(ms))) {
+      last.time = chartTime(ms);
+      last.total += total[i];
+      last.maker += maker[i];
+    } else {
+      bars.push({ step, time: chartTime(ms), total: total[i], maker: maker[i] });
+    }
+  });
+  return bars.map(({ time, total: t, maker: m }) => ({ time, total: t, maker: m }));
+}

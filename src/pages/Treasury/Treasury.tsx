@@ -26,6 +26,7 @@ import { ReconPanel } from './ReconPanel';
 import { RewardsPanel } from './RewardsPanel';
 import { TransfersTable } from './TransfersTable';
 import { AccountRow } from './types';
+import { ExchangeLink } from '../../components/ExchangeLink';
 
 interface Venue {
   exchangeId: number;
@@ -200,7 +201,7 @@ function Treasury() {
           <Card key={venue.exchangeId} withBorder mb="md" p="sm">
             <Group justify="space-between" mb="xs">
               <Group gap="sm">
-                <Text fw={700}>{venue.name}</Text>
+                <ExchangeLink exchangeId={venue.exchangeId} size="md" fw={700}>{venue.name}</ExchangeLink>
                 {halted && <Badge color="red" leftSection={<IconAlertOctagon size={12} />}>halted</Badge>}
                 <Text size="sm" c="dimmed">
                   cash <Money value={venueTotals.cashTotal} pnl={false} size="sm" /> · allocated{' '}

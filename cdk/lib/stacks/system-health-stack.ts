@@ -16,8 +16,8 @@ export interface SystemHealthStackProps extends cdk.StackProps {
   approvalsRoleArn?: string;
 }
 
-// The controller's System page: the account's health, discovered across every enabled region. Read-only, and
-// account-wide by design, so new alarms, queues, jobs and pipelines appear without changes here.
+// The controller's System page: the account's health, discovered across every enabled region. Account-wide by
+// design, so new alarms, queues, jobs and pipelines appear without changes here.
 export class SystemHealthStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: SystemHealthStackProps) {
     super(scope, id, props);
@@ -57,7 +57,13 @@ export class SystemHealthStack extends cdk.Stack {
     }));
 
     // gnome-bot reads health to answer "is anything broken"; approving a deploy stays a person's.
-    props.auth.addRoute(props.apiGateway.root, "system/health", new apigateway.LambdaIntegration(healthLambda.function),
+    const healthIntegration = new apigateway.LambdaIntegration(healthLambda.function);
+    props.auth.addRoute(props.apiGateway.root, "system/health", healthIntegration,
+      { GET: [CallerKind.PERSON, CallerKind.BOT] });
+    // One pipeline's runs and actions, and a build's logs, read when someone opens it on the page.
+    props.auth.addRoute(props.apiGateway.root, "system/pipelines/{name}", healthIntegration,
+      { GET: [CallerKind.PERSON, CallerKind.BOT] });
+    props.auth.addRoute(props.apiGateway.root, "system/pipelines/{name}/logs", healthIntegration,
       { GET: [CallerKind.PERSON, CallerKind.BOT] });
 
     if (props.approvalsRoleArn) {
@@ -66,7 +72,7 @@ export class SystemHealthStack extends cdk.Stack {
         codePath: "lambda/functions/system-approvals",
         functionName: "gnome-system-approvals",
         roleName: SYSTEM_APPROVALS_LAMBDA_ROLE,
-        description: "Approve or reject a waiting deploy-pipeline approval from the System page",
+        description: "Approve, retry, release or stop deploy pipeline runs from the System page",
         timeout: cdk.Duration.seconds(15),
         environment: {
           APPROVALS_ROLE_ARN: props.approvalsRoleArn,
@@ -77,7 +83,10 @@ export class SystemHealthStack extends cdk.Stack {
         actions: ["sts:AssumeRole"],
         resources: [props.approvalsRoleArn],
       }));
-      props.auth.addRoute(props.apiGateway.root, "system/approvals", new apigateway.LambdaIntegration(approvalsLambda.function),
+      const approvalsIntegration = new apigateway.LambdaIntegration(approvalsLambda.function);
+      props.auth.addRoute(props.apiGateway.root, "system/approvals", approvalsIntegration, { POST: [CallerKind.PERSON] });
+      // Retry a failed stage, release the latest change, or stop a run.
+      props.auth.addRoute(props.apiGateway.root, "system/pipelines/{name}/operations", approvalsIntegration,
         { POST: [CallerKind.PERSON] });
     }
   }

@@ -18,7 +18,7 @@ import { Money, Price, Qty } from '../../components/trading/values';
 import { PriceChart } from '../../components/trading/PriceChart';
 import { FillsTable, OrdersTable } from '../../components/trading/LedgerTables';
 import { AdjustPositionModal } from '../../components/trading/AdjustPositionModal';
-import { formatDuration } from '../../utils/format';
+import { formatDuration, formatPriceBands } from '../../utils/format';
 import { treasuryLink } from '../../utils/attention';
 import { usePageTitleLabels } from '../../context/PageTitleContext';
 
@@ -113,7 +113,7 @@ function PositionDetail() {
         meta={[
           <Anchor component={Link} to={`/strategies/${strategyId}?mode=${mode}`} size="sm">{strategy?.name ?? `Strategy ${strategyId}`}</Anchor>,
           <Anchor component={Link} to={`/security-master/listings/${listingId}`} size="sm">listing {listingId}</Anchor>,
-          row?.tickSize && <>tick <Price value={row.tickSize} exchangeId={row.exchangeId} tickSize={row.tickSize} size="sm" /></>,
+          row?.priceBands && <>grid {formatPriceBands(row.priceBands, cents)}</>,
           row?.accountLabel && (
             <>account <Anchor component={Link} to={treasuryLink(row.accountId)} size="sm" ff="monospace">{row.accountLabel}</Anchor></>
           ),
@@ -124,8 +124,8 @@ function PositionDetail() {
 
       <KpiStrip>
         <Kpi label="Position" value={row ? <Qty value={row.netQuantity} lotSize={row.lotSize} signed /> : '—'}
-          footer={row && BigInt(row.netQuantity) !== 0n && <>avg <Price value={row.avgEntryPrice} exchangeId={row.exchangeId} tickSize={row.tickSize} derived size="xs" /></>} />
-        <Kpi label="Mark" value={row ? <Price value={row.markPrice} exchangeId={row.exchangeId} tickSize={row.tickSize} derived /> : '—'}
+          footer={row && BigInt(row.netQuantity) !== 0n && <>avg <Price value={row.avgEntryPrice} exchangeId={row.exchangeId} priceBands={row.priceBands} derived size="xs" /></>} />
+        <Kpi label="Mark" value={row ? <Price value={row.markPrice} exchangeId={row.exchangeId} priceBands={row.priceBands} derived /> : '—'}
           footer={markAge !== null && `updated ${formatDuration(markAge)} ago`} />
         <Kpi label="Unrealized" value={<Money value={row?.unrealized} />} />
         <Kpi label="Realized" value={<Money value={row?.realized} />} />
@@ -160,7 +160,7 @@ function PositionDetail() {
                     </Group>
                   </Table.Td>
                   <Table.Td ta="right"><Qty value={r.netQuantity} lotSize={r.lotSize} signed size="sm" /></Table.Td>
-                  <Table.Td ta="right"><Price value={r.avgEntryPrice} exchangeId={r.exchangeId} tickSize={r.tickSize} derived size="sm" /></Table.Td>
+                  <Table.Td ta="right"><Price value={r.avgEntryPrice} exchangeId={r.exchangeId} priceBands={r.priceBands} derived size="sm" /></Table.Td>
                   <Table.Td ta="right"><Money value={r.unrealized} size="sm" /></Table.Td>
                   <Table.Td ta="right"><Money value={r.total} size="sm" /></Table.Td>
                 </Table.Tr>
@@ -183,7 +183,7 @@ function PositionDetail() {
           prices={prices.data}
           series={series.data}
           fills={chartFills.data}
-          tickSize={row?.tickSize ?? null}
+          priceBands={row?.priceBands ?? null}
           lotSize={row?.lotSize ?? null}
           cents={cents}
           loading={prices.isLoading}

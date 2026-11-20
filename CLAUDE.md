@@ -32,6 +32,17 @@ Python Lambda tests (`cd cdk`; `pip install -r requirements-dev.txt` first). Run
   shard's home zone; a session's panel flags a session placed outside its gateway's zone (`gatewayZone`).
 - `src/pages/*` - one folder per nav area: Dashboard, Trading (Fills & Orders; Order Gateways: every live and paper gateway from the registry's `gateways/status`, its linked sessions from heartbeats, per-account last hour and session shares or a paper gateway's books' lag, and its alerts; logic in `src/utils/gateways.ts`), Strategies, Sessions, Launcher, Risk, Treasury, Predictions, SecurityMaster, MarketData (Collection: shards, rules, stream targets and each stream's coverage history from the market-data `collection/*` routes; Credentials), Data (pipelines/datasets/artifacts), Research (Backtests, Jobs, Sessions), System (health, alerts), Tools (ServiceConfig, LatencyProbe, BotNotes: gnome-bot's team notes through its own API). Routes are in `src/App.tsx`.
 - `src/utils/api.ts` - every HTTP call. `sendApiRequest` plus `registryApi`, `collectionApi` (market data), `controllerApi`, `launcherApi`, `botApi` (gnome-bot's `notes` routes), `samplesApi` (the registry's samples API, `VITE_SAMPLES_API_URL`; `samplesConfigured` is false in a build without it, which hides what reads it), one per `VITE_*_API_URL`. Other files in `src/utils` are pure logic with colocated tests.
+- Volume: the registry's money traded (`types/pnl.ts` `Volume`; pure helpers in `src/utils/volume.ts`). `VolumeKpi`
+  tiles on the Overview, strategy and session pages; columns on the Overview table, Strategies list (30d) and
+  Sessions list; the Performance tab's daily bars toggle PnL / volume / fees. `PnlChart`'s Total view stacks panes
+  under the PnL (drawdown, volume with its maker part, capital at risk), each switched off from the chart's footer
+  and remembered (`pref.hiddenPanes`); polled points are re-bucketed onto the resolution (`chart-data.ts`
+  `volumeBars`) and a poll keeps the newest shown point's volume (`query/series.ts`).
+- Exchange page (`src/pages/SecurityMaster/ExchangeDetail.tsx`, `/security-master/exchanges/:exchangeId`): the
+  exchange's kill switch, gateways, and its trading from the registry's `/pnl/exchanges` (volume, rewards, net cost
+  per $100, by account and strategy, daily bars), then its fee schedules (`FeesTab` with `fixedExchangeId`). The
+  accounts table's Fee tier column is a placeholder until fee tiers are modelled. Every exchange name in Security
+  Master, Treasury and a gateway's header links here through `components/ExchangeLink`.
 - Session Performance tab (`src/pages/Sessions/SessionPerformance.tsx`): a session's samples over 1h-7d (latency by
   metric with exchange/action/trigger filters and the latest minute's table, activity, runtime, rings, market data,
   ledger, journal), read through `useSamples` (thinned with `everyMs` past an hour, re-read every 30 s while live).
@@ -60,7 +71,7 @@ Python Lambda tests (`cd cdk`; `pip install -r requirements-dev.txt` first). Run
   - `research-stack.ts` - research sessions (`gnome-research-sessions` table), `research/sessions/*` routes.
   - `pipeline-stack.ts` - only forwards `research/{pipelines,datasets,artifacts}` to Lambdas that gnome-pipelines owns (`gnome-pipelines-api`, `gnome-pipelines-data-api`); they must exist before this deploys.
   - `service-config-stack.ts` - `gnome-service-config` table and `config/{service}` routes.
-  - `system-health-stack.ts` - `GET system/health`; prod only also gets `POST system/approvals`.
+  - `system-health-stack.ts` - `GET system/health`, plus `GET system/pipelines/{name}` (runs, a run's actions, where each stage last succeeded) and `GET system/pipelines/{name}/logs` (a CodeBuild build's log), all on `gnome-system-health`; prod only also gets `POST system/approvals` and `POST system/pipelines/{name}/operations` (retry a failed stage, release the latest change, stop a run) on `gnome-system-approvals`.
   - `monitoring-stack.ts` - the `Controller-*` alarms via cdk-monitoring-constructs (API 5xx, Batch status handlers);
     tested in `cdk/test/`.
   - `latency-probe-stack.ts` - the `latency-probe` Lambda, one stack per region in `PROBE_REGIONS`.
@@ -85,7 +96,7 @@ Python Lambda tests (`cd cdk`; `pip install -r requirements-dev.txt` first). Run
   - Research jobs: `gnome-research-job-{submit,inputs,get,list,cancel,logs}`; array jobs on `gnome-research-queue` with the `gnomepy-research-job:latest` image; inputs/outputs under `research-jobs/` in the research bucket; status-handler via EventBridge updates `gnome-research-jobs`. Spot retries only for reclaimed instances and image pulls.
   - Research sessions: `gnome-research-{create,list,get,update}-session`, `-record-iteration`, `-add-note`.
   - Service config: `gnome-service-config-{get,put,history}`.
-  - System page: `gnome-system-health` (read-only, discovers alarms, EC2, queues, rules, RDS across all regions; assumes `gnome-system-health-pipelines-read` in the pipelines account). Prod only: `gnome-system-approvals`, which assumes `gnome-system-health-pipelines-approve` to approve or reject pipeline approvals; both roles are created by gnome-shared-infra.
+  - System page: `gnome-system-health` (read-only, discovers alarms, EC2, queues, rules, RDS across all regions; assumes `gnome-system-health-pipelines-read` in the pipelines account). It also serves the Deploys section's pipeline dialog (runs, actions, CodeBuild logs). Prod only: `gnome-system-approvals`, which assumes `gnome-system-health-pipelines-approve` to approve or reject pipeline approvals and to retry, release or stop runs (who asked is in its log; CodePipeline keeps no comment for those except a stop's reason); both roles are created by gnome-shared-infra.
   - Latency probes: an orchestrator in BackendStack invokes the `latency-probe` Lambda in each region.
 - Logs / alarms:
   - Lambda logs are in `/aws/lambda/<functionName>`; Batch container logs are in `/aws/batch/job` (the UI reads them through the `*-logs` routes).

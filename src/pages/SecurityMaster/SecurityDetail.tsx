@@ -25,6 +25,7 @@ import {
   formatSecurityType,
 } from '../../utils/security-master';
 import { usePageTitleLabels } from '../../context/PageTitleContext';
+import { ExchangeLink } from '../../components/ExchangeLink';
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -229,7 +230,7 @@ function SecurityDetail() {
                         onClick={() => navigate(`/security-master/listings/${l.listingId}`)}
                         style={{ cursor: 'pointer' }}
                       >
-                        <Table.Td>{l.exchangeName}</Table.Td>
+                        <Table.Td><ExchangeLink exchangeId={l.exchangeId}>{l.exchangeName}</ExchangeLink></Table.Td>
                         <Table.Td>{l.exchangeSecuritySymbol}</Table.Td>
                         <Table.Td>
                           <ReactTimeAgo date={new Date(l.dateCreated)} timeStyle="round" />

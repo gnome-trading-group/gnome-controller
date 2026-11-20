@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TickMarkType } from 'lightweight-charts';
-import { chartPoints, chartTime, drawdown, fromChartTime, pointAt, snapToPoint, tickLabel } from './chart-data';
+import { chartPoints, chartTime, drawdown, fromChartTime, pointAt, snapToPoint, tickLabel, volumeBars } from './chart-data';
 
 describe('chart points', () => {
   it('keeps the newest value when two points fall in one second', () => {
@@ -43,5 +43,25 @@ describe('chart time zones', () => {
     expect(tickLabel(midnight, TickMarkType.DayOfMonth, 'UTC')).toBe('Nov 4');
     expect(tickLabel(midnight + 3600, TickMarkType.DayOfMonth, 'UTC')).toBe('Nov 4 01:00');
     expect(tickLabel(midnight + 3661, TickMarkType.TimeWithSeconds, 'UTC')).toBe('01:01:01');
+  });
+});
+
+describe('volume bars', () => {
+  it('sums the points a poll added between steps into the step they end in, drawn at its newest point', () => {
+    // Steps of 60 s: 60 s and 120 s are on the grid, 90 s and 100 s came from polls, 130 s is the newest.
+    const bars = volumeBars([60_000, 90_000, 100_000, 120_000, 130_000], [5, 1, 2, 3, 4], [5, 0, 2, 1, 0], 60_000);
+    expect(bars).toEqual([
+      { time: 60, total: 5, maker: 5 },
+      { time: 120, total: 6, maker: 3 },
+      { time: 130, total: 4, maker: 0 },
+    ]);
+  });
+
+  it('keeps bar times strictly increasing when a point between one-second steps shares the second before it', () => {
+    const bars = volumeBars([702_000, 703_000, 703_400], [1, 2, 3], [0, 0, 0], 1_000);
+    expect(bars).toEqual([
+      { time: 702, total: 1, maker: 0 },
+      { time: 703, total: 5, maker: 0 },
+    ]);
   });
 });

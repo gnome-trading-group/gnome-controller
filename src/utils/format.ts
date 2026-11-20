@@ -1,11 +1,13 @@
 // Every money, price and quantity on the trading pages is formatted here, from the registry's scaled-integer strings,
 // with BigInt so nothing is lost to floating point before the final rounding.
 //   money     always to the cent, signed when it is PnL; the exact value is offered for a hover
-//   prices    at the listing's tick: exactly the tick's decimals for prices traded on the book, one more for derived
-//             prices (an average entry or a mid can fall between ticks), and never rounding away digits a value
-//             really has (a fill at an older, finer tick shows up to two more)
+//   prices    on the listing's price grid: exactly the decimals of the step where the price sits for prices traded on
+//             the book, one more for derived prices (an average entry or a mid can fall between grid points), and
+//             never rounding away digits a value really has (a fill on an older, finer grid shows up to two more)
 //   quantity  at the lot size's decimals, with the same rule
 // Prediction-market prices are shown in cents, as the venues show them.
+
+import type { PriceBand } from '../types/security-master';
 
 const PRICE_DIGITS = 9;
 const SIZE_DIGITS = 6;
@@ -83,24 +85,60 @@ export function formatMoney(value: Scaled, signed = true): MoneyText {
 }
 
 export interface PriceFormat {
-  tickSize?: string | null;
+  priceBands?: PriceBand[] | null;
   cents?: boolean;
-  // Average entries and mids can fall between ticks.
+  // Average entries and mids can fall between grid points.
   derived?: boolean;
+}
+
+// The step of the band holding the price, or null without bands.
+function stepAt(bands: PriceBand[] | null | undefined, price: bigint): bigint | null {
+  if (!bands || bands.length === 0) return null;
+  const abs = price < 0n ? -price : price;
+  for (let i = bands.length - 1; i >= 0; i--) {
+    if (BigInt(bands[i].start) <= abs) return BigInt(bands[i].step);
+  }
+  return BigInt(bands[0].step);
+}
+
+// The finest step anywhere on the grid, or null without bands.
+export function finestStep(bands: PriceBand[] | null | undefined): number | null {
+  if (!bands || bands.length === 0) return null;
+  return Math.min(...bands.map(band => band.step));
 }
 
 export function formatPrice(value: Scaled, format: PriceFormat = {}): string {
   const v = toBig(value);
   if (v === null || v === 0n) return '—';
-  const tick = toBig(format.tickSize);
-  const tickDecimals = tick !== null && tick > 0n ? exactDecimals(tick, PRICE_DIGITS) : DEFAULT_PRICE_DECIMALS;
+  const step = stepAt(format.priceBands, v);
+  const tickDecimals = step !== null && step > 0n ? exactDecimals(step, PRICE_DIGITS) : DEFAULT_PRICE_DECIMALS;
   if (format.cents) {
     const base = Math.max(0, tickDecimals - 2) + (format.derived ? 1 : 0);
     return `${decimalString(v, PRICE_DIGITS - 2, displayDecimals(v, PRICE_DIGITS - 2, base))}¢`;
   }
-  // Dollar prices always show cents, even on a coarser tick.
+  // Dollar prices always show cents, even on a coarser grid.
   const base = Math.max(2, tickDecimals) + (format.derived ? 1 : 0);
   return `$${decimalString(v, PRICE_DIGITS, displayDecimals(v, PRICE_DIGITS, base))}`;
+}
+
+// A price written exactly, in cents or dollars: a grid's step or edge.
+function exactPrice(value: bigint, cents: boolean): string {
+  if (cents) return `${decimalString(value, PRICE_DIGITS - 2, exactDecimals(value, PRICE_DIGITS - 2))}¢`;
+  return `$${decimalString(value, PRICE_DIGITS, exactDecimals(value, PRICE_DIGITS))}`;
+}
+
+// A price grid in a line: its one step, or each band's step with where it applies ("0.1¢ <10¢ · 1¢ 10¢–90¢ ·
+// 0.1¢ ≥90¢").
+export function formatPriceBands(bands: PriceBand[] | null | undefined, cents: boolean): string {
+  if (!bands || bands.length === 0) return '—';
+  if (bands.length === 1) return exactPrice(BigInt(bands[0].step), cents);
+  const edge = (units: number) => exactPrice(BigInt(units), cents);
+  return bands.map((band, i) => {
+    const step = exactPrice(BigInt(band.step), cents);
+    if (i === 0) return `${step} <${edge(band.end ?? 0)}`;
+    if (i === bands.length - 1 || band.end === null) return `${step} ≥${edge(band.start)}`;
+    return `${step} ${edge(band.start)}–${edge(band.end)}`;
+  }).join(' · ');
 }
 
 // What an outcome paid when its market settled. Unlike a price, 0 is a real value here (the outcome paid nothing),

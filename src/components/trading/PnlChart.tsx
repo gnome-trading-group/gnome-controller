@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Group, SegmentedControl, Skeleton, Text, useComputedColorScheme } from '@mantine/core';
+import { Box, Group, LoadingOverlay, SegmentedControl, Skeleton, Text, UnstyledButton, useComputedColorScheme } from '@mantine/core';
 import {
   AreaSeries, ColorType, createChart, createSeriesMarkers, CrosshairMode, HistogramSeries, IChartApi, ISeriesApi,
   ISeriesMarkersPluginApi, LineSeries, SeriesMarker, SeriesType, Time, UTCTimestamp,
@@ -7,7 +7,9 @@ import {
 import { usePreferences } from '../../context/PreferencesContext';
 import { PnlSeries, SeriesEventKind } from '../../types';
 import { formatMoney, formatQty, formatTime, moneyToNumber, sizeToNumber } from '../../utils/format';
-import { chartPoints, ChartPoint, chartTime, chartZoneOptions, drawdown, fromChartTime, pointAt, snapToPoint } from './chart-data';
+import {
+  chartPoints, ChartPoint, chartTime, chartZoneOptions, drawdown, fromChartTime, pointAt, snapToPoint, volumeBars,
+} from './chart-data';
 import { ChartTooltip, TooltipState } from './ChartTooltip';
 import { MarkerKind, MarkerToggles } from './MarkerToggles';
 
@@ -46,6 +48,42 @@ interface Line {
 
 const MONEY_STEP = 0.01;
 
+// The Total view's lower panes, top to bottom, each switched off from the chart's footer and remembered.
+type Pane = 'drawdown' | 'volume' | 'capital';
+
+const PANES: { pane: Pane; label: string; hint: string }[] = [
+  { pane: 'drawdown', label: 'Drawdown', hint: 'How far the total sits below its best so far' },
+  { pane: 'volume', label: 'Volume', hint: 'Money traded in each step, the maker part in green' },
+  { pane: 'capital', label: 'Capital at risk', hint: "What the held positions tie up: a binary contract's worst loss if it settles against it, anything else its cost" },
+];
+
+interface PaneLine extends Line {
+  pane: Pane;
+  bars: boolean;
+}
+
+function PaneToggles({ panes }: { panes: Pane[] }) {
+  const { hiddenPanes, setPaneHidden } = usePreferences();
+  return (
+    <Group gap="sm" wrap="wrap">
+      {PANES.filter(p => panes.includes(p.pane)).map(({ pane, label, hint }) => {
+        const hidden = hiddenPanes.has(pane);
+        return (
+          <UnstyledButton
+            key={pane}
+            onClick={() => setPaneHidden(pane, !hidden)}
+            aria-pressed={!hidden}
+            title={`${hidden ? 'Show' : 'Hide'} ${label.toLowerCase()}: ${hint}`}
+            style={{ opacity: hidden ? 0.4 : 1 }}
+          >
+            <Text span size="xs" c="dimmed" td={hidden ? 'line-through' : undefined}>{label}</Text>
+          </UnstyledButton>
+        );
+      })}
+    </Group>
+  );
+}
+
 // Listings held or traded in the window that the registry left out of the per-listing lines.
 function hiddenListings(series: PnlSeries): number {
   return Math.max(0, series.listingCount - series.listings.length);
@@ -66,20 +104,22 @@ function quantity(lotSize: string | null): Pick<Line, 'format' | 'minMove'> {
 interface PnlChartProps {
   series: PnlSeries | undefined;
   loading: boolean;
+  // A different window or scope is loading while the previous one's data is still drawn.
+  refreshing?: boolean;
   // A session's chart has every view; a strategy's shows its total.
   views?: ChartView[];
   onViewChange?: (view: ChartView) => void;
   height?: number;
 }
 
-export function PnlChart({ series, loading, views = ['total'], onViewChange, height = 280 }: PnlChartProps) {
-  const { timeZone, hiddenMarkers } = usePreferences();
+export function PnlChart({ series, loading, refreshing = false, views = ['total'], onViewChange, height = 280 }: PnlChartProps) {
+  const { timeZone, hiddenMarkers, hiddenPanes } = usePreferences();
   const scheme = useComputedColorScheme('dark');
   const [view, setView] = useState<ChartView>(views[0]);
   const container = useRef<HTMLDivElement>(null);
   const [chart, setChart] = useState<IChartApi | null>(null);
   // The series drawn for the current set of lines, kept across polls so new data updates them in place.
-  const drawn = useRef<{ lines: ISeriesApi<SeriesType>[]; drawdown: ISeriesApi<SeriesType> | null;
+  const drawn = useRef<{ lines: ISeriesApi<SeriesType>[]; panes: ISeriesApi<SeriesType>[];
     markers: ISeriesMarkersPluginApi<Time> | null } | null>(null);
   const [hover, setHover] = useState<{ time: number; x: number; y: number } | null>(null);
 
@@ -119,11 +159,46 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
       .map(kind => ({ key: `pnl:${kind}`, label: EVENT_STYLE[kind].text, color: EVENT_STYLE[kind].color, shape: EVENT_STYLE[kind].shape }));
   }, [series]);
 
-  const drawdownPoints = useMemo(() => (view === 'total' && lines.length > 0 ? drawdown(lines[0].points) : []), [view, lines]);
+  // A registry from before volume and capital sends neither, and the chart leaves those panes out.
+  const available = useMemo<Pane[]>(() => (view !== 'total' || !series ? [] : [
+    'drawdown' as const,
+    ...(series.volume ? ['volume' as const] : []),
+    ...(series.capital ? ['capital' as const] : []),
+  ]), [series, view]);
 
-  // Which series exist: a different view or a different set of listings draws new ones. Anything else (a poll's new
+  const paneLines = useMemo<PaneLine[]>(() => {
+    if (!series || lines.length === 0) return [];
+    const shown = available.filter(p => !hiddenPanes.has(p));
+    const out: PaneLine[] = [];
+    const moneyLine = { format: money, minMove: MONEY_STEP };
+    if (shown.includes('drawdown')) {
+      out.push({ pane: 'drawdown', bars: true, key: 'drawdown', name: 'Drawdown', color: 'rgba(250,82,82,0.6)',
+        points: drawdown(lines[0].points), ...moneyLine });
+    }
+    if (shown.includes('volume')) {
+      const bars = volumeBars(series.t, series.volume.map(moneyToNumber), series.maker.map(moneyToNumber), series.resolutionMs);
+      out.push(
+        { pane: 'volume', bars: true, key: 'volume', name: 'Volume', color: 'rgba(134,142,150,0.7)',
+          points: bars.map(b => ({ time: b.time, value: b.total })), ...moneyLine },
+        { pane: 'volume', bars: true, key: 'maker', name: 'Maker', color: 'rgba(32,201,151,0.8)',
+          points: bars.map(b => ({ time: b.time, value: b.maker })), ...moneyLine },
+      );
+    }
+    if (shown.includes('capital')) {
+      out.push({ pane: 'capital', bars: false, key: 'capital', name: 'Capital at risk', color: '#fab005',
+        points: chartPoints(series.t, series.capital.map(moneyToNumber)), ...moneyLine });
+    }
+    return out;
+  }, [series, lines, available, hiddenPanes]);
+
+  const paneCount = new Set(paneLines.map(l => l.pane)).size;
+  const paneHeight = Math.round(height * 0.22);
+  // The first lower pane fits within the given height, as the drawdown always did; each further one adds its own.
+  const chartHeight = height + Math.max(0, paneCount - 1) * paneHeight;
+
+  // Which series exist: a different view, set of listings or set of panes draws new ones. Anything else (a poll's new
   // points) only updates their data, which keeps the viewer's zoom and lets the chart follow the newest point.
-  const structure = `${view}|${lines.map(l => l.key).join(',')}`;
+  const structure = `${view}|${lines.map(l => l.key).join(',')}|${paneLines.map(l => l.key).join(',')}`;
 
   useEffect(() => {
     if (!container.current) return;
@@ -175,25 +250,30 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
         })
         : chart.addSeries(LineSeries, options);
     });
-    const dd = total
-      ? chart.addSeries(HistogramSeries, {
-        color: 'rgba(250,82,82,0.6)',
-        priceFormat: { type: 'custom', formatter: money, minMove: MONEY_STEP },
+    const paneIndex = new Map<Pane, number>();
+    const seriesForPanes = paneLines.map(line => {
+      if (!paneIndex.has(line.pane)) paneIndex.set(line.pane, paneIndex.size + 1);
+      const options = {
+        color: line.color,
+        priceFormat: { type: 'custom' as const, formatter: line.format, minMove: line.minMove },
         lastValueVisible: false,
         priceLineVisible: false,
-      }, 1)
-      : null;
-    if (dd) chart.panes()[1]?.setHeight(Math.round(height * 0.22));
-    const current = { lines: seriesForLines, drawdown: dd, markers: total ? createSeriesMarkers(seriesForLines[0], []) : null };
+      };
+      return line.bars
+        ? chart.addSeries(HistogramSeries, options, paneIndex.get(line.pane))
+        : chart.addSeries(LineSeries, { ...options, lineWidth: 1 }, paneIndex.get(line.pane));
+    });
+    for (const index of paneIndex.values()) chart.panes()[index]?.setHeight(paneHeight);
+    const current = { lines: seriesForLines, panes: seriesForPanes, markers: total ? createSeriesMarkers(seriesForLines[0], []) : null };
     drawn.current = current;
     return () => {
       if (drawn.current !== current) return;
       drawn.current = null;
-      for (const s of [...current.lines, ...(current.drawdown ? [current.drawdown] : [])]) chart.removeSeries(s);
+      for (const s of [...current.lines, ...current.panes]) chart.removeSeries(s);
     };
     // Rebuilt only when the structure changes; `lines` is read for it, its data is set below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chart, structure, height]);
+  }, [chart, structure, height, paneHeight]);
 
   // Fits the chart to its data when a new set of series is first filled, not on every poll.
   const fitted = useRef<string | null>(null);
@@ -204,9 +284,10 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
     lines.forEach((line, i) => {
       current.lines[i].setData(line.points.map(p => ({ time: p.time as UTCTimestamp, value: p.value })));
     });
-    if (current.drawdown) {
-      current.drawdown.setData(drawdownPoints.map(p => ({ time: p.time as UTCTimestamp, value: p.value })));
-    }
+    if (current.panes.length !== paneLines.length) return;
+    paneLines.forEach((line, i) => {
+      current.panes[i].setData(line.points.map(p => ({ time: p.time as UTCTimestamp, value: p.value })));
+    });
     if (current.markers && series) {
       const markers: SeriesMarker<Time>[] = [];
       for (const event of series.events) {
@@ -226,19 +307,15 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
       fitted.current = key;
       chart.timeScale().fitContent();
     }
-  }, [chart, lines, drawdownPoints, series, structure, hiddenMarkers]);
+  }, [chart, lines, paneLines, series, structure, hiddenMarkers]);
 
   const legendTime = hover?.time ?? lines[0]?.points[lines[0].points.length - 1]?.time ?? null;
   const valueAt = (line: Line, time: number) => pointAt(line.points, time);
-  // The Total view's lower pane: how far below its best the total sits at the hovered time.
-  const drawdownLine: Line | null = view === 'total' && lines.length > 0
-    ? { key: 'drawdown', name: 'Drawdown', color: 'rgba(250,82,82,0.8)', points: drawdownPoints, format: money, minMove: MONEY_STEP }
-    : null;
   const tooltip: TooltipState | null = hover && {
     x: hover.x,
     y: hover.y,
     title: formatTime(fromChartTime(hover.time), timeZone),
-    rows: [...lines, ...(drawdownLine ? [drawdownLine] : [])].map(line => {
+    rows: [...lines, ...paneLines].map(line => {
       const point = valueAt(line, hover.time);
       return { label: line.name, color: line.color, value: point === undefined ? '—' : line.format(point.value) };
     }),
@@ -280,9 +357,10 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
           />
         )}
       </Group>
-      <Box pos="relative" h={height}>
+      <Box pos="relative" h={chartHeight}>
         <div ref={container} style={{ position: 'absolute', inset: 0 }} />
         <ChartTooltip tooltip={tooltip} chartWidth={container.current?.clientWidth ?? 0} />
+        <LoadingOverlay visible={refreshing} zIndex={3} overlayProps={{ blur: 1, backgroundOpacity: 0.15 }} loaderProps={{ size: 'sm' }} />
         {loading && !series && (
           <Skeleton pos="absolute" inset={0} />
         )}
@@ -294,9 +372,14 @@ export function PnlChart({ series, loading, views = ['total'], onViewChange, hei
         <Group justify="space-between" gap="sm" mt={4} wrap="wrap">
           <Text size="xs" c="dimmed">
             One point per {series.resolutionMs >= 60_000 ? `${series.resolutionMs / 60_000} min` : `${series.resolutionMs / 1000}s`}
-            {' '}· marked at the mid (else the last trade); drawdown below
+            {' '}· marked at the mid (else the last trade)
           </Text>
-          {view === 'total' && <MarkerToggles kinds={markerKinds} />}
+          {view === 'total' && (
+            <Group gap="lg" wrap="wrap">
+              <PaneToggles panes={available} />
+              <MarkerToggles kinds={markerKinds} />
+            </Group>
+          )}
         </Group>
       )}
     </Box>

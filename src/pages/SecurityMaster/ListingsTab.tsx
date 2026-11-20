@@ -29,6 +29,7 @@ import { useServerPaginatedTable } from '../../hooks/useServerPaginatedTable';
 import { useUrlTableState } from '../../hooks/useUrlTableState';
 import { useSecuritySearch } from '../../hooks/useAsyncSearch';
 import { useState } from 'react';
+import { ExchangeLink } from '../../components/ExchangeLink';
 
 interface ListingsTabProps {
   onDelete: (type: 'listing', id: number, name: string) => void;
@@ -111,6 +112,9 @@ function ListingsTab({ onDelete, externalRefreshKey }: ListingsTabProps) {
       accessorKey: 'exchangeName',
       header: 'Exchange',
       enableSorting: false,
+      Cell: ({ row }: { row: MRT_Row<DenormalizedListing> }) => (
+        <ExchangeLink exchangeId={row.original.exchangeId}>{row.original.exchangeName}</ExchangeLink>
+      ),
     },
     {
       accessorKey: 'securityType',

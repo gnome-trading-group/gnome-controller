@@ -10,12 +10,14 @@ import { registryApi } from '../../utils/api';
 import { errorMessage } from '../../utils/kill-switch';
 import { describeFeeDefinition, FEE_SCOPE_LABELS, feeScope, feeTarget, supersededFeeSchedules } from '../../utils/fees';
 import { AddFeeScheduleModal } from './AddFeeScheduleModal';
+import { ExchangeLink } from '../../components/ExchangeLink';
 
 // Every fee schedule the registry holds, as recorded: one row per venue change or correction. A listing's resolved
-// fees over time are on its own page.
-function FeesTab() {
+// fees over time are on its own page. An exchange's page shows only that exchange's.
+function FeesTab({ fixedExchangeId }: { fixedExchangeId?: number }) {
   const { exchanges } = useGlobalState();
-  const [exchangeId, setExchangeId] = useState<string | null>(null);
+  const [chosenExchangeId, setExchangeId] = useState<string | null>(null);
+  const exchangeId = fixedExchangeId !== undefined ? String(fixedExchangeId) : chosenExchangeId;
   const [scope, setScope] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showSuperseded, setShowSuperseded] = useState(false);
@@ -47,6 +49,9 @@ function FeesTab() {
     {
       id: 'exchange', header: 'Exchange', size: 140,
       accessorFn: (r) => exchangeCode.get(r.exchangeId) ?? r.exchangeId,
+      Cell: ({ row: { original: r } }) => (
+        <ExchangeLink exchangeId={r.exchangeId}>{exchangeCode.get(r.exchangeId) ?? r.exchangeId}</ExchangeLink>
+      ),
     },
     {
       id: 'appliesTo', header: 'Applies to', size: 220,
@@ -91,8 +96,10 @@ function FeesTab() {
     initialState: { density: 'xs', pagination: { pageIndex: 0, pageSize: 50 } },
     renderTopToolbarCustomActions: () => (
       <Group>
-        <Select placeholder="All exchanges" clearable searchable value={exchangeId} onChange={setExchangeId} w={180}
-          data={exchanges.map((e) => ({ value: String(e.exchangeId), label: e.exchangeCode }))} />
+        {fixedExchangeId === undefined && (
+          <Select placeholder="All exchanges" clearable searchable value={exchangeId} onChange={setExchangeId} w={180}
+            data={exchanges.map((e) => ({ value: String(e.exchangeId), label: e.exchangeCode }))} />
+        )}
         <Select placeholder="Any scope" clearable value={scope} onChange={setScope} w={150}
           data={(Object.keys(FEE_SCOPE_LABELS) as FeeScope[]).map((s) => ({ value: s, label: FEE_SCOPE_LABELS[s] }))} />
         <TextInput placeholder="Group, event or listing" value={search} onChange={(e) => setSearch(e.currentTarget.value)} w={210} />

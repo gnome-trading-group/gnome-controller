@@ -18,6 +18,13 @@ export function mergeSeries(previous: PnlSeries, tail: PnlSeries): PnlSeries {
       netQuantity: [...pad(before?.netQuantity), ...listing.netQuantity],
     };
   });
+  // A point's volume is what traded since the point before it, and the poll's first point has none of its own: it is
+  // the newest point already shown, whose volume stays.
+  const joinVolume = (a: string[], b: string[]) => {
+    const joined = join(a, b);
+    if (cut < a.length && previous.t[cut] === tail.t[0]) joined[cut] = a[cut];
+    return joined;
+  };
   const eventKey = (e: PnlSeries['events'][number]) => `${e.time}/${e.kind}/${e.sessionId}/${e.listingId}`;
   const seen = new Set(previous.events.map(eventKey));
   return {
@@ -27,6 +34,10 @@ export function mergeSeries(previous: PnlSeries, tail: PnlSeries): PnlSeries {
     realized: join(previous.realized, tail.realized),
     unrealized: join(previous.unrealized, tail.unrealized),
     fees: join(previous.fees, tail.fees),
+    volume: joinVolume(previous.volume, tail.volume),
+    maker: joinVolume(previous.maker, tail.maker),
+    taker: joinVolume(previous.taker, tail.taker),
+    capital: join(previous.capital, tail.capital),
     listings,
     // How many could have been drawn is the full window's, not the poll's.
     listingCount: previous.listingCount,
